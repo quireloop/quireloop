@@ -48,6 +48,12 @@ space.
 - **Upload a project** — pick a `.zip` (e.g. the hosted editor's own "Download .zip",
   or any folder of `.tex`/`.bib`/image files you zip up yourself) to bring
   it in as a new project. Handles zips that wrap everything in one folder.
+- **Source Control** — every project is its own real git repository from the
+  moment you create it (not a Scriptorium-specific format). A VS Code–style
+  panel in the editor shows changed files, lets you write a commit message
+  and commit, and push/pull to a remote you set per project — a GitHub repo,
+  a GitLab repo, or back to the hosted editor's own git bridge. Nothing is pushed
+  automatically; you're always in control of when.
 - **Download** — grab the compiled PDF or the whole project as a `.zip`.
 - **Outline panel** — jump between `\section`/`\chapter` headings; live
   word count.
@@ -68,9 +74,10 @@ space.
   synctex version
   ```
 
-- **`git` and `unzip`** on your `PATH` — used for "Import from the hosted editor" and
-  "Upload Project (.zip)" respectively. Both ship by default on macOS and
-  most Linux distros.
+- **`git` and `unzip`** on your `PATH` — `git` backs every project's version
+  control (Source Control panel, Import from the hosted editor); `unzip` backs
+  "Upload Project (.zip)". Both ship by default on macOS and most Linux
+  distros.
 
 ## Setup
 
@@ -107,21 +114,36 @@ cd web && npm run dev         # terminal 2 — UI on :5173 with hot reload
 Open `http://localhost:5173` in dev mode; API calls are proxied to the
 server in `web/vite.config.js`.
 
-The repo ships with one **Sample Project** already in place (with a compiled
-PDF and one version-history entry) so you have something to open immediately
-— delete it whenever you're ready to start your own paper.
+You'll land on an empty dashboard — create a project, import one from
+the hosted editor, or upload a `.zip` to get started.
 
-## Where your data lives
+## Where your data lives — and why it's kept separate from this repo
 
-Every project is a plain folder on disk under `data/projects/<id>/` — a
-`manifest.json` plus your `.tex`/`.bib`/image files, exactly as you'd have
-them locally. There is no database. Back it up, sync it, or move it just by
-copying the `data/` folder. Deleting this repo's folder deletes everything
-in it, so back up `data/` separately if it matters to you.
+There are deliberately **two completely separate git histories** at play,
+and they never mix:
 
-New projects you create aren't tracked by git (see `.gitignore`) — only the
-bundled sample project is, so your own papers never accidentally end up in
-your fork's history.
+1. **This repo** (Scriptorium's own source code) — what you cloned. It has
+   no knowledge of any paper you write with it.
+2. **Each project's own repo**, created automatically the moment you make a
+   project, living at `data/projects/<id>/`. That folder is *entirely*
+   `.gitignore`d by this repo (see the root `.gitignore` — just one line,
+   `data/`), so nothing you write ever becomes part of Scriptorium's commit
+   history, and a `git status` in this repo never shows your papers.
+
+Each project folder holds plain files — a `manifest.json` (Scriptorium's own
+bookkeeping) plus your real `.tex`/`.bib`/image files exactly as you'd have
+them locally — with its own `.git` underneath, its own commit history, and
+optionally its own remote (configured per project in the **Source Control**
+panel). Scriptorium's bookkeeping (`manifest.json`, `build/`, `versions/`,
+and the file that stores your remote's access token) is excluded from that
+inner repo too, via a `.gitignore` Scriptorium writes into every project —
+so if you push a project to GitHub or back to the hosted editor, only your actual
+paper goes with it, never Scriptorium's internals or your token.
+
+There is no database anywhere. Back up `data/` however you like — Time
+Machine, syncing it to another drive, or pushing each project to its own
+remote. Deleting this repo's folder deletes everything in it, `data/`
+included, so keep that backup separate from your clone of this repo.
 
 ## Project structure
 

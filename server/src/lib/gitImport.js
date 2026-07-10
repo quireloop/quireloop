@@ -1,23 +1,12 @@
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { execa } from 'execa';
 import { nanoid } from 'nanoid';
 import { projectDir } from './storage.js';
 import { buildManifestFromDirectory } from './manifest.js';
+import { withToken } from './gitAuth.js';
+import { setRemote } from './projectGit.js';
 
 const CLONE_TIMEOUT_MS = 60_000;
-
-// the hosted editor's git bridge (git.hosted-editor.com/<project-id>) authenticates over
-// HTTPS with the project's git token as the username and an empty password
-// — there's no separate "password" concept to ask the user for.
-function withToken(gitUrl, token) {
-  const url = new URL(gitUrl);
-  if (token) {
-    url.username = token;
-    url.password = '';
-  }
-  return url.toString();
-}
 
 export async function importFromGit(name, gitUrl, token) {
   let parsed;
@@ -48,12 +37,18 @@ export async function importFromGit(name, gitUrl, token) {
     throw new Error('git clone failed — check the URL and try again');
   }
 
-  await fs.rm(path.join(dir, '.git'), { recursive: true, force: true });
-
+  let manifest;
   try {
-    return await buildManifestFromDirectory(id, name, dir, 'Imported from the hosted editor');
+    // Deliberately keeps the cloned .git history/remote intact (unlike a
+    // detached one-time import) — buildManifestFromDirectory's ensureGitRepo
+    // call layers our own ignore rules on top without disturbing it, so the
+    // project stays connected to the hosted editor and can be pushed straight back.
+    manifest = await buildManifestFromDirectory(id, name, dir, 'Imported from the hosted editor');
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });
     throw new Error(err.message === 'no files found' ? 'the cloned project has no files' : err.message);
   }
+
+  await setRemote(id, gitUrl, token);
+  return manifest;
 }

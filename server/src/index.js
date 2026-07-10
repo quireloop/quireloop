@@ -7,6 +7,7 @@ import filesRoutes from './routes/files.js';
 import compileRoutes from './routes/compile.js';
 import synctexRoutes from './routes/synctex.js';
 import versionsRoutes from './routes/versions.js';
+import gitRoutes from './routes/git.js';
 import registerMultipart from './plugins/multipart.js';
 
 const app = Fastify({ logger: true });
@@ -22,6 +23,7 @@ await app.register(filesRoutes);
 await app.register(compileRoutes);
 await app.register(synctexRoutes);
 await app.register(versionsRoutes);
+await app.register(gitRoutes);
 
 if (fs.existsSync(PUBLIC_DIR)) {
   await app.register(fastifyStatic, { root: PUBLIC_DIR });

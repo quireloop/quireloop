@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { PROJECTS_DIR } from '../config.js';
 import { projectDir } from './storage.js';
 import { templateContent } from './templates.js';
+import { ensureGitRepo } from './projectGit.js';
 
 async function manifestPath(projectId) {
   return path.join(projectDir(projectId), 'manifest.json');
@@ -54,6 +55,7 @@ export async function createProject(name, templateId = 'blank') {
 
   await fs.writeFile(path.join(dir, 'main.tex'), templateContent(templateId, name));
   await fs.writeFile(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  await ensureGitRepo(id);
 
   return manifest;
 }
@@ -77,11 +79,16 @@ export function fileTypeFor(relPath) {
   return EXT_TYPES[path.extname(relPath).toLowerCase()] ?? 'other';
 }
 
+// Scriptorium's own bookkeeping, sitting at the project root alongside the
+// real content — never something to list as one of the project's files.
+const BOOKKEEPING_ENTRIES = new Set(['manifest.json', 'build', 'versions']);
+
 async function walkFiles(root, base = '') {
   const entries = await fs.readdir(path.join(root, base), { withFileTypes: true });
   let files = [];
   for (const entry of entries) {
     if (entry.name.startsWith('.') || entry.name === '__MACOSX') continue;
+    if (!base && BOOKKEEPING_ENTRIES.has(entry.name)) continue;
     const relPath = base ? `${base}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
       files = files.concat(await walkFiles(root, relPath));
@@ -115,7 +122,24 @@ export async function buildManifestFromDirectory(id, name, dir, fallbackName) {
     createdAt: now,
     files,
   };
-  return writeManifest(id, manifest);
+  const written = await writeManifest(id, manifest);
+  await ensureGitRepo(id);
+  return written;
+}
+
+// Rebuilds the manifest's file list from what's actually on disk, keeping
+// everything else (id, name, mainFile, compiler) as-is. Needed after a git
+// pull, which can add/remove/rename files without going through the normal
+// upsert/remove/rename-file-entry calls.
+export async function syncFilesFromDisk(projectId) {
+  const manifest = await readManifest(projectId);
+  const dir = projectDir(projectId);
+  const relPaths = await walkFiles(dir);
+  manifest.files = relPaths.map((p) => ({ path: p, type: fileTypeFor(p) }));
+  if (!manifest.files.some((f) => f.path === manifest.mainFile)) {
+    manifest.mainFile = manifest.files.find((f) => f.type === 'tex')?.path ?? manifest.mainFile;
+  }
+  return writeManifest(projectId, manifest);
 }
 
 // Adds or updates a file entry in the manifest (idempotent on `path`).

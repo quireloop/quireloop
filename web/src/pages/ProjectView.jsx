@@ -7,6 +7,7 @@ import CompileLogPanel from '../components/CompileLogPanel.jsx';
 import OutlinePanel from '../components/OutlinePanel.jsx';
 import SymbolPalette from '../components/SymbolPalette.jsx';
 import VersionHistoryPanel from '../components/VersionHistoryPanel.jsx';
+import SourceControlPanel from '../components/SourceControlPanel.jsx';
 import Logo from '../components/Logo.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
 import { useDarkMode } from '../lib/theme.js';
@@ -306,6 +307,19 @@ export default function ProjectView({ projectId, onBack }) {
             >
               Outline
             </button>
+            <button
+              onClick={() => setSidebarTab('git')}
+              style={{
+                flex: 1,
+                border: 'none',
+                borderRadius: 0,
+                background: sidebarTab === 'git' ? 'var(--accent-bg)' : 'transparent',
+                fontSize: 13,
+                padding: 6,
+              }}
+            >
+              Source Control
+            </button>
           </div>
           <div style={{ flex: 1, minHeight: 0 }}>
             {sidebarTab === 'files' && manifest && (
@@ -322,6 +336,9 @@ export default function ProjectView({ projectId, onBack }) {
               />
             )}
             {sidebarTab === 'outline' && <OutlinePanel entries={outline} onJump={handleOutlineJump} />}
+            {sidebarTab === 'git' && (
+              <SourceControlPanel projectId={projectId} beforeAction={() => (dirty ? flushSave() : null)} />
+            )}
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>

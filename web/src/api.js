@@ -99,4 +99,20 @@ export const api = {
       body: JSON.stringify({ label }),
     }),
   restoreVersion: (id, versionId) => request(`/projects/${id}/versions/${versionId}/restore`, { method: 'POST' }),
+
+  gitStatus: (id) => request(`/projects/${id}/git/status`),
+  gitCommit: (id, message) =>
+    request(`/projects/${id}/git/commit`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message }),
+    }),
+  setGitRemote: (id, url, token) =>
+    request(`/projects/${id}/git/remote`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url, token }),
+    }),
+  gitPush: (id) => request(`/projects/${id}/git/push`, { method: 'POST' }),
+  gitPull: (id) => request(`/projects/${id}/git/pull`, { method: 'POST' }),
 };
