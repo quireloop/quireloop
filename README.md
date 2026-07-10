@@ -1,4 +1,8 @@
-# Scriptorium
+<p align="center">
+  <img src="assets/logo.svg" width="96" height="96" alt="Scriptorium logo">
+</p>
+
+<h1 align="center">Scriptorium</h1>
 
 A self-hosted web IDE for writing LaTeX: a project/file manager, a code
 editor with LaTeX syntax highlighting and autocomplete, a live PDF preview,

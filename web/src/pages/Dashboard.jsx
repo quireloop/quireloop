@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useDarkMode } from '../lib/theme.js';
+import Logo from '../components/Logo.jsx';
 
 function ImportFromthe hosted editor({ onClose, onImported }) {
   const [name, setName] = useState('');
@@ -123,7 +124,10 @@ export default function Dashboard({ onOpen }) {
   return (
     <div style={{ maxWidth: 720, margin: '40px auto', padding: '0 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>Scriptorium</h1>
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Logo size={32} />
+          Scriptorium
+        </h1>
         <button onClick={() => setDark(!dark)} style={{ fontSize: 13, height: 32 }}>
           {dark ? '☀ Light mode' : '🌙 Dark mode'}
         </button>

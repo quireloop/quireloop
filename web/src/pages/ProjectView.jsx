@@ -7,6 +7,7 @@ import CompileLogPanel from '../components/CompileLogPanel.jsx';
 import OutlinePanel from '../components/OutlinePanel.jsx';
 import SymbolPalette from '../components/SymbolPalette.jsx';
 import VersionHistoryPanel from '../components/VersionHistoryPanel.jsx';
+import Logo from '../components/Logo.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
 import { useDarkMode } from '../lib/theme.js';
 
@@ -222,6 +223,7 @@ export default function ProjectView({ projectId, onBack }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 8, borderBottom: '1px solid var(--border)' }}>
         <button onClick={onBack}>&larr; Back</button>
+        <Logo size={20} />
         <strong>{manifest?.name}</strong>
         {dirty && <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Unsaved changes…</span>}
         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{wordCount} words</span>

@@ -1,0 +1,13 @@
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Scriptorium">
+  <rect x="4" y="4" width="112" height="112" rx="24" fill="#1c1a17"/>
+  <path
+    d="M36 25 C 22 25 24 42 20 52 C 18 56 12 58 8 60 C 12 62 18 64 20 68 C 24 78 22 95 36 95"
+    fill="none" stroke="#f4efe4" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path
+    d="M84 25 C 98 25 96 42 100 52 C 102 56 108 58 112 60 C 108 62 102 64 100 68 C 96 78 98 95 84 95"
+    fill="none" stroke="#f4efe4" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="40" y="28" width="28" height="9" rx="3" fill="#e7a13a"/>
+  <rect x="46" y="44" width="28" height="9" rx="3" fill="#f0c674"/>
+  <rect x="52" y="60" width="28" height="9" rx="3" fill="#e7a13a"/>
+  <rect x="58" y="76" width="28" height="9" rx="3" fill="#f0c674"/>
+</svg>
