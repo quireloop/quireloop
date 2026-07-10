@@ -60,6 +60,7 @@ const Editor = forwardRef(function Editor(
       extensions: [
         lineNumbers(),
         foldGutter(),
+        EditorView.lineWrapping,
         history(),
         latex(),
         search(),
