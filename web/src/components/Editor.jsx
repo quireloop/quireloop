@@ -27,13 +27,18 @@ function insertAtCursor(view, text) {
   view.focus();
 }
 
-const Editor = forwardRef(function Editor({ filePath, content, initialLine, dark, onChange, onSave }, ref) {
+const Editor = forwardRef(function Editor(
+  { filePath, content, initialLine, dark, onChange, onSave, onJumpToPdf },
+  ref
+) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
+  const onJumpToPdfRef = useRef(onJumpToPdf);
   onChangeRef.current = onChange;
   onSaveRef.current = onSave;
+  onJumpToPdfRef.current = onJumpToPdf;
 
   useImperativeHandle(ref, () => ({
     goToLine: (line) => {
@@ -62,6 +67,17 @@ const Editor = forwardRef(function Editor({ filePath, content, initialLine, dark
         ...(dark ? [oneDark] : []),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) onChangeRef.current?.(update.state.doc.toString());
+        }),
+        EditorView.domEventHandlers({
+          dblclick(event, view) {
+            // Leaves the browser's own double-click word-selection alone —
+            // this just additionally jumps the PDF preview to the matching
+            // spot, same idea as the hosted editor's double-click-to-locate.
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (pos == null) return;
+            const line = view.state.doc.lineAt(pos).number;
+            onJumpToPdfRef.current?.(line);
+          },
         }),
         keymap.of([
           ...defaultKeymap,

@@ -16,3 +16,13 @@ export function useDarkMode() {
 
   return [dark, setDark];
 }
+
+export function useSidebarOpen() {
+  const [open, setOpen] = useState(() => localStorage.getItem('sidebarOpen') !== 'false');
+
+  useEffect(() => {
+    localStorage.setItem('sidebarOpen', String(open));
+  }, [open]);
+
+  return [open, setOpen];
+}

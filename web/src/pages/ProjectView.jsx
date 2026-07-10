@@ -10,7 +10,7 @@ import VersionHistoryPanel from '../components/VersionHistoryPanel.jsx';
 import SourceControlPanel from '../components/SourceControlPanel.jsx';
 import Logo from '../components/Logo.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
-import { useDarkMode } from '../lib/theme.js';
+import { useDarkMode, useSidebarOpen } from '../lib/theme.js';
 
 const AUTOSAVE_DELAY_MS = 1200;
 
@@ -28,6 +28,7 @@ export default function ProjectView({ projectId, onBack }) {
   const [showHistory, setShowHistory] = useState(false);
   const [versions, setVersions] = useState([]);
   const [dark, setDark] = useDarkMode();
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
   const dirtyContentRef = useRef('');
   const activePathRef = useRef(null);
   const autosaveTimerRef = useRef(null);
@@ -209,9 +210,8 @@ export default function ProjectView({ projectId, onBack }) {
     await refreshVersions();
   }
 
-  async function handleShowInPdf() {
+  async function jumpToPdfAtLine(line) {
     if (!activePath || !pdfUrl) return;
-    const line = editorRef.current?.getCursorLine() ?? 1;
     try {
       const result = await api.synctexToPdf(projectId, activePath, line);
       pdfViewerRef.current?.scrollToPosition(result.page, result.x, result.y);
@@ -220,9 +220,20 @@ export default function ProjectView({ projectId, onBack }) {
     }
   }
 
+  function handleShowInPdf() {
+    return jumpToPdfAtLine(editorRef.current?.getCursorLine() ?? 1);
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 8, borderBottom: '1px solid var(--border)' }}>
+        <button
+          onClick={() => setSidebarOpen((v) => !v)}
+          title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+          style={{ fontSize: 15, lineHeight: 1 }}
+        >
+          ☰
+        </button>
         <button onClick={onBack}>&larr; Back</button>
         <Logo size={20} />
         <strong>{manifest?.name}</strong>
@@ -279,6 +290,7 @@ export default function ProjectView({ projectId, onBack }) {
         </div>
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {sidebarOpen && (
         <div style={{ width: 220, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
             <button
@@ -341,6 +353,7 @@ export default function ProjectView({ projectId, onBack }) {
             )}
           </div>
         </div>
+        )}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 1, minHeight: 0 }}>
             {activePath && content !== null && (
@@ -353,6 +366,7 @@ export default function ProjectView({ projectId, onBack }) {
                 dark={dark}
                 onChange={handleEditorChange}
                 onSave={() => flushSave()}
+                onJumpToPdf={jumpToPdfAtLine}
               />
             )}
           </div>
