@@ -73,13 +73,20 @@ const PdfViewer = forwardRef(function PdfViewer({ url, projectId, onJumpToSource
     container.innerHTML = '';
     pagesRef.current = [];
 
+    // The canvas backing store must be rendered at device-pixel resolution,
+    // not CSS-pixel resolution, or the browser upscales it on HiDPI/Retina
+    // displays and every page looks soft/blurred regardless of zoom level.
+    const outputScale = window.devicePixelRatio || 1;
+
     for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
       const page = await doc.getPage(pageNum);
       if (renderTokenRef.current !== token) return;
       const viewport = page.getViewport({ scale: useScale });
       const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+      canvas.width = Math.floor(viewport.width * outputScale);
+      canvas.height = Math.floor(viewport.height * outputScale);
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
       canvas.style.display = 'block';
       canvas.style.marginBottom = '12px';
       canvas.style.boxShadow = '0 1px 4px rgba(0,0,0,0.2)';
@@ -87,7 +94,8 @@ const PdfViewer = forwardRef(function PdfViewer({ url, projectId, onJumpToSource
       canvas.dataset.page = pageNum;
       canvas.addEventListener('click', (e) => handleCanvasClick(e, pageNum, useScale));
       container.appendChild(canvas);
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport, transform }).promise;
       if (renderTokenRef.current !== token) return;
       pagesRef.current.push({ canvas, pageNum, scale: useScale, heightPts: viewport.height / useScale });
     }

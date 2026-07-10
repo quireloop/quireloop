@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { api } from '../api.js';
 import FileTree from '../components/FileTree.jsx';
 import Editor from '../components/Editor.jsx';
@@ -354,34 +355,50 @@ export default function ProjectView({ projectId, onBack }) {
           </div>
         </div>
         )}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            {activePath && content !== null && (
-              <Editor
-                ref={editorRef}
-                key={activePath}
-                filePath={activePath}
-                content={content}
-                initialLine={initialLine}
-                dark={dark}
-                onChange={handleEditorChange}
-                onSave={() => flushSave()}
-                onJumpToPdf={jumpToPdfAtLine}
-              />
-            )}
-          </div>
-          {compileResult && (
-            <CompileLogPanel
-              log={compileResult.log}
-              success={compileResult.success}
-              onClose={() => setCompileResult(null)}
-              onJump={jumpToSource}
-            />
-          )}
-        </div>
-        <div style={{ width: '45%', borderLeft: '1px solid var(--border)' }}>
-          <PdfViewer ref={pdfViewerRef} url={pdfUrl} projectId={projectId} onJumpToSource={jumpToSource} />
-        </div>
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="scriptorium-editor-pdf-split"
+          style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+        >
+          <Panel defaultSize={55} minSize={20}>
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                {activePath && content !== null && (
+                  <Editor
+                    ref={editorRef}
+                    key={activePath}
+                    filePath={activePath}
+                    content={content}
+                    initialLine={initialLine}
+                    dark={dark}
+                    onChange={handleEditorChange}
+                    onSave={() => flushSave()}
+                    onJumpToPdf={jumpToPdfAtLine}
+                  />
+                )}
+              </div>
+              {compileResult && (
+                <CompileLogPanel
+                  log={compileResult.log}
+                  success={compileResult.success}
+                  onClose={() => setCompileResult(null)}
+                  onJump={jumpToSource}
+                />
+              )}
+            </div>
+          </Panel>
+          <PanelResizeHandle
+            style={{
+              width: 6,
+              cursor: 'col-resize',
+              background: 'var(--border)',
+              flexShrink: 0,
+            }}
+          />
+          <Panel defaultSize={45} minSize={15}>
+            <PdfViewer ref={pdfViewerRef} url={pdfUrl} projectId={projectId} onJumpToSource={jumpToSource} />
+          </Panel>
+        </PanelGroup>
       </div>
     </div>
   );
