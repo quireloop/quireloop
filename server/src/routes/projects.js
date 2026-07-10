@@ -3,6 +3,7 @@ import { listProjects, createProject, readManifest, writeManifest, deleteProject
 import { TEMPLATES } from '../lib/templates.js';
 import { projectDir } from '../lib/storage.js';
 import { importFromGit } from '../lib/gitImport.js';
+import { importFromZip } from '../lib/zipImport.js';
 
 export default async function projectsRoutes(app) {
   app.get('/api/templates', async () => {
@@ -29,6 +30,18 @@ export default async function projectsRoutes(app) {
     }
     try {
       const manifest = await importFromGit(name, gitUrl, token);
+      return reply.code(201).send(manifest);
+    } catch (err) {
+      return reply.code(400).send({ error: err.message });
+    }
+  });
+
+  app.post('/api/projects/upload-zip', async (req, reply) => {
+    const data = await req.file();
+    if (!data) return reply.code(400).send({ error: 'no file uploaded' });
+    const buffer = await data.toBuffer();
+    try {
+      const manifest = await importFromZip(req.query?.name, buffer);
       return reply.code(201).send(manifest);
     } catch (err) {
       return reply.code(400).send({ error: err.message });

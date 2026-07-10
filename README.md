@@ -45,6 +45,9 @@ space.
 - **Import from the hosted editor** — paste an the hosted editor project's git URL (and a git
   token, if it's private) to clone it in as a new local project. One-time
   import, not a live sync — after that it's just a regular local project.
+- **Upload a project** — pick a `.zip` (e.g. the hosted editor's own "Download .zip",
+  or any folder of `.tex`/`.bib`/image files you zip up yourself) to bring
+  it in as a new project. Handles zips that wrap everything in one folder.
 - **Download** — grab the compiled PDF or the whole project as a `.zip`.
 - **Outline panel** — jump between `\section`/`\chapter` headings; live
   word count.
@@ -64,6 +67,10 @@ space.
   latexmk --version
   synctex version
   ```
+
+- **`git` and `unzip`** on your `PATH` — used for "Import from the hosted editor" and
+  "Upload Project (.zip)" respectively. Both ship by default on macOS and
+  most Linux distros.
 
 ## Setup
 

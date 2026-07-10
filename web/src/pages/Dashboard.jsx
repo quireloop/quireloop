@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useDarkMode } from '../lib/theme.js';
 import Logo from '../components/Logo.jsx';
@@ -83,7 +83,10 @@ export default function Dashboard({ onOpen }) {
   const [templateId, setTemplateId] = useState('blank');
   const [error, setError] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const [dark, setDark] = useDarkMode();
+  const uploadInputRef = useRef(null);
 
   async function refresh() {
     try {
@@ -121,6 +124,23 @@ export default function Dashboard({ onOpen }) {
     await refresh();
   }
 
+  async function handleUploadZip(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so picking the same file again still fires onChange
+    if (!file) return;
+    const name = file.name.replace(/\.zip$/i, '');
+    setUploading(true);
+    setUploadError('');
+    try {
+      await api.uploadProjectZip(name, file);
+      await refresh();
+    } catch (err) {
+      setUploadError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
     <div style={{ maxWidth: 720, margin: '40px auto', padding: '0 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -154,9 +174,16 @@ export default function Dashboard({ onOpen }) {
       </form>
 
       {!showImport && (
-        <button onClick={() => setShowImport(true)} style={{ fontSize: 13, marginBottom: 24 }}>
-          Import from the hosted editor…
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+          <button onClick={() => setShowImport(true)} style={{ fontSize: 13 }}>
+            Import from the hosted editor…
+          </button>
+          <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ fontSize: 13 }}>
+            {uploading ? 'Uploading…' : 'Upload Project (.zip)…'}
+          </button>
+          <input ref={uploadInputRef} type="file" accept=".zip" onChange={handleUploadZip} style={{ display: 'none' }} />
+          {uploadError && <span style={{ color: 'crimson', fontSize: 13 }}>{uploadError}</span>}
+        </div>
       )}
       {showImport && <ImportFromthe hosted editor onClose={() => setShowImport(false)} onImported={handleImported} />}
 

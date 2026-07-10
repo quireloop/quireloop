@@ -27,6 +27,12 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, gitUrl, token }),
     }),
+  uploadProjectZip: (name, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    const qs = name ? `?name=${encodeURIComponent(name)}` : '';
+    return request(`/projects/upload-zip${qs}`, { method: 'POST', body: form });
+  },
   getProject: (id) => request(`/projects/${id}`),
   renameProject: (id, name) =>
     request(`/projects/${id}`, {

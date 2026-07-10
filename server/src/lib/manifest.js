@@ -77,6 +77,47 @@ export function fileTypeFor(relPath) {
   return EXT_TYPES[path.extname(relPath).toLowerCase()] ?? 'other';
 }
 
+async function walkFiles(root, base = '') {
+  const entries = await fs.readdir(path.join(root, base), { withFileTypes: true });
+  let files = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') || entry.name === '__MACOSX') continue;
+    const relPath = base ? `${base}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      files = files.concat(await walkFiles(root, relPath));
+    } else {
+      files.push(relPath);
+    }
+  }
+  return files;
+}
+
+// Builds and writes a manifest for a project whose files already exist on
+// disk at `dir` (used by git-import and zip-upload, which both drop a whole
+// tree in place first and need a manifest built from what's actually there).
+export async function buildManifestFromDirectory(id, name, dir, fallbackName) {
+  const relPaths = await walkFiles(dir);
+  if (relPaths.length === 0) {
+    throw new Error('no files found');
+  }
+  const files = relPaths.map((p) => ({ path: p, type: fileTypeFor(p) }));
+  const mainFile =
+    files.find((f) => f.path === 'main.tex')?.path ??
+    files.find((f) => f.type === 'tex')?.path ??
+    files[0].path;
+
+  const now = new Date().toISOString();
+  const manifest = {
+    id,
+    name: name?.trim() || fallbackName,
+    mainFile,
+    compiler: 'pdflatex',
+    createdAt: now,
+    files,
+  };
+  return writeManifest(id, manifest);
+}
+
 // Adds or updates a file entry in the manifest (idempotent on `path`).
 export async function upsertFileEntry(projectId, relPath, extra = {}) {
   const manifest = await readManifest(projectId);

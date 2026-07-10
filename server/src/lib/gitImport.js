@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execa } from 'execa';
 import { nanoid } from 'nanoid';
 import { projectDir } from './storage.js';
-import { writeManifest, fileTypeFor } from './manifest.js';
+import { buildManifestFromDirectory } from './manifest.js';
 
 const CLONE_TIMEOUT_MS = 60_000;
 
@@ -17,21 +17,6 @@ function withToken(gitUrl, token) {
     url.password = '';
   }
   return url.toString();
-}
-
-async function walkFiles(root, base = '') {
-  const entries = await fs.readdir(path.join(root, base), { withFileTypes: true });
-  let files = [];
-  for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue; // skip .git and dotfiles
-    const relPath = base ? `${base}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      files = files.concat(await walkFiles(root, relPath));
-    } else {
-      files.push(relPath);
-    }
-  }
-  return files;
 }
 
 export async function importFromGit(name, gitUrl, token) {
@@ -65,25 +50,10 @@ export async function importFromGit(name, gitUrl, token) {
 
   await fs.rm(path.join(dir, '.git'), { recursive: true, force: true });
 
-  const relPaths = await walkFiles(dir);
-  if (relPaths.length === 0) {
+  try {
+    return await buildManifestFromDirectory(id, name, dir, 'Imported from the hosted editor');
+  } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });
-    throw new Error('the cloned project has no files');
+    throw new Error(err.message === 'no files found' ? 'the cloned project has no files' : err.message);
   }
-  const files = relPaths.map((p) => ({ path: p, type: fileTypeFor(p) }));
-  const mainFile =
-    files.find((f) => f.path === 'main.tex')?.path ??
-    files.find((f) => f.type === 'tex')?.path ??
-    files[0].path;
-
-  const now = new Date().toISOString();
-  const manifest = {
-    id,
-    name: name?.trim() || 'Imported from the hosted editor',
-    mainFile,
-    compiler: 'pdflatex',
-    createdAt: now,
-    files,
-  };
-  return writeManifest(id, manifest);
 }
