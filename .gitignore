@@ -1,0 +1,12 @@
+node_modules/
+server/public/
+*.log
+.DS_Store
+
+# Ignore all project data except one bundled sample project, so a fresh
+# clone has something to open immediately.
+data/*
+!data/projects
+data/projects/*
+!data/projects/ux4mwW1tzr
+data/projects/ux4mwW1tzr/build/

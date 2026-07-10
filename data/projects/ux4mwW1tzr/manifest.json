@@ -1,0 +1,14 @@
+{
+  "id": "ux4mwW1tzr",
+  "name": "Sample Project",
+  "mainFile": "main.tex",
+  "compiler": "pdflatex",
+  "createdAt": "2026-07-10T09:33:35.066Z",
+  "updatedAt": "2026-07-10T09:33:47.770Z",
+  "files": [
+    {
+      "path": "main.tex",
+      "type": "tex"
+    }
+  ]
+}

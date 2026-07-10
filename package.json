@@ -1,0 +1,5 @@
+{
+  "name": "local-hosted-editor-ide",
+  "private": true,
+  "workspaces": ["server", "web"]
+}
