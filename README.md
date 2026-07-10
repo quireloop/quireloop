@@ -1,10 +1,10 @@
-# Quireloop
+# Scriptorium
 
-A self-hosted, hosted-editor-style web IDE for writing LaTeX: a project/file
-manager, a code editor with LaTeX syntax highlighting and autocomplete, a
-live PDF preview, and version history — all running on your own machine.
-No account, no cloud, no subscription. Everything — the app and your
-project files — lives in one folder on disk.
+A self-hosted web IDE for writing LaTeX: a project/file manager, a code
+editor with LaTeX syntax highlighting and autocomplete, a live PDF preview,
+and version history — all running on your own machine. No account, no
+cloud, no subscription. Everything — the app and your project files — lives
+in one folder on disk.
 
 ## What this is (and isn't)
 
@@ -64,8 +64,8 @@ space.
 ## Setup
 
 ```
-git clone <this-repo-url> local-hosted-editor
-cd local-hosted-editor
+git clone <this-repo-url> scriptorium
+cd scriptorium
 npm install
 ```
 

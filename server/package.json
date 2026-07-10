@@ -1,5 +1,5 @@
 {
-  "name": "ide-server",
+  "name": "scriptorium-server",
   "private": true,
   "type": "module",
   "scripts": {

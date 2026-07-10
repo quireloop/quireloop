@@ -1,5 +1,5 @@
 {
-  "name": "local-hosted-editor-ide",
+  "name": "scriptorium",
   "private": true,
   "workspaces": ["server", "web"]
 }

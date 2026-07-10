@@ -123,7 +123,7 @@ export default function Dashboard({ onOpen }) {
   return (
     <div style={{ maxWidth: 720, margin: '40px auto', padding: '0 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>Quireloop</h1>
+        <h1>Scriptorium</h1>
         <button onClick={() => setDark(!dark)} style={{ fontSize: 13, height: 32 }}>
           {dark ? '☀ Light mode' : '🌙 Dark mode'}
         </button>

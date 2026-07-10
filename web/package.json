@@ -1,5 +1,5 @@
 {
-  "name": "ide-web",
+  "name": "scriptorium-web",
   "private": true,
   "type": "module",
   "scripts": {
