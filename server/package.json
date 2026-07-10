@@ -1,5 +1,5 @@
 {
-  "name": "scriptorium-server",
+  "name": "quireloop-server",
   "private": true,
   "type": "module",
   "scripts": {

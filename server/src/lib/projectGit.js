@@ -6,16 +6,16 @@ import { PROJECTS_DIR } from '../config.js';
 import { withToken, withoutToken } from './gitAuth.js';
 
 const PUSH_PULL_TIMEOUT_MS = 60_000;
-const CREDENTIALS_FILE = '.scriptorium-remote.json';
+const CREDENTIALS_FILE = '.quireloop-remote.json';
 
 // Commits in a project's git history are attributed to this fixed identity
 // unless the user has their own global git config — set explicitly on
 // every commit so it works out of the box on a machine with no git config
 // at all, rather than failing with "please tell me who you are".
-const GIT_IDENTITY = ['-c', 'user.name=Scriptorium', '-c', 'user.email=scriptorium@localhost'];
+const GIT_IDENTITY = ['-c', 'user.name=Quireloop', '-c', 'user.email=quireloop@localhost'];
 
-// Scriptorium's own bookkeeping — never part of the paper, never pushed.
-const GITIGNORE_CONTENT = `# Scriptorium bookkeeping — not part of your project
+// Quireloop's own bookkeeping — never part of the paper, never pushed.
+const GITIGNORE_CONTENT = `# Quireloop bookkeeping — not part of your project
 /manifest.json
 /build/
 /versions/

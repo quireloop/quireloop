@@ -8,7 +8,7 @@ export default function Logo({ size = 28 }) {
       width={size}
       height={size}
       role="img"
-      aria-label="Scriptorium"
+      aria-label="Quireloop"
       style={{ flexShrink: 0 }}
     >
       <path

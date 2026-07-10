@@ -1,5 +1,5 @@
 {
-  "name": "scriptorium",
+  "name": "quireloop",
   "private": true,
   "workspaces": ["server", "web"]
 }

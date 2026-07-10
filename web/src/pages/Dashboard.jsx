@@ -146,7 +146,7 @@ export default function Dashboard({ onOpen }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Logo size={32} />
-          Scriptorium
+          Quireloop
         </h1>
         <button onClick={() => setDark(!dark)} style={{ fontSize: 13, height: 32 }}>
           {dark ? '☀ Light mode' : '🌙 Dark mode'}

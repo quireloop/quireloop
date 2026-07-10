@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.svg" width="96" height="96" alt="Scriptorium logo">
+  <img src="assets/logo.svg" width="96" height="96" alt="Quireloop logo">
 </p>
 
-<h1 align="center">Scriptorium</h1>
+<h1 align="center">Quireloop</h1>
 
 A self-hosted web IDE for writing LaTeX: a project/file manager, a code
 editor with LaTeX syntax highlighting and autocomplete, a live PDF preview,
@@ -49,7 +49,7 @@ space.
   or any folder of `.tex`/`.bib`/image files you zip up yourself) to bring
   it in as a new project. Handles zips that wrap everything in one folder.
 - **Source Control** — every project is its own real git repository from the
-  moment you create it (not a Scriptorium-specific format). A VS Code–style
+  moment you create it (not a Quireloop-specific format). A VS Code–style
   panel in the editor shows changed files, lets you write a commit message
   and commit, and push/pull to a remote you set per project — a GitHub repo,
   a GitLab repo, or back to the hosted editor's own git bridge. Nothing is pushed
@@ -82,8 +82,8 @@ space.
 ## Setup
 
 ```
-git clone <this-repo-url> scriptorium
-cd scriptorium
+git clone <this-repo-url> quireloop
+cd quireloop
 npm install
 ```
 
@@ -122,23 +122,23 @@ the hosted editor, or upload a `.zip` to get started.
 There are deliberately **two completely separate git histories** at play,
 and they never mix:
 
-1. **This repo** (Scriptorium's own source code) — what you cloned. It has
+1. **This repo** (Quireloop's own source code) — what you cloned. It has
    no knowledge of any paper you write with it.
 2. **Each project's own repo**, created automatically the moment you make a
    project, living at `data/projects/<id>/`. That folder is *entirely*
    `.gitignore`d by this repo (see the root `.gitignore` — just one line,
-   `data/`), so nothing you write ever becomes part of Scriptorium's commit
+   `data/`), so nothing you write ever becomes part of Quireloop's commit
    history, and a `git status` in this repo never shows your papers.
 
-Each project folder holds plain files — a `manifest.json` (Scriptorium's own
+Each project folder holds plain files — a `manifest.json` (Quireloop's own
 bookkeeping) plus your real `.tex`/`.bib`/image files exactly as you'd have
 them locally — with its own `.git` underneath, its own commit history, and
 optionally its own remote (configured per project in the **Source Control**
-panel). Scriptorium's bookkeeping (`manifest.json`, `build/`, `versions/`,
+panel). Quireloop's bookkeeping (`manifest.json`, `build/`, `versions/`,
 and the file that stores your remote's access token) is excluded from that
-inner repo too, via a `.gitignore` Scriptorium writes into every project —
+inner repo too, via a `.gitignore` Quireloop writes into every project —
 so if you push a project to GitHub or back to the hosted editor, only your actual
-paper goes with it, never Scriptorium's internals or your token.
+paper goes with it, never Quireloop's internals or your token.
 
 There is no database anywhere. Back up `data/` however you like — Time
 Machine, syncing it to another drive, or pushing each project to its own

@@ -357,7 +357,7 @@ export default function ProjectView({ projectId, onBack }) {
         )}
         <PanelGroup
           direction="horizontal"
-          autoSaveId="scriptorium-editor-pdf-split"
+          autoSaveId="quireloop-editor-pdf-split"
           style={{ flex: 1, minWidth: 0, minHeight: 0 }}
         >
           <Panel defaultSize={55} minSize={20}>

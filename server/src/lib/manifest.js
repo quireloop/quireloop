@@ -79,7 +79,7 @@ export function fileTypeFor(relPath) {
   return EXT_TYPES[path.extname(relPath).toLowerCase()] ?? 'other';
 }
 
-// Scriptorium's own bookkeeping, sitting at the project root alongside the
+// Quireloop's own bookkeeping, sitting at the project root alongside the
 // real content — never something to list as one of the project's files.
 const BOOKKEEPING_ENTRIES = new Set(['manifest.json', 'build', 'versions']);
 

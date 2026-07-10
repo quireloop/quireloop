@@ -27,7 +27,7 @@ export async function importFromZip(name, buffer) {
   const dir = projectDir(id);
   await fs.mkdir(dir, { recursive: true });
 
-  const tmpZip = path.join(os.tmpdir(), `scriptorium-upload-${id}.zip`);
+  const tmpZip = path.join(os.tmpdir(), `quireloop-upload-${id}.zip`);
   await fs.writeFile(tmpZip, buffer);
 
   try {
