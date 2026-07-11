@@ -88,7 +88,7 @@ function Footer() {
         padding: '56px 16px 32px',
       }}
     >
-      Quireloop is free and open source, MIT-licensed.{' '}
+      Quireloop is free and open source, Apache 2.0-licensed.{' '}
       <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
         View the source on GitHub
       </a>

@@ -27,7 +27,7 @@ const FEATURES = [
   {
     icon: '📖',
     title: 'Open source',
-    body: 'MIT-licensed. Read the code, self-host it, or send a pull request.',
+    body: 'Apache 2.0-licensed. Read the code, self-host it, or send a pull request.',
   },
 ];
 
