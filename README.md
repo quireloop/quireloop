@@ -91,7 +91,31 @@ This installs dependencies for both the `server/` and `web/` workspaces.
 
 ## Running it
 
-**Quick start (production mode, one server, one port):**
+**Always-on (recommended for day-to-day writing), macOS only:**
+
+The friction of "open a terminal and start the server" before you can even
+begin writing is real — this makes Quireloop behave like an installed app
+instead of a dev project you have to boot up:
+
+```
+npm install
+npm run build --workspace=web
+npm run service:install
+```
+
+This installs a [LaunchAgent](https://www.launchd.info/) that starts
+Quireloop at login and keeps it running in the background — restarting it
+automatically if it ever crashes. From then on, opening
+**http://localhost:4173** (bookmark it) just works, every time, with
+nothing to remember to start first. Logs land in
+`~/Library/Logs/Quireloop/`. To stop it running at login:
+`npm run service:uninstall`.
+
+On Linux, the equivalent is a `systemd --user` unit running
+`node server/src/index.js` with `WantedBy=default.target`; there's no
+installer script for that here yet.
+
+**Quick start (manual, any OS):**
 
 ```
 cd web && npm run build && cd ..
