@@ -14,12 +14,38 @@ const CARD_STYLE = {
   boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
 };
 
+function Hero() {
+  return (
+    <div style={{ textAlign: 'center', marginBottom: 40 }}>
+      <h1
+        style={{
+          fontFamily: 'ui-monospace, "SF Mono", monospace',
+          fontSize: 'clamp(34px, 6vw, 58px)',
+          fontWeight: 700,
+          margin: 0,
+          lineHeight: 1.1,
+        }}
+      >
+        <span style={{ color: '#e7a13a' }}>{'\\begin{'}</span>
+        <span style={{ color: 'var(--text)' }}>focus</span>
+        <span style={{ color: '#e7a13a' }}>{'}'}</span>
+      </h1>
+      <p style={{ color: 'var(--text-muted)', fontSize: 16, maxWidth: 480, margin: '14px auto 0' }}>
+        A self-hosted LaTeX workspace for labs who'd rather own their papers than rent them.
+      </p>
+    </div>
+  );
+}
+
 function Page({ children }) {
   const [dark] = useDarkMode();
   return (
     <div style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
       <ReactiveBackground dark={dark} />
-      <div style={{ position: 'relative', zIndex: 1, padding: '96px 16px' }}>{children}</div>
+      <div style={{ position: 'relative', zIndex: 1, padding: '80px 16px' }}>
+        <Hero />
+        {children}
+      </div>
     </div>
   );
 }

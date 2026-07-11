@@ -1,23 +1,39 @@
 import { useEffect, useRef } from 'react';
 
-// LaTeX-flavored symbols scattered across the canvas, each tethered to a
-// resting point by an invisible "string" — moving the cursor near one
-// plucks it away from its anchor and it springs back, Stanford-homepage
-// style, just built from \int and \alpha instead of literal wire letters.
-const SYMBOLS = [
-  '\\int', '\\sum', '\\prod', '\\sqrt{x}', '\\frac{a}{b}', '\\partial',
-  '\\nabla', '\\infty', '\\alpha', '\\beta', '\\gamma', '\\theta', '\\lambda',
-  '\\pi', '\\Omega', '\\Sigma', '\\Delta', '\\epsilon', '\\phi', '\\psi',
-  '\\forall', '\\exists', '\\in', '\\subset', '\\otimes', '\\approx',
-  '\\cite{}', '\\ref{}', '\\label{}', '\\begin{eq}', '\\end{eq}',
-  '\\mathbb{R}', '\\mathcal{L}', '\\LaTeX', '\\times', '\\cdot', '\\pm',
-  '\\leq', '\\geq', '\\rightarrow', '\\emptyset', '\\cup', '\\cap', '\\hbar',
+// A constellation of real mathematical notation — the way a citation graph
+// or a knowledge graph looks, built out of the actual symbols researchers
+// stare at all day. Nodes drift gently, tether to a resting point, and pull
+// toward the cursor when it passes near; nearby nodes link up into a faint
+// graph, and the links closest to the cursor brighten, like current running
+// through the network. A soft spotlight follows the pointer for depth.
+const GLYPHS = [
+  '∫', '∑', '∏', '√', '∂', '∇', '∞', '∀', '∃', '∈', '⊂', '⊗', '≈', '≤', '≥',
+  '×', '±', '⋅', '→', '∪', '∩', 'α', 'β', 'γ', 'θ', 'λ', 'π', 'Ω', 'Σ', 'Δ',
+  'ε', 'φ', 'ψ', 'ħ', 'μ', '⟨ψ|', '∅',
 ];
+
+const EQUATIONS = [
+  'E = mc²', 'a² + b² = c²', '∇·B = 0', 'H|ψ⟩ = E|ψ⟩', 'F = ma',
+  'e^{iπ} + 1 = 0', 'lim 1/x = 0', 'P(A|B)', '∀ε ∃δ', 'argmin L(θ)',
+  'χ² test', 'O(n log n)', '∇×E = -∂B/∂t', 'σ² = Var(X)', 'p < 0.05',
+];
+
+function buildPool() {
+  // Weighted so single glyphs (small, plentiful) outnumber full equations
+  // (larger, rarer) — mirrors how a page of notes actually looks.
+  const pool = [];
+  for (const g of GLYPHS) pool.push({ text: g, equation: false });
+  for (const e of EQUATIONS) pool.push({ text: e, equation: true });
+  return pool;
+}
+
+const POOL = buildPool();
 
 const SPRING_K = 0.02;
 const DAMPING = 0.9;
-const REPEL_RADIUS = 140;
-const REPEL_STRENGTH = 2200;
+const REPEL_RADIUS = 130;
+const REPEL_STRENGTH = 2000;
+const CONNECT_RADIUS = 150;
 
 export default function ReactiveBackground({ dark }) {
   const canvasRef = useRef(null);
@@ -34,22 +50,26 @@ export default function ReactiveBackground({ dark }) {
     let t = 0;
 
     function initNodes() {
-      const count = Math.max(16, Math.min(60, Math.floor((width * height) / 34000)));
+      const count = Math.max(20, Math.min(70, Math.floor((width * height) / 26000)));
       nodes = Array.from({ length: count }, () => {
         const bx = Math.random() * width;
         const by = Math.random() * height;
+        const pick = POOL[Math.floor(Math.random() * POOL.length)];
+        const depth = 0.5 + Math.random(); // parallax/size factor
         return {
-          symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+          text: pick.text,
+          equation: pick.equation,
           baseX: bx,
           baseY: by,
           x: bx,
           y: by,
           vx: 0,
           vy: 0,
-          fontSize: 13 + Math.random() * 13,
+          depth,
+          fontSize: (pick.equation ? 15 : 17) * depth + (pick.equation ? 4 : 6),
           phase: Math.random() * Math.PI * 2,
-          speed: 0.3 + Math.random() * 0.4,
-          driftR: 6 + Math.random() * 12,
+          speed: 0.25 + Math.random() * 0.35,
+          driftR: 5 + Math.random() * 10,
         };
       });
     }
@@ -76,14 +96,28 @@ export default function ReactiveBackground({ dark }) {
       mouse.active = false;
     }
 
-    const stringColor = dark ? '150, 160, 190' : '120, 120, 150';
-    const glowColor = dark ? '255, 205, 130' : '90, 70, 220';
-    const textColor = dark ? '215, 218, 232' : '85, 85, 105';
+    const linkColor = dark ? '150, 160, 190' : '130, 130, 160';
+    const glowColor = dark ? '240, 190, 110' : '110, 80, 220';
+    const textColor = dark ? '210, 213, 228' : '80, 80, 100';
+    const eqColor = dark ? '190, 196, 220' : '95, 95, 130';
+    const spotlight = dark ? '240, 190, 110' : '150, 130, 240';
 
     function tick() {
       t += 1;
       ctx.clearRect(0, 0, width, height);
 
+      // Soft spotlight following the cursor — cheap depth cue, à la
+      // modern SaaS hero sections.
+      if (mouse.active) {
+        const grad = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 260);
+        grad.addColorStop(0, `rgba(${spotlight}, 0.06)`);
+        grad.addColorStop(1, `rgba(${spotlight}, 0)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      // Physics pass — drift toward an idle orbit, spring back to the
+      // resting point, repel away from the cursor.
       for (const n of nodes) {
         const driftX = n.baseX + Math.cos(t * 0.01 * n.speed + n.phase) * n.driftR;
         const driftY = n.baseY + Math.sin(t * 0.013 * n.speed + n.phase) * n.driftR;
@@ -108,23 +142,43 @@ export default function ReactiveBackground({ dark }) {
         n.vy = (n.vy + fy) * DAMPING;
         n.x += n.vx;
         n.y += n.vy;
+        n.glow = glow;
+      }
 
-        // The tether — a faint line back to the resting point that
-        // stretches as the cursor pulls the symbol away from it.
-        ctx.beginPath();
-        ctx.moveTo(n.baseX, n.baseY);
-        ctx.lineTo(n.x, n.y);
-        ctx.strokeStyle = `rgba(${stringColor}, ${0.05 + glow * 0.25})`;
-        ctx.lineWidth = 1;
-        ctx.stroke();
+      // Constellation links — connect nearby nodes, brightening whichever
+      // edges sit closest to the cursor so the graph feels alive rather
+      // than static wallpaper.
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i];
+          const b = nodes[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > CONNECT_RADIUS) continue;
+          const proximity = 1 - dist / CONNECT_RADIUS;
+          const edgeGlow = Math.max(a.glow, b.glow);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.strokeStyle = `rgba(${linkColor}, ${proximity * (0.08 + edgeGlow * 0.35)})`;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
 
-        ctx.font = `${n.fontSize}px ui-monospace, "SF Mono", monospace`;
+      // Symbols on top of the links.
+      for (const n of nodes) {
+        ctx.font = `${n.equation ? '' : ''}${n.fontSize}px ${
+          n.equation ? 'Georgia, "Times New Roman", serif' : 'ui-monospace, "SF Mono", monospace'
+        }`;
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'center';
-        ctx.shadowColor = `rgba(${glowColor}, ${glow})`;
-        ctx.shadowBlur = 4 + glow * 24;
-        ctx.fillStyle = glow > 0.02 ? `rgba(${glowColor}, ${0.35 + glow * 0.6})` : `rgba(${textColor}, 0.3)`;
-        ctx.fillText(n.symbol, n.x, n.y);
+        ctx.shadowColor = `rgba(${glowColor}, ${n.glow})`;
+        ctx.shadowBlur = 4 + n.glow * 26;
+        const base = n.equation ? eqColor : textColor;
+        ctx.fillStyle = n.glow > 0.02 ? `rgba(${glowColor}, ${0.4 + n.glow * 0.55})` : `rgba(${base}, ${0.28 + n.depth * 0.1})`;
+        ctx.fillText(n.text, n.x, n.y);
       }
       ctx.shadowBlur = 0;
 
