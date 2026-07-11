@@ -9,6 +9,7 @@ import OutlinePanel from '../components/OutlinePanel.jsx';
 import SymbolPalette from '../components/SymbolPalette.jsx';
 import VersionHistoryPanel from '../components/VersionHistoryPanel.jsx';
 import SourceControlPanel from '../components/SourceControlPanel.jsx';
+import ShareModal from '../components/ShareModal.jsx';
 import Logo from '../components/Logo.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
 import { useDarkMode, useSidebarOpen } from '../lib/theme.js';
@@ -16,7 +17,7 @@ import { parseBibEntries } from '../lib/bibtex.js';
 
 const AUTOSAVE_DELAY_MS = 1200;
 
-export default function ProjectView({ projectId, onBack }) {
+export default function ProjectView({ projectId, onBack, user }) {
   const [manifest, setManifest] = useState(null);
   const [activePath, setActivePath] = useState(null);
   const [content, setContent] = useState(null);
@@ -28,6 +29,7 @@ export default function ProjectView({ projectId, onBack }) {
   const [sidebarTab, setSidebarTab] = useState('files');
   const [showSymbols, setShowSymbols] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [versions, setVersions] = useState([]);
   const [bibEntries, setBibEntries] = useState([]);
   const [dark, setDark] = useDarkMode();
@@ -282,6 +284,19 @@ export default function ProjectView({ projectId, onBack }) {
               onSave={handleSaveVersion}
               onRestore={handleRestoreVersion}
               onClose={() => setShowHistory(false)}
+            />
+          )}
+          {manifest && (
+            <button onClick={() => setShowShare((v) => !v)} style={{ fontSize: 13 }}>
+              Share
+            </button>
+          )}
+          {showShare && manifest && (
+            <ShareModal
+              manifest={manifest}
+              isOwner={manifest.ownerId === user?.id}
+              onClose={() => setShowShare(false)}
+              onUpdated={setManifest}
             />
           )}
           {manifest && (

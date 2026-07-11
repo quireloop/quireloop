@@ -1,10 +1,18 @@
 import { ZipArchive } from 'archiver';
-import { listProjects, createProject, readManifest, writeManifest, deleteProject } from '../lib/manifest.js';
+import {
+  listProjectsForUser,
+  createProject,
+  readManifest,
+  writeManifest,
+  deleteProject,
+} from '../lib/manifest.js';
 import { TEMPLATES } from '../lib/templates.js';
 import { projectDir } from '../lib/storage.js';
 import { importFromGit } from '../lib/gitImport.js';
 import { importFromZip } from '../lib/zipImport.js';
 import { requireAuth, requireProjectAccess, requireProjectOwner } from '../lib/authMiddleware.js';
+import { findUserByEmail } from '../lib/auth.js';
+import * as sharedIndex from '../lib/sharedIndex.js';
 
 export default async function projectsRoutes(app) {
   app.get('/api/templates', { preHandler: requireAuth }, async () => {
@@ -12,7 +20,7 @@ export default async function projectsRoutes(app) {
   });
 
   app.get('/api/projects', { preHandler: requireAuth }, async (req) => {
-    return listProjects(req.userId);
+    return listProjectsForUser(req.userId);
   });
 
   app.post('/api/projects', { preHandler: requireAuth }, async (req, reply) => {
@@ -76,5 +84,38 @@ export default async function projectsRoutes(app) {
     reply.send(archive);
     archive.glob('**/*', { cwd: dir, ignore: ['build/**', 'versions/**', 'manifest.json'] });
     await archive.finalize();
+  });
+
+  app.post('/api/projects/:id/share', { preHandler: requireProjectOwner }, async (req, reply) => {
+    const { email } = req.body ?? {};
+    if (!email || typeof email !== 'string') {
+      return reply.code(400).send({ error: 'email is required' });
+    }
+    const user = await findUserByEmail(email.trim());
+    if (!user) return reply.code(404).send({ error: 'no account with that email' });
+    if (user.id === req.userId) {
+      return reply.code(400).send({ error: "can't share a project with yourself" });
+    }
+
+    const manifest = req.manifest;
+    manifest.collaborators = manifest.collaborators ?? [];
+    if (!manifest.collaborators.some((c) => c.userId === user.id)) {
+      manifest.collaborators.push({ userId: user.id, email: user.email });
+    }
+    await writeManifest(req.ownerId, req.params.id, manifest);
+    await sharedIndex.addShare(user.id, req.params.id, req.ownerId);
+    return manifest;
+  });
+
+  app.post('/api/projects/:id/unshare', { preHandler: requireProjectOwner }, async (req, reply) => {
+    const { userId } = req.body ?? {};
+    if (!userId || typeof userId !== 'string') {
+      return reply.code(400).send({ error: 'userId is required' });
+    }
+    const manifest = req.manifest;
+    manifest.collaborators = (manifest.collaborators ?? []).filter((c) => c.userId !== userId);
+    await writeManifest(req.ownerId, req.params.id, manifest);
+    await sharedIndex.removeShare(userId, req.params.id);
+    return manifest;
   });
 }

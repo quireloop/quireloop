@@ -222,6 +222,20 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
           >
             <div onClick={() => onOpen(p.id)} style={{ cursor: 'pointer', flex: 1 }}>
               <strong>{p.name}</strong>
+              {p.ownerId !== user?.id && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: 11,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: 'var(--accent-bg)',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  Shared
+                </span>
+              )}
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Updated {new Date(p.updatedAt).toLocaleString()}
               </div>
@@ -229,9 +243,11 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
             <a href={api.downloadUrl(p.id)} download style={{ marginRight: 12, fontSize: 13 }}>
               Download .zip
             </a>
-            <button onClick={() => handleDelete(p.id)} style={{ color: 'crimson' }}>
-              Delete
-            </button>
+            {p.ownerId === user?.id && (
+              <button onClick={() => handleDelete(p.id)} style={{ color: 'crimson' }}>
+                Delete
+              </button>
+            )}
           </div>
         ))}
         {projects.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No projects yet.</p>}

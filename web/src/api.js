@@ -50,6 +50,19 @@ export const api = {
   downloadUrl: (id) => `${BASE}/projects/${id}/download`,
   clean: (id) => request(`/projects/${id}/clean`, { method: 'POST' }),
 
+  shareProject: (id, email) =>
+    request(`/projects/${id}/share`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }),
+  unshareProject: (id, userId) =>
+    request(`/projects/${id}/unshare`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    }),
+
   readFile: (id, path) => request(`/projects/${id}/files/${path}`),
   writeFile: (id, path, content) =>
     request(`/projects/${id}/files/${path}`, {

@@ -5,6 +5,7 @@ import { userDir, projectDir } from './storage.js';
 import { templateContent } from './templates.js';
 import { ensureGitRepo } from './projectGit.js';
 import * as projectIndex from './projectIndex.js';
+import * as sharedIndex from './sharedIndex.js';
 
 async function manifestPath(ownerId, projectId) {
   return path.join(projectDir(ownerId, projectId), 'manifest.json');
@@ -38,6 +39,24 @@ export async function listProjects(ownerId) {
   }
   projects.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   return projects;
+}
+
+// Own projects + projects shared with this user (via sharedIndex), for the
+// dashboard's project list.
+export async function listProjectsForUser(userId) {
+  const owned = await listProjects(userId);
+  const shared = await sharedIndex.listForUser(userId);
+  const sharedProjects = [];
+  for (const { projectId, ownerId } of shared) {
+    try {
+      sharedProjects.push(await readManifest(ownerId, projectId));
+    } catch {
+      // project or manifest gone — skip stale shared-index entry
+    }
+  }
+  const all = [...owned, ...sharedProjects];
+  all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  return all;
 }
 
 export async function createProject(ownerId, name, templateId = 'blank') {
