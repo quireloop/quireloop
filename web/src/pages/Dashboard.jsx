@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import { authApi } from '../lib/auth.js';
 import { useDarkMode } from '../lib/theme.js';
 import Logo from '../components/Logo.jsx';
+import AccountSettings from '../components/AccountSettings.jsx';
 
 function ImportFromthe hosted editor({ onClose, onImported }) {
   const [name, setName] = useState('');
@@ -76,7 +78,7 @@ function ImportFromthe hosted editor({ onClose, onImported }) {
   );
 }
 
-export default function Dashboard({ onOpen }) {
+export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
   const [projects, setProjects] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [newName, setNewName] = useState('');
@@ -85,8 +87,14 @@ export default function Dashboard({ onOpen }) {
   const [showImport, setShowImport] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
   const [dark, setDark] = useDarkMode();
   const uploadInputRef = useRef(null);
+
+  async function handleLogout() {
+    await authApi.logout();
+    onLogout();
+  }
 
   async function refresh() {
     try {
@@ -148,9 +156,20 @@ export default function Dashboard({ onOpen }) {
           <Logo size={32} />
           Quireloop
         </h1>
-        <button onClick={() => setDark(!dark)} style={{ fontSize: 13, height: 32 }}>
-          {dark ? '☀ Light mode' : '🌙 Dark mode'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+          <button onClick={() => setShowSettings((v) => !v)} style={{ fontSize: 13, height: 32 }}>
+            {user?.email}
+          </button>
+          {showSettings && (
+            <AccountSettings user={user} onClose={() => setShowSettings(false)} onUserUpdate={onUserUpdate} />
+          )}
+          <button onClick={() => setDark(!dark)} style={{ fontSize: 13, height: 32 }}>
+            {dark ? '☀ Light mode' : '🌙 Dark mode'}
+          </button>
+          <button onClick={handleLogout} style={{ fontSize: 13, height: 32 }}>
+            Log out
+          </button>
+        </div>
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
