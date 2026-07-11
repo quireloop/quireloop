@@ -1,6 +1,28 @@
 import { useState } from 'react';
 import { authApi } from '../lib/auth.js';
 import Logo from '../components/Logo.jsx';
+import ReactiveBackground from '../components/ReactiveBackground.jsx';
+import { useDarkMode } from '../lib/theme.js';
+
+const CARD_STYLE = {
+  maxWidth: 360,
+  margin: '0 auto',
+  padding: 28,
+  background: 'var(--panel-bg)',
+  border: '1px solid var(--border)',
+  borderRadius: 14,
+  boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
+};
+
+function Page({ children }) {
+  const [dark] = useDarkMode();
+  return (
+    <div style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
+      <ReactiveBackground dark={dark} />
+      <div style={{ position: 'relative', zIndex: 1, padding: '96px 16px' }}>{children}</div>
+    </div>
+  );
+}
 
 export default function LoginPage({ onAuthenticated }) {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
@@ -53,73 +75,77 @@ export default function LoginPage({ onAuthenticated }) {
 
   if (tempToken) {
     return (
-      <div style={{ maxWidth: 360, margin: '80px auto', padding: '0 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <Logo size={32} />
-          <h1 style={{ margin: 0 }}>Quireloop</h1>
+      <Page>
+        <div style={CARD_STYLE}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <Logo size={32} />
+            <h1 style={{ margin: 0 }}>Quireloop</h1>
+          </div>
+          <p style={{ color: 'var(--text-muted)' }}>Enter the 6-digit code from your authenticator app.</p>
+          <form onSubmit={handleTwoFactorSubmit} style={{ display: 'grid', gap: 8 }}>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123456"
+              autoFocus
+              style={{ padding: 8, fontSize: 18, textAlign: 'center', letterSpacing: 4 }}
+            />
+            {error && <p style={{ color: 'crimson', margin: 0 }}>{error}</p>}
+            <button type="submit" disabled={busy} style={{ padding: 8 }}>
+              {busy ? 'Verifying…' : 'Verify'}
+            </button>
+            <button type="button" onClick={() => setTempToken(null)} style={{ padding: 8 }}>
+              Back
+            </button>
+          </form>
         </div>
-        <p style={{ color: 'var(--text-muted)' }}>Enter the 6-digit code from your authenticator app.</p>
-        <form onSubmit={handleTwoFactorSubmit} style={{ display: 'grid', gap: 8 }}>
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="123456"
-            autoFocus
-            style={{ padding: 8, fontSize: 18, textAlign: 'center', letterSpacing: 4 }}
-          />
-          {error && <p style={{ color: 'crimson', margin: 0 }}>{error}</p>}
-          <button type="submit" disabled={busy} style={{ padding: 8 }}>
-            {busy ? 'Verifying…' : 'Verify'}
-          </button>
-          <button type="button" onClick={() => setTempToken(null)} style={{ padding: 8 }}>
-            Back
-          </button>
-        </form>
-      </div>
+      </Page>
     );
   }
 
   return (
-    <div style={{ maxWidth: 360, margin: '80px auto', padding: '0 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <Logo size={32} />
-        <h1 style={{ margin: 0 }}>Quireloop</h1>
+    <Page>
+      <div style={CARD_STYLE}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <Logo size={32} />
+          <h1 style={{ margin: 0 }}>Quireloop</h1>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button
+            onClick={() => setMode('login')}
+            style={{ flex: 1, background: mode === 'login' ? 'var(--accent-bg)' : undefined }}
+          >
+            Log in
+          </button>
+          <button
+            onClick={() => setMode('signup')}
+            style={{ flex: 1, background: mode === 'signup' ? 'var(--accent-bg)' : undefined }}
+          >
+            Sign up
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 8 }}>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            type="email"
+            autoFocus
+            style={{ padding: 8 }}
+          />
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            type="password"
+            style={{ padding: 8 }}
+          />
+          {error && <p style={{ color: 'crimson', margin: 0 }}>{error}</p>}
+          <button type="submit" disabled={busy} style={{ padding: 8 }}>
+            {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Log in'}
+          </button>
+        </form>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button
-          onClick={() => setMode('login')}
-          style={{ flex: 1, background: mode === 'login' ? 'var(--accent-bg)' : undefined }}
-        >
-          Log in
-        </button>
-        <button
-          onClick={() => setMode('signup')}
-          style={{ flex: 1, background: mode === 'signup' ? 'var(--accent-bg)' : undefined }}
-        >
-          Sign up
-        </button>
-      </div>
-      <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 8 }}>
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email"
-          type="email"
-          autoFocus
-          style={{ padding: 8 }}
-        />
-        <input
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          type="password"
-          style={{ padding: 8 }}
-        />
-        {error && <p style={{ color: 'crimson', margin: 0 }}>{error}</p>}
-        <button type="submit" disabled={busy} style={{ padding: 8 }}>
-          {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Log in'}
-        </button>
-      </form>
-    </div>
+    </Page>
   );
 }

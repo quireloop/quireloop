@@ -4,6 +4,7 @@ import { authApi } from '../lib/auth.js';
 import { useDarkMode } from '../lib/theme.js';
 import Logo from '../components/Logo.jsx';
 import AccountSettings from '../components/AccountSettings.jsx';
+import ReactiveBackground from '../components/ReactiveBackground.jsx';
 
 function ImportFromthe hosted editor({ onClose, onImported }) {
   const [name, setName] = useState('');
@@ -150,7 +151,9 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '40px auto', padding: '0 16px' }}>
+    <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <ReactiveBackground dark={dark} />
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '40px auto', padding: '0 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Logo size={32} />
@@ -251,6 +254,7 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
           </div>
         ))}
         {projects.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No projects yet.</p>}
+      </div>
       </div>
     </div>
   );
