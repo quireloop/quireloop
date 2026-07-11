@@ -8,7 +8,7 @@ import { setRemote } from './projectGit.js';
 
 const CLONE_TIMEOUT_MS = 60_000;
 
-export async function importFromGit(name, gitUrl, token) {
+export async function importFromGit(ownerId, name, gitUrl, token) {
   let parsed;
   try {
     parsed = new URL(gitUrl);
@@ -20,7 +20,7 @@ export async function importFromGit(name, gitUrl, token) {
   }
 
   const id = nanoid(10);
-  const dir = projectDir(id);
+  const dir = projectDir(ownerId, id);
   const authedUrl = withToken(gitUrl, token);
 
   try {
@@ -43,12 +43,12 @@ export async function importFromGit(name, gitUrl, token) {
     // detached one-time import) — buildManifestFromDirectory's ensureGitRepo
     // call layers our own ignore rules on top without disturbing it, so the
     // project stays connected to the hosted editor and can be pushed straight back.
-    manifest = await buildManifestFromDirectory(id, name, dir, 'Imported from the hosted editor');
+    manifest = await buildManifestFromDirectory(ownerId, id, name, dir, 'Imported from the hosted editor');
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });
     throw new Error(err.message === 'no files found' ? 'the cloned project has no files' : err.message);
   }
 
-  await setRemote(id, gitUrl, token);
+  await setRemote(ownerId, id, gitUrl, token);
   return manifest;
 }

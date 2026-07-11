@@ -6,11 +6,15 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.1",
     "@fastify/multipart": "^9.0.0",
+    "@fastify/secure-session": "^8.3.0",
     "@fastify/static": "^9.3.0",
     "archiver": "^8.0.0",
     "execa": "^9.6.1",
     "fastify": "^5.10.0",
-    "nanoid": "^5.1.16"
+    "nanoid": "^5.1.16",
+    "otplib": "^13.4.1",
+    "qrcode": "^1.5.4"
   }
 }

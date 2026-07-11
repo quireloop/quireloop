@@ -9,8 +9,8 @@ function pdfNameFor(mainFile) {
 // Reverse sync: a click position on the rendered PDF -> the source file/line
 // that produced it. Coordinates are in PDF points (72dpi), top-left origin,
 // matching synctex's own convention (and pdf.js's, conveniently).
-export async function toSource(projectId, mainFile, page, x, y) {
-  const cwd = projectDir(projectId);
+export async function toSource(ownerId, projectId, mainFile, page, x, y) {
+  const cwd = projectDir(ownerId, projectId);
   const pdfPath = path.join('build', pdfNameFor(mainFile));
   const result = await execa('synctex', ['edit', '-o', `${page}:${x}:${y}:${pdfPath}`], {
     cwd,
@@ -30,8 +30,8 @@ export async function toSource(projectId, mainFile, page, x, y) {
 // Forward sync: a source file/line -> where it landed on the PDF page.
 // A line can produce multiple output records (one per word/box); we take
 // the first, which is what most editors do.
-export async function toPdf(projectId, mainFile, file, line) {
-  const cwd = projectDir(projectId);
+export async function toPdf(ownerId, projectId, mainFile, file, line) {
+  const cwd = projectDir(ownerId, projectId);
   const pdfPath = path.join('build', pdfNameFor(mainFile));
   const result = await execa('synctex', ['view', '-i', `${line}:0:${file}`, '-o', pdfPath], {
     cwd,

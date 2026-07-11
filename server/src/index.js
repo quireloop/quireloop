@@ -1,7 +1,11 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
+import fastifyCookie from '@fastify/cookie';
+import fastifySecureSession from '@fastify/secure-session';
 import fs from 'node:fs';
 import { PORT, HOST, PUBLIC_DIR } from './config.js';
+import { loadOrCreateSessionKey } from './lib/auth.js';
+import authRoutes from './routes/auth.js';
 import projectsRoutes from './routes/projects.js';
 import filesRoutes from './routes/files.js';
 import compileRoutes from './routes/compile.js';
@@ -17,7 +21,14 @@ app.addContentTypeParser('text/plain', { parseAs: 'string' }, (req, body, done) 
   done(null, body);
 });
 
+await app.register(fastifyCookie);
+await app.register(fastifySecureSession, {
+  key: await loadOrCreateSessionKey(),
+  cookie: { path: '/', httpOnly: true, sameSite: 'lax' },
+});
+
 await registerMultipart(app);
+await app.register(authRoutes);
 await app.register(projectsRoutes);
 await app.register(filesRoutes);
 await app.register(compileRoutes);

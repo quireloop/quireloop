@@ -11,8 +11,8 @@ const ENGINE_FLAGS = {
 // Compiles a project's main file with latexmk. Never throws for LaTeX
 // compile failures (non-zero latexmk exit) — only for infra problems
 // (e.g. latexmk not found), which callers should treat as a 500.
-export async function compileProject(projectId, mainFile, compiler = 'pdflatex') {
-  const cwd = projectDir(projectId);
+export async function compileProject(ownerId, projectId, mainFile, compiler = 'pdflatex') {
+  const cwd = projectDir(ownerId, projectId);
   const outdir = 'build';
   const engineFlag = ENGINE_FLAGS[compiler] ?? ENGINE_FLAGS.pdflatex;
 
@@ -52,8 +52,8 @@ export async function compileProject(projectId, mainFile, compiler = 'pdflatex')
   }
 }
 
-export async function cleanProject(projectId, mainFile) {
-  const cwd = projectDir(projectId);
+export async function cleanProject(ownerId, projectId, mainFile) {
+  const cwd = projectDir(ownerId, projectId);
   const outdir = 'build';
   try {
     await execa('latexmk', ['-C', `-outdir=${outdir}`, mainFile], { cwd, timeout: 30_000, reject: false });

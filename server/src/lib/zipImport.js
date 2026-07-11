@@ -22,9 +22,9 @@ async function flattenSingleWrapperFolder(dir) {
   await fs.rm(wrapper, { recursive: true, force: true });
 }
 
-export async function importFromZip(name, buffer) {
+export async function importFromZip(ownerId, name, buffer) {
   const id = nanoid(10);
-  const dir = projectDir(id);
+  const dir = projectDir(ownerId, id);
   await fs.mkdir(dir, { recursive: true });
 
   const tmpZip = path.join(os.tmpdir(), `quireloop-upload-${id}.zip`);
@@ -43,7 +43,7 @@ export async function importFromZip(name, buffer) {
   await flattenSingleWrapperFolder(dir);
 
   try {
-    return await buildManifestFromDirectory(id, name, dir, 'Uploaded project');
+    return await buildManifestFromDirectory(ownerId, id, name, dir, 'Uploaded project');
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });
     throw new Error(err.message === 'no files found' ? 'that zip has no files in it' : err.message);

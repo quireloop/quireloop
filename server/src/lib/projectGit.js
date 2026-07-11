@@ -23,10 +23,11 @@ const GITIGNORE_CONTENT = `# Quireloop bookkeeping — not part of your project
 .DS_Store
 `;
 
-// Every project directory lives inside this app's own repo (as gitignored
-// data), so naive repo discovery (git walking upward from -C dir looking
-// for the nearest .git) finds *this app's* repo, not a project-local one —
-// and any add/commit then silently lands there instead. GIT_CEILING_DIRECTORIES
+// Every project directory lives under PROJECTS_DIR (<ownerId>/<projectId>),
+// which itself lives inside this app's own repo (as gitignored data), so
+// naive repo discovery (git walking upward from -C dir looking for the
+// nearest .git) finds *this app's* repo, not a project-local one — and any
+// add/commit then silently lands there instead. GIT_CEILING_DIRECTORIES
 // stops that walk at PROJECTS_DIR, so git can never see anything above a
 // given project folder, no matter what.
 function git(dir, args, opts = {}) {
@@ -58,8 +59,8 @@ async function hasGitRepo(dir) {
 // status check, so if it kept committing "whatever's pending" the user's
 // in-progress edits would get swallowed under a meaningless message before
 // they ever reach the commit box in the UI.
-export async function ensureGitRepo(projectId) {
-  const dir = projectDir(projectId);
+export async function ensureGitRepo(ownerId, projectId) {
+  const dir = projectDir(ownerId, projectId);
   const ignorePath = path.join(dir, '.gitignore');
   const isNewRepo = !(await hasGitRepo(dir));
 
@@ -91,9 +92,9 @@ function parseStatusLine(line) {
   return { path: filePath, status: status.trim() || '??' };
 }
 
-export async function gitStatus(projectId) {
-  const dir = projectDir(projectId);
-  await ensureGitRepo(projectId);
+export async function gitStatus(ownerId, projectId) {
+  const dir = projectDir(ownerId, projectId);
+  await ensureGitRepo(ownerId, projectId);
 
   const { stdout } = await git(dir, ['status', '--porcelain', '-b']);
   const lines = stdout.split('\n').filter(Boolean);
@@ -106,14 +107,14 @@ export async function gitStatus(projectId) {
   const behind = Number(branchLine.match(/behind (\d+)/)?.[1] ?? 0);
   const hasUpstream = branchLine.includes('...');
 
-  const remote = await getRemote(projectId);
+  const remote = await getRemote(ownerId, projectId);
 
   return { branch, ahead, behind, hasUpstream, remote, files };
 }
 
-export async function gitCommit(projectId, message) {
-  const dir = projectDir(projectId);
-  await ensureGitRepo(projectId);
+export async function gitCommit(ownerId, projectId, message) {
+  const dir = projectDir(ownerId, projectId);
+  await ensureGitRepo(ownerId, projectId);
 
   const status = await git(dir, ['status', '--porcelain']);
   if (!status.stdout.trim()) {
@@ -125,25 +126,25 @@ export async function gitCommit(projectId, message) {
   return { ok: true, committed: true };
 }
 
-async function credentialsPath(projectId) {
-  return path.join(projectDir(projectId), CREDENTIALS_FILE);
+function credentialsPath(ownerId, projectId) {
+  return path.join(projectDir(ownerId, projectId), CREDENTIALS_FILE);
 }
 
-async function readCredentials(projectId) {
+async function readCredentials(ownerId, projectId) {
   try {
-    const raw = await fs.readFile(await credentialsPath(projectId), 'utf8');
+    const raw = await fs.readFile(credentialsPath(ownerId, projectId), 'utf8');
     return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-export async function getRemote(projectId) {
-  const creds = await readCredentials(projectId);
+export async function getRemote(ownerId, projectId) {
+  const creds = await readCredentials(ownerId, projectId);
   return creds ? withoutToken(creds.url) : null;
 }
 
-export async function setRemote(projectId, url, token) {
+export async function setRemote(ownerId, projectId, url, token) {
   let parsed;
   try {
     parsed = new URL(url);
@@ -154,13 +155,13 @@ export async function setRemote(projectId, url, token) {
     throw new Error('only https:// git URLs are supported');
   }
 
-  await ensureGitRepo(projectId);
-  const dir = projectDir(projectId);
+  await ensureGitRepo(ownerId, projectId);
+  const dir = projectDir(ownerId, projectId);
 
   // The token lives only in this gitignored file — never in .git/config —
   // so it can't leak if the repo is inspected or copied elsewhere.
   const plainUrl = withoutToken(url);
-  await fs.writeFile(await credentialsPath(projectId), JSON.stringify({ url: plainUrl, token }, null, 2), {
+  await fs.writeFile(credentialsPath(ownerId, projectId), JSON.stringify({ url: plainUrl, token }, null, 2), {
     mode: 0o600,
   });
 
@@ -183,10 +184,10 @@ function friendlyGitError(err) {
   return stderr.split('\n').find(Boolean) || 'git command failed';
 }
 
-export async function pushProject(projectId) {
-  const dir = projectDir(projectId);
-  await ensureGitRepo(projectId);
-  const creds = await readCredentials(projectId);
+export async function pushProject(ownerId, projectId) {
+  const dir = projectDir(ownerId, projectId);
+  await ensureGitRepo(ownerId, projectId);
+  const creds = await readCredentials(ownerId, projectId);
   if (!creds) throw new Error('no remote configured yet — set one first');
 
   const branch = await currentBranch(dir);
@@ -199,10 +200,10 @@ export async function pushProject(projectId) {
   return { ok: true };
 }
 
-export async function pullProject(projectId) {
-  const dir = projectDir(projectId);
-  await ensureGitRepo(projectId);
-  const creds = await readCredentials(projectId);
+export async function pullProject(ownerId, projectId) {
+  const dir = projectDir(ownerId, projectId);
+  await ensureGitRepo(ownerId, projectId);
+  const creds = await readCredentials(ownerId, projectId);
   if (!creds) throw new Error('no remote configured yet — set one first');
 
   const branch = await currentBranch(dir);
