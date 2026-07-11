@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { authApi } from '../lib/auth.js';
 import Logo from '../components/Logo.jsx';
 import ReactiveBackground from '../components/ReactiveBackground.jsx';
+import FeatureGrid from '../components/FeatureGrid.jsx';
+import EditorPreview from '../components/EditorPreview.jsx';
 import { useDarkMode } from '../lib/theme.js';
+
+const GITHUB_URL = 'https://github.com/arjunpogaku/quireloop';
 
 const CARD_STYLE = {
   maxWidth: 360,
@@ -13,6 +17,43 @@ const CARD_STYLE = {
   borderRadius: 14,
   boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
 };
+
+function NavBar() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        maxWidth: 1000,
+        margin: '0 auto',
+        padding: '4px 8px 40px',
+      }}
+    >
+      <Logo size={26} />
+      <strong>Quireloop</strong>
+      <a
+        href={GITHUB_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          marginLeft: 'auto',
+          fontSize: 13,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          color: 'var(--text-muted)',
+          textDecoration: 'none',
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+        </svg>
+        Open source
+      </a>
+    </div>
+  );
+}
 
 function Hero() {
   return (
@@ -37,14 +78,45 @@ function Hero() {
   );
 }
 
-function Page({ children }) {
+function Footer() {
+  return (
+    <div
+      style={{
+        textAlign: 'center',
+        fontSize: 12,
+        color: 'var(--text-muted)',
+        padding: '56px 16px 32px',
+      }}
+    >
+      Quireloop is free and open source, MIT-licensed.{' '}
+      <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
+        View the source on GitHub
+      </a>
+      .
+    </div>
+  );
+}
+
+function Page({ children, marketing }) {
   const [dark] = useDarkMode();
   return (
     <div style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
       <ReactiveBackground dark={dark} />
-      <div style={{ position: 'relative', zIndex: 1, padding: '80px 16px' }}>
+      <div style={{ position: 'relative', zIndex: 1, padding: '48px 16px 0' }}>
+        <NavBar />
         <Hero />
         {children}
+        {marketing && (
+          <>
+            <div style={{ margin: '64px 16px 40px' }}>
+              <EditorPreview />
+            </div>
+            <div style={{ margin: '0 16px' }}>
+              <FeatureGrid />
+            </div>
+            <Footer />
+          </>
+        )}
       </div>
     </div>
   );
@@ -130,7 +202,7 @@ export default function LoginPage({ onAuthenticated }) {
   }
 
   return (
-    <Page>
+    <Page marketing>
       <div style={CARD_STYLE}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <Logo size={32} />

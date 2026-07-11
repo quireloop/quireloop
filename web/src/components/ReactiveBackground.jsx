@@ -197,14 +197,18 @@ export default function ReactiveBackground({ dark }) {
     resize();
     tick();
 
-    window.addEventListener('resize', resize);
+    // ResizeObserver instead of just a window resize listener — the parent
+    // page's height can change from content (feature sections, mockups)
+    // loading in without the viewport itself ever resizing.
+    const resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(parent);
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerleave', handlePointerLeave);
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
-      window.removeEventListener('resize', resize);
+      resizeObserver.disconnect();
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerleave', handlePointerLeave);
       document.removeEventListener('visibilitychange', handleVisibility);
