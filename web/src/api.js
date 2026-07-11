@@ -128,4 +128,6 @@ export const api = {
     }),
   gitPush: (id) => request(`/projects/${id}/git/push`, { method: 'POST' }),
   gitPull: (id) => request(`/projects/${id}/git/pull`, { method: 'POST' }),
+
+  recentEditors: (id, path) => request(`/projects/${id}/recent-editors/${path}`),
 };

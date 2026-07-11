@@ -1,10 +1,12 @@
 import { gitStatus, gitCommit, setRemote, pushProject, pullProject } from '../lib/projectGit.js';
 import { syncFilesFromDisk } from '../lib/manifest.js';
 import { requireProjectAccess } from '../lib/authMiddleware.js';
+import * as collab from '../lib/collab.js';
 
 export default async function gitRoutes(app) {
   app.get('/api/projects/:id/git/status', { preHandler: requireProjectAccess }, async (req, reply) => {
     try {
+      await collab.flushProject(req.ownerId, req.params.id);
       return await gitStatus(req.ownerId, req.params.id);
     } catch (err) {
       return reply.code(400).send({ error: err.message });
@@ -14,6 +16,7 @@ export default async function gitRoutes(app) {
   app.post('/api/projects/:id/git/commit', { preHandler: requireProjectAccess }, async (req, reply) => {
     const { message } = req.body ?? {};
     try {
+      await collab.flushProject(req.ownerId, req.params.id);
       return await gitCommit(req.ownerId, req.params.id, message);
     } catch (err) {
       return reply.code(400).send({ error: err.message });

@@ -3,10 +3,12 @@ import { compileProject, cleanProject } from '../lib/latex.js';
 import { resolveProjectPath } from '../lib/storage.js';
 import { createSnapshot } from '../lib/versions.js';
 import { requireProjectAccess } from '../lib/authMiddleware.js';
+import * as collab from '../lib/collab.js';
 
 export default async function compileRoutes(app) {
   app.post('/api/projects/:id/compile', { preHandler: requireProjectAccess }, async (req) => {
     const manifest = req.manifest;
+    await collab.flushProject(req.ownerId, req.params.id);
     const result = await compileProject(req.ownerId, req.params.id, manifest.mainFile, manifest.compiler);
     if (result.success) {
       await createSnapshot(req.ownerId, req.params.id, { trigger: 'compile' });

@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyCookie from '@fastify/cookie';
 import fastifySecureSession from '@fastify/secure-session';
+import fastifyWebsocket from '@fastify/websocket';
 import fs from 'node:fs';
 import { PORT, HOST, PUBLIC_DIR } from './config.js';
 import { loadOrCreateSessionKey } from './lib/auth.js';
@@ -12,6 +13,7 @@ import compileRoutes from './routes/compile.js';
 import synctexRoutes from './routes/synctex.js';
 import versionsRoutes from './routes/versions.js';
 import gitRoutes from './routes/git.js';
+import collabRoutes from './routes/collab.js';
 import registerMultipart from './plugins/multipart.js';
 
 const app = Fastify({ logger: true });
@@ -28,6 +30,7 @@ await app.register(fastifySecureSession, {
 });
 
 await registerMultipart(app);
+await app.register(fastifyWebsocket);
 await app.register(authRoutes);
 await app.register(projectsRoutes);
 await app.register(filesRoutes);
@@ -35,6 +38,7 @@ await app.register(compileRoutes);
 await app.register(synctexRoutes);
 await app.register(versionsRoutes);
 await app.register(gitRoutes);
+await app.register(collabRoutes);
 
 if (fs.existsSync(PUBLIC_DIR)) {
   await app.register(fastifyStatic, { root: PUBLIC_DIR });

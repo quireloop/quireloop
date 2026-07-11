@@ -89,8 +89,12 @@ export async function restoreVersion(ownerId, projectId, versionId) {
   }
   await copyProjectContents(src, dir);
 
-  // Bump updatedAt so the dashboard reflects the restore.
+  // Bump updatedAt (dashboard) and collabGeneration — the latter changes the
+  // room identity every live editor uses, so a restore can't be silently
+  // undone by an in-flight collaborative session resurrecting pre-restore
+  // content (see collab.invalidateProject, called by the route after this).
   const manifest = await readManifest(ownerId, projectId);
+  manifest.collabGeneration = (manifest.collabGeneration ?? 0) + 1;
   await writeManifest(ownerId, projectId, manifest);
   return { ok: true };
 }

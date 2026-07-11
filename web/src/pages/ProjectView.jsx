@@ -15,14 +15,23 @@ import { buildOutline, countWords } from '../lib/outline.js';
 import { useDarkMode, useSidebarOpen } from '../lib/theme.js';
 import { parseBibEntries } from '../lib/bibtex.js';
 
-const AUTOSAVE_DELAY_MS = 1200;
+const RECENT_EDITORS_POLL_MS = 8000;
+
+const STATUS_LABEL = {
+  connecting: 'Connecting…',
+  connected: 'Connected — syncing…',
+  syncing: 'Syncing…',
+  synced: 'Synced',
+  disconnected: 'Offline — changes saved locally',
+};
 
 export default function ProjectView({ projectId, onBack, user }) {
   const [manifest, setManifest] = useState(null);
   const [activePath, setActivePath] = useState(null);
-  const [content, setContent] = useState(null);
+  const [content, setContent] = useState('');
+  const [collabStatus, setCollabStatus] = useState('connecting');
+  const [recentEditors, setRecentEditors] = useState([]);
   const [initialLine, setInitialLine] = useState(null);
-  const [dirty, setDirty] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [compileResult, setCompileResult] = useState(null);
   const [compiling, setCompiling] = useState(false);
@@ -34,13 +43,8 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [bibEntries, setBibEntries] = useState([]);
   const [dark, setDark] = useDarkMode();
   const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
-  const dirtyContentRef = useRef('');
-  const activePathRef = useRef(null);
-  const autosaveTimerRef = useRef(null);
   const editorRef = useRef(null);
   const pdfViewerRef = useRef(null);
-
-  activePathRef.current = activePath;
 
   useEffect(() => {
     api.getProject(projectId).then((m) => {
@@ -49,16 +53,6 @@ export default function ProjectView({ projectId, onBack, user }) {
       if (textFile) setActivePath(textFile.path);
     });
   }, [projectId]);
-
-  useEffect(() => {
-    if (!activePath) return;
-    setContent(null);
-    api.readFile(projectId, activePath).then((text) => {
-      setContent(text);
-      dirtyContentRef.current = text;
-      setDirty(false);
-    });
-  }, [projectId, activePath]);
 
   // Powers \cite{} autocomplete — re-parsed whenever the project's file
   // list changes (a .bib was added, removed, or the active one saved a new
@@ -79,40 +73,40 @@ export default function ProjectView({ projectId, onBack, user }) {
     };
   }, [projectId, manifest?.files]);
 
+  // Attribution — who's recently touched the file currently open, polled
+  // rather than pushed since it's a nice-to-have, not something that needs
+  // to be instant.
   useEffect(() => {
-    function handleBeforeUnload(e) {
-      if (dirty) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
+    if (!activePath) {
+      setRecentEditors([]);
+      return;
     }
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [dirty]);
+    let cancelled = false;
+    function poll() {
+      api
+        .recentEditors(projectId, activePath)
+        .then((list) => !cancelled && setRecentEditors(list))
+        .catch(() => {});
+    }
+    poll();
+    const timer = setInterval(poll, RECENT_EDITORS_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [projectId, activePath]);
 
   const outline = useMemo(() => buildOutline(content ?? ''), [content]);
   const wordCount = useMemo(() => countWords(content ?? ''), [content]);
 
-  async function flushSave(path = activePathRef.current) {
-    if (!path) return;
-    clearTimeout(autosaveTimerRef.current);
-    await api.writeFile(projectId, path, dirtyContentRef.current);
-    setDirty(false);
-  }
-
   function handleEditorChange(text) {
-    dirtyContentRef.current = text;
-    setDirty(true);
-    clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => {
-      flushSave();
-    }, AUTOSAVE_DELAY_MS);
+    setContent(text);
   }
 
-  async function handleSelectFile(f) {
+  function handleSelectFile(f) {
     if (f.path === activePath) return;
-    if (dirty) await flushSave();
     setInitialLine(null);
+    setContent('');
     setActivePath(f.path);
   }
 
@@ -129,6 +123,7 @@ export default function ProjectView({ projectId, onBack, user }) {
     await api.writeFile(projectId, name, '');
     await refreshManifest();
     setInitialLine(null);
+    setContent('');
     setActivePath(name);
   }
 
@@ -149,15 +144,14 @@ export default function ProjectView({ projectId, onBack, user }) {
     setManifest(updated);
     if (path === activePath) {
       const next = updated.files.find((f) => ['tex', 'bib', 'cls', 'sty'].includes(f.type));
+      setContent('');
       setActivePath(next ? next.path : null);
-      if (!next) setContent(null);
     }
   }
 
   async function handleCompile() {
     setCompiling(true);
     try {
-      await flushSave();
       const result = await api.compile(projectId);
       setCompileResult(result);
       if (result.success) {
@@ -178,12 +172,12 @@ export default function ProjectView({ projectId, onBack, user }) {
     setPdfUrl(null);
   }
 
-  async function jumpToSource(file, line) {
+  function jumpToSource(file, line) {
     if (file === activePath) {
       editorRef.current?.goToLine(line);
     } else {
-      if (dirty) await flushSave();
       setInitialLine(line);
+      setContent('');
       setActivePath(file);
     }
   }
@@ -206,7 +200,6 @@ export default function ProjectView({ projectId, onBack, user }) {
   }
 
   async function handleSaveVersion(label) {
-    await flushSave();
     await api.saveVersion(projectId, label);
     await refreshVersions();
   }
@@ -217,20 +210,12 @@ export default function ProjectView({ projectId, onBack, user }) {
     setManifest(updated);
     setPdfUrl(null);
     setCompileResult(null);
+    setContent('');
     const stillExists = updated.files.some((f) => f.path === activePath);
     const nextPath = stillExists
       ? activePath
       : updated.files.find((f) => ['tex', 'bib', 'cls', 'sty'].includes(f.type))?.path ?? null;
-    if (nextPath === activePath) {
-      // Force a re-fetch of content even though the path didn't change.
-      setContent(null);
-      const text = await api.readFile(projectId, nextPath);
-      setContent(text);
-      dirtyContentRef.current = text;
-      setDirty(false);
-    } else {
-      setActivePath(nextPath);
-    }
+    setActivePath(nextPath);
     await refreshVersions();
   }
 
@@ -261,8 +246,15 @@ export default function ProjectView({ projectId, onBack, user }) {
         <button onClick={onBack}>&larr; Back</button>
         <Logo size={20} />
         <strong>{manifest?.name}</strong>
-        {dirty && <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Unsaved changes…</span>}
+        <span style={{ color: collabStatus === 'disconnected' ? '#e0a030' : 'var(--text-muted)', fontSize: 12 }}>
+          {STATUS_LABEL[collabStatus] ?? collabStatus}
+        </span>
         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{wordCount} words</span>
+        {recentEditors.length > 0 && (
+          <span style={{ color: 'var(--text-muted)', fontSize: 12 }} title={recentEditors.map((e) => e.email).join(', ')}>
+            👥 {recentEditors.map((e) => e.email.split('@')[0]).join(', ')}
+          </span>
+        )}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
           <button
             onClick={() => setDark(!dark)}
@@ -375,7 +367,6 @@ export default function ProjectView({ projectId, onBack, user }) {
               <FileTree
                 files={manifest.files}
                 activePath={activePath}
-                dirty={dirty}
                 onSelect={handleSelectFile}
                 onUpload={handleUpload}
                 onCreate={handleCreate}
@@ -385,9 +376,7 @@ export default function ProjectView({ projectId, onBack, user }) {
               />
             )}
             {sidebarTab === 'outline' && <OutlinePanel entries={outline} onJump={handleOutlineJump} />}
-            {sidebarTab === 'git' && (
-              <SourceControlPanel projectId={projectId} beforeAction={() => (dirty ? flushSave() : null)} />
-            )}
+            {sidebarTab === 'git' && <SourceControlPanel projectId={projectId} />}
           </div>
         </div>
         )}
@@ -399,16 +388,18 @@ export default function ProjectView({ projectId, onBack, user }) {
           <Panel defaultSize={55} minSize={20}>
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <div style={{ flex: 1, minHeight: 0 }}>
-                {activePath && content !== null && (
+                {activePath && (
                   <Editor
                     ref={editorRef}
-                    key={activePath}
+                    key={`${activePath}:${manifest?.collabGeneration ?? 0}`}
+                    projectId={projectId}
                     filePath={activePath}
-                    content={content}
+                    collabGeneration={manifest?.collabGeneration ?? 0}
                     initialLine={initialLine}
                     dark={dark}
+                    user={user}
                     onChange={handleEditorChange}
-                    onSave={() => flushSave()}
+                    onStatus={setCollabStatus}
                     onJumpToPdf={jumpToPdfAtLine}
                     bibEntries={bibEntries}
                   />

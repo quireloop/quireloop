@@ -1,11 +1,15 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { defaultKeymap } from '@codemirror/commands';
 import { defaultHighlightStyle, syntaxHighlighting, foldGutter } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { latex, latexCompletionSource, autocompletion, completionKeymap } from 'codemirror-lang-latex';
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
+import { IndexeddbPersistence } from 'y-indexeddb';
+import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 
 // \cite{...} and its many variants (\citep, \citet, \parencite, \autocite,
 // \footcite, biblatex's capitalized forms, ...) — matched generically by
@@ -52,19 +56,28 @@ function insertAtCursor(view, text) {
   view.focus();
 }
 
+// Deterministic per-user color for remote cursors/selections — same user
+// always renders the same color across sessions and browser tabs.
+function userColor(userId) {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) hash = (hash * 31 + userId.charCodeAt(i)) | 0;
+  const hue = Math.abs(hash) % 360;
+  return { color: `hsl(${hue}, 70%, 45%)`, colorLight: `hsl(${hue}, 70%, 45%, 0.25)` };
+}
+
 const Editor = forwardRef(function Editor(
-  { filePath, content, initialLine, dark, onChange, onSave, onJumpToPdf, bibEntries },
+  { projectId, filePath, collabGeneration, initialLine, dark, user, onChange, onJumpToPdf, onStatus, bibEntries },
   ref
 ) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const onChangeRef = useRef(onChange);
-  const onSaveRef = useRef(onSave);
   const onJumpToPdfRef = useRef(onJumpToPdf);
+  const onStatusRef = useRef(onStatus);
   const bibEntriesRef = useRef(bibEntries ?? []);
   onChangeRef.current = onChange;
-  onSaveRef.current = onSave;
   onJumpToPdfRef.current = onJumpToPdf;
+  onStatusRef.current = onStatus;
   bibEntriesRef.current = bibEntries ?? [];
 
   useImperativeHandle(ref, () => ({
@@ -82,13 +95,35 @@ const Editor = forwardRef(function Editor(
   }));
 
   useEffect(() => {
+    const ydoc = new Y.Doc();
+    const ytext = ydoc.getText('content');
+
+    const indexeddb = new IndexeddbPersistence(
+      `quireloop:${projectId}:${filePath}:${collabGeneration ?? 0}`,
+      ydoc
+    );
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const provider = new WebsocketProvider(`${wsProtocol}//${window.location.host}/ws/${projectId}`, filePath, ydoc);
+
+    if (user) {
+      const { color, colorLight } = userColor(user.id);
+      provider.awareness.setLocalStateField('user', { name: user.email, color, colorLight });
+    }
+
+    provider.on('status', ({ status }) => onStatusRef.current?.(status));
+    provider.on('sync', (synced) => onStatusRef.current?.(synced ? 'synced' : 'syncing'));
+
+    const reportChange = () => onChangeRef.current?.(ytext.toString());
+    ytext.observe(reportChange);
+
     const state = EditorState.create({
-      doc: content,
+      doc: ytext.toString(),
       extensions: [
         lineNumbers(),
         foldGutter(),
         EditorView.lineWrapping,
-        history(),
+        yCollab(ytext, provider.awareness),
         // enableAutocomplete disabled here so we can fold in our own
         // \cite{} source alongside the built-in command/environment
         // completions — codemirror-lang-latex's own autocomplete uses
@@ -102,9 +137,6 @@ const Editor = forwardRef(function Editor(
         search(),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ...(dark ? [oneDark] : []),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) onChangeRef.current?.(update.state.doc.toString());
-        }),
         EditorView.domEventHandlers({
           dblclick(event, view) {
             // Leaves the browser's own double-click word-selection alone —
@@ -116,18 +148,7 @@ const Editor = forwardRef(function Editor(
             onJumpToPdfRef.current?.(line);
           },
         }),
-        keymap.of([
-          ...defaultKeymap,
-          ...historyKeymap,
-          ...searchKeymap,
-          {
-            key: 'Mod-s',
-            run: () => {
-              onSaveRef.current?.();
-              return true;
-            },
-          },
-        ]),
+        keymap.of([...yUndoManagerKeymap, ...defaultKeymap, ...searchKeymap]),
         EditorView.theme({
           '&': { height: '100%', fontSize: '14px' },
           '.cm-scroller': { overflow: 'auto', fontFamily: 'ui-monospace, monospace' },
@@ -140,9 +161,15 @@ const Editor = forwardRef(function Editor(
 
     if (initialLine) jumpToLine(view, initialLine);
 
-    return () => view.destroy();
+    return () => {
+      ytext.unobserve(reportChange);
+      view.destroy();
+      provider.destroy();
+      indexeddb.destroy();
+      ydoc.destroy();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath, dark]);
+  }, [projectId, filePath, collabGeneration, dark]);
 
   return <div ref={containerRef} style={{ height: '100%' }} />;
 });
