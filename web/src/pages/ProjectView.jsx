@@ -12,6 +12,7 @@ import SourceControlPanel from '../components/SourceControlPanel.jsx';
 import Logo from '../components/Logo.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
 import { useDarkMode, useSidebarOpen } from '../lib/theme.js';
+import { parseBibEntries } from '../lib/bibtex.js';
 
 const AUTOSAVE_DELAY_MS = 1200;
 
@@ -28,6 +29,7 @@ export default function ProjectView({ projectId, onBack }) {
   const [showSymbols, setShowSymbols] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [versions, setVersions] = useState([]);
+  const [bibEntries, setBibEntries] = useState([]);
   const [dark, setDark] = useDarkMode();
   const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
   const dirtyContentRef = useRef('');
@@ -55,6 +57,25 @@ export default function ProjectView({ projectId, onBack }) {
       setDirty(false);
     });
   }, [projectId, activePath]);
+
+  // Powers \cite{} autocomplete — re-parsed whenever the project's file
+  // list changes (a .bib was added, removed, or the active one saved a new
+  // manifest entry). The file's own edits mid-session aren't picked up
+  // until the next manifest refresh, which is fine for an autocomplete list.
+  useEffect(() => {
+    const bibFiles = (manifest?.files ?? []).filter((f) => f.type === 'bib');
+    if (bibFiles.length === 0) {
+      setBibEntries([]);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(bibFiles.map((f) => api.readFile(projectId, f.path).catch(() => ''))).then((texts) => {
+      if (!cancelled) setBibEntries(texts.flatMap(parseBibEntries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, manifest?.files]);
 
   useEffect(() => {
     function handleBeforeUnload(e) {
@@ -374,6 +395,7 @@ export default function ProjectView({ projectId, onBack }) {
                     onChange={handleEditorChange}
                     onSave={() => flushSave()}
                     onJumpToPdf={jumpToPdfAtLine}
+                    bibEntries={bibEntries}
                   />
                 )}
               </div>

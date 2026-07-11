@@ -5,7 +5,32 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { defaultHighlightStyle, syntaxHighlighting, foldGutter } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { latex } from 'codemirror-lang-latex';
+import { latex, latexCompletionSource, autocompletion, completionKeymap } from 'codemirror-lang-latex';
+
+// \cite{...} and its many variants (\citep, \citet, \parencite, \autocite,
+// \footcite, biblatex's capitalized forms, ...) — matched generically by
+// "contains cite" rather than an exhaustive list of command names.
+const CITE_COMMAND_RE = /\\\w*[Cc]ite\w*\*?(\[[^\]]*\])*\{[^}]*/;
+
+function citationCompletionSource(getBibEntries) {
+  return (context) => {
+    const before = context.matchBefore(CITE_COMMAND_RE);
+    if (!before) return null;
+    const entries = getBibEntries();
+    if (entries.length === 0) return null;
+
+    const braceIdx = before.text.lastIndexOf('{');
+    const argsText = before.text.slice(braceIdx + 1);
+    const lastComma = argsText.lastIndexOf(',');
+    const from = before.from + braceIdx + 1 + (lastComma + 1);
+
+    return {
+      from,
+      options: entries.map((e) => ({ label: e.key, detail: e.title, type: 'constant' })),
+      validFor: /^[^,}]*$/,
+    };
+  };
+}
 
 function jumpToLine(view, line) {
   const doc = view.state.doc;
@@ -28,7 +53,7 @@ function insertAtCursor(view, text) {
 }
 
 const Editor = forwardRef(function Editor(
-  { filePath, content, initialLine, dark, onChange, onSave, onJumpToPdf },
+  { filePath, content, initialLine, dark, onChange, onSave, onJumpToPdf, bibEntries },
   ref
 ) {
   const containerRef = useRef(null);
@@ -36,9 +61,11 @@ const Editor = forwardRef(function Editor(
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
   const onJumpToPdfRef = useRef(onJumpToPdf);
+  const bibEntriesRef = useRef(bibEntries ?? []);
   onChangeRef.current = onChange;
   onSaveRef.current = onSave;
   onJumpToPdfRef.current = onJumpToPdf;
+  bibEntriesRef.current = bibEntries ?? [];
 
   useImperativeHandle(ref, () => ({
     goToLine: (line) => {
@@ -62,7 +89,16 @@ const Editor = forwardRef(function Editor(
         foldGutter(),
         EditorView.lineWrapping,
         history(),
-        latex(),
+        // enableAutocomplete disabled here so we can fold in our own
+        // \cite{} source alongside the built-in command/environment
+        // completions — codemirror-lang-latex's own autocomplete uses
+        // `override`, which replaces rather than merges completion
+        // sources, so both need to live in one autocompletion() call.
+        latex({ enableAutocomplete: false }),
+        autocompletion({
+          override: [latexCompletionSource(true), citationCompletionSource(() => bibEntriesRef.current)],
+        }),
+        keymap.of(completionKeymap),
         search(),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ...(dark ? [oneDark] : []),
