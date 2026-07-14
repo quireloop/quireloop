@@ -18,6 +18,7 @@ import versionsRoutes from './routes/versions.js';
 import gitRoutes from './routes/git.js';
 import collabRoutes from './routes/collab.js';
 import commentsRoutes from './routes/comments.js';
+import suggestionsRoutes from './routes/suggestions.js';
 import chatRoutes from './routes/chat.js';
 import registerMultipart from './plugins/multipart.js';
 
@@ -56,6 +57,7 @@ await app.register(versionsRoutes);
 await app.register(gitRoutes);
 await app.register(collabRoutes);
 await app.register(commentsRoutes);
+await app.register(suggestionsRoutes);
 await app.register(chatRoutes);
 
 if (fs.existsSync(PUBLIC_DIR)) {

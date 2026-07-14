@@ -12,6 +12,7 @@ import SourceControlPanel from '../components/SourceControlPanel.jsx';
 import SearchPanel from '../components/SearchPanel.jsx';
 import ShareModal from '../components/ShareModal.jsx';
 import CommentsPanel from '../components/CommentsPanel.jsx';
+import SuggestionsPanel from '../components/SuggestionsPanel.jsx';
 import ChatPanel from '../components/ChatPanel.jsx';
 import Logo from '../components/Logo.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
@@ -21,12 +22,14 @@ import { encodeAnchor, decodeAnchor } from '../lib/commentAnchors.js';
 
 const RECENT_EDITORS_POLL_MS = 8000;
 const COMMENTS_POLL_MS = 8000;
+const SUGGESTIONS_POLL_MS = 8000;
 const CHAT_OPEN_POLL_MS = 4000;
 const CHAT_CLOSED_POLL_MS = 15000;
 const AUTO_COMPILE_IDLE_MS = 2500;
 const AUTO_COMPILE_STORAGE_KEY = 'quireloop:autoCompile';
 const SPELLCHECK_STORAGE_KEY = 'quireloop:spellcheck';
 const VIM_MODE_STORAGE_KEY = 'quireloop:vimMode';
+const SUGGEST_MODE_STORAGE_KEY = 'quireloop:suggestMode';
 
 const STATUS_LABEL = {
   connecting: 'Connecting…',
@@ -74,6 +77,15 @@ export default function ProjectView({ projectId, onBack, user }) {
     () => localStorage.getItem(SPELLCHECK_STORAGE_KEY) === 'true'
   );
   const [vimMode, setVimMode] = useState(() => localStorage.getItem(VIM_MODE_STORAGE_KEY) === 'true');
+  // Suggest mode ("track changes") — default off, persisted per-browser
+  // like autoCompile/spellcheck/vimMode above. Only meaningful for roles
+  // that can write; the toolbar toggle and its effect are hidden/no-ops
+  // for viewers (see isViewer below).
+  const [suggestMode, setSuggestMode] = useState(
+    () => localStorage.getItem(SUGGEST_MODE_STORAGE_KEY) === 'true'
+  );
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
   const autoCompileRef = useRef(autoCompile);
   const compilingRef = useRef(false);
   const activePathRef = useRef(activePath);
@@ -118,6 +130,11 @@ export default function ProjectView({ projectId, onBack, user }) {
   useEffect(() => {
     localStorage.setItem(VIM_MODE_STORAGE_KEY, String(vimMode));
   }, [vimMode]);
+
+  useEffect(() => {
+    localStorage.setItem(SUGGEST_MODE_STORAGE_KEY, String(suggestMode));
+    editorRef.current?.setSuggestMode(suggestMode);
+  }, [suggestMode]);
 
   useEffect(() => {
     activePathRef.current = activePath;
@@ -221,6 +238,29 @@ export default function ProjectView({ projectId, onBack, user }) {
     };
   }, [projectId, activePath]);
 
+  // Suggestion records for the open file — polled the same way as
+  // comments so collaborators see new/accepted/rejected suggestions
+  // without a refresh.
+  useEffect(() => {
+    if (!activePath) {
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    function poll() {
+      api
+        .listSuggestions(projectId, activePath)
+        .then((list) => !cancelled && setSuggestions(list))
+        .catch(() => {});
+    }
+    poll();
+    const timer = setInterval(poll, SUGGESTIONS_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [projectId, activePath]);
+
   // Decode each thread's Yjs relative-position anchor against the live doc
   // and push the resulting ranges into the editor as highlight decorations
   // — recomputed whenever the thread list changes or the doc's content
@@ -235,6 +275,33 @@ export default function ProjectView({ projectId, onBack, user }) {
       .filter(Boolean);
     editorRef.current?.setCommentRanges(ranges);
   }, [collabHandles, commentThreads, content]);
+
+  // Same decode as comments above, but for pending suggestions: resolves
+  // each anchor to a live range, reads the anchored text straight out of
+  // `content` (kept in sync with the doc by Editor's onChange), and drops
+  // — rather than flagging as orphaned — any suggestion whose anchor no
+  // longer resolves, per the design (an insert suggestion whose range
+  // vanished has nothing left to accept/reject; same for a delete
+  // suggestion whose range was itself deleted by someone else).
+  const suggestionsWithText = useMemo(() => {
+    if (!collabHandles) return [];
+    return suggestions
+      .map((s) => {
+        const range = decodeAnchor(collabHandles.ydoc, s.anchor);
+        if (!range) return null;
+        return { ...s, from: range.from, to: range.to, text: content.slice(range.from, range.to) };
+      })
+      .filter(Boolean);
+  }, [suggestions, collabHandles, content]);
+
+  // Push the resolved suggestion ranges into the editor as decorations —
+  // same pattern as the comment-highlight effect above.
+  useEffect(() => {
+    if (!collabHandles) return;
+    editorRef.current?.setSuggestionRanges(
+      suggestionsWithText.map((s) => ({ from: s.from, to: s.to, type: s.type }))
+    );
+  }, [collabHandles, suggestionsWithText]);
 
   // Chat — polls faster while the panel is open (so an active conversation
   // feels live) and slower while closed (just enough to keep the unread
@@ -435,6 +502,68 @@ export default function ProjectView({ projectId, onBack, user }) {
     await refreshComments();
   }
 
+  async function refreshSuggestions() {
+    if (!activePath) return;
+    setSuggestions(await api.listSuggestions(projectId, activePath));
+  }
+
+  // Fired by Editor whenever suggest mode rewrites a user edit into a
+  // pending suggestion — see the transactionFilter/updateListener pair in
+  // Editor.jsx for why this arrives post-sync (ytext already has the
+  // edit, so encodeAnchor's indices are valid).
+  async function handleSuggestedChange(change) {
+    const ytext = collabHandles?.ytext;
+    if (!ytext || !activePath) return;
+    const anchor = encodeAnchor(ytext, change.from, change.to);
+    await api.createSuggestion(projectId, activePath, change.type, anchor);
+    await refreshSuggestions();
+  }
+
+  // After an accept/reject edits the doc, other pending suggestions whose
+  // anchored text was inside the removed range collapse to empty — e.g.
+  // accepting a deletion that covered someone's pending insertion. Their
+  // records would linger forever (nothing left to highlight or act on),
+  // so sweep away any same-file record whose anchor no longer spans text.
+  // Only called right after our own doc edit, never from the poll: decode
+  // uses THIS file's ydoc, so records for other files would always look
+  // dead from here.
+  async function sweepOrphanedSuggestions() {
+    if (!collabHandles || !activePath) return;
+    const list = await api.listSuggestions(projectId, activePath);
+    const stale = list.filter((s) => {
+      const r = decodeAnchor(collabHandles.ydoc, s.anchor);
+      return !r || r.from >= r.to;
+    });
+    await Promise.all(stale.map((s) => api.deleteSuggestion(projectId, s.id).catch(() => {})));
+  }
+
+  // Accept/reject both re-decode the anchor immediately before touching
+  // the doc, in case it went stale between the panel rendering and the
+  // button click (someone else edited nearby, or resolved it already).
+  async function handleAcceptSuggestion(suggestion) {
+    const range = collabHandles ? decodeAnchor(collabHandles.ydoc, suggestion.anchor) : null;
+    if (range && suggestion.type === 'delete') {
+      // Accepting a deletion actually removes the anchored text.
+      editorRef.current?.replaceRange(range.from, range.to, '');
+    }
+    // Accepting an insertion just un-marks it — the text is already live.
+    await api.deleteSuggestion(projectId, suggestion.id);
+    await sweepOrphanedSuggestions();
+    await refreshSuggestions();
+  }
+
+  async function handleRejectSuggestion(suggestion) {
+    const range = collabHandles ? decodeAnchor(collabHandles.ydoc, suggestion.anchor) : null;
+    if (range && suggestion.type === 'insert') {
+      // Rejecting an insertion removes the text that was staged.
+      editorRef.current?.replaceRange(range.from, range.to, '');
+    }
+    // Rejecting a deletion just un-marks it — the text was never removed.
+    await api.deleteSuggestion(projectId, suggestion.id);
+    await sweepOrphanedSuggestions();
+    await refreshSuggestions();
+  }
+
   async function handleSendChat(text) {
     const message = await api.sendChat(projectId, text);
     setChatMessages((list) => [...list, message]);
@@ -563,6 +692,25 @@ export default function ProjectView({ projectId, onBack, user }) {
               onClose={() => setShowHistory(false)}
             />
           )}
+          {!isViewer && (
+            <button
+              onClick={() => setSuggestMode((v) => !v)}
+              title={
+                suggestMode
+                  ? 'Suggest mode is on — your edits become pending suggestions others can accept or reject'
+                  : 'Suggest mode is off — edits apply directly'
+              }
+              style={{ fontSize: 13, background: suggestMode ? 'var(--accent-bg)' : undefined }}
+            >
+              ✏ Suggest
+            </button>
+          )}
+          <button
+            onClick={() => setShowSuggestions((v) => !v)}
+            style={{ fontSize: 13, background: showSuggestions ? 'var(--accent-bg)' : undefined }}
+          >
+            Suggestions{suggestions.length > 0 ? ` (${suggestions.length})` : ''}
+          </button>
           <button
             onClick={handleCreateComment}
             disabled={!selectionNonEmpty}
@@ -750,12 +898,14 @@ export default function ProjectView({ projectId, onBack, user }) {
                     readOnly={isViewer}
                     spellcheck={spellcheck}
                     vimMode={vimMode}
+                    suggestMode={suggestMode && !isViewer}
                     onChange={handleEditorChange}
                     onStatus={setCollabStatus}
                     onJumpToPdf={jumpToPdfAtLine}
                     bibEntries={bibEntries}
                     onCollabHandles={setCollabHandles}
                     onSelectionChange={setSelectionNonEmpty}
+                    onSuggestedChange={handleSuggestedChange}
                   />
                 )}
               </div>
@@ -794,6 +944,15 @@ export default function ProjectView({ projectId, onBack, user }) {
             onResolve={handleResolveComment}
             onDelete={handleDeleteComment}
             onClose={() => setShowComments(false)}
+          />
+        )}
+        {showSuggestions && (
+          <SuggestionsPanel
+            suggestions={suggestionsWithText}
+            canWrite={!isViewer}
+            onAccept={handleAcceptSuggestion}
+            onReject={handleRejectSuggestion}
+            onClose={() => setShowSuggestions(false)}
           />
         )}
         {showChat && (

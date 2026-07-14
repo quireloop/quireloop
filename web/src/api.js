@@ -174,6 +174,17 @@ export const api = {
     }),
   deleteComment: (id, threadId) => request(`/projects/${id}/comments/${threadId}`, { method: 'DELETE' }),
 
+  listSuggestions: (id, filePath) =>
+    request(`/projects/${id}/suggestions${filePath ? `?file=${encodeURIComponent(filePath)}` : ''}`),
+  createSuggestion: (id, filePath, type, anchor) =>
+    request(`/projects/${id}/suggestions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filePath, type, anchor }),
+    }),
+  deleteSuggestion: (id, suggestionId) =>
+    request(`/projects/${id}/suggestions/${suggestionId}`, { method: 'DELETE' }),
+
   listChat: (id, after) => request(`/projects/${id}/chat${after ? `?after=${encodeURIComponent(after)}` : ''}`),
   sendChat: (id, text) =>
     request(`/projects/${id}/chat`, {

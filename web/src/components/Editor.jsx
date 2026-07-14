@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { EditorView, keymap, lineNumbers, Decoration, gutter, GutterMarker, drawSelection } from '@codemirror/view';
-import { EditorState, StateField, StateEffect, Compartment } from '@codemirror/state';
+import { EditorState, StateField, StateEffect, Compartment, Transaction, EditorSelection } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
 import { defaultHighlightStyle, syntaxHighlighting, foldGutter } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
@@ -100,6 +100,105 @@ const commentHighlightField = StateField.define({
   },
   provide: (f) => EditorView.decorations.from(f),
 });
+
+// Suggestion range highlighting — same pattern as commentHighlightField
+// above: a StateField so ranges survive concurrent document edits via
+// CodeMirror's own change-mapping. ProjectView recomputes absolute ranges
+// from each pending suggestion's Yjs relative-position anchor and pushes
+// them in via setSuggestionRangesEffect. Pending inserts render with a
+// green background (the text is already live in the doc); pending
+// deletes render struck-through with a red tint (the text is still there
+// on purpose, pending accept/reject).
+const setSuggestionRangesEffect = StateEffect.define();
+
+const suggestionHighlightField = StateField.define({
+  create() {
+    return Decoration.none;
+  },
+  update(decorations, tr) {
+    decorations = decorations.map(tr.changes);
+    for (const effect of tr.effects) {
+      if (effect.is(setSuggestionRangesEffect)) {
+        const marks = effect.value
+          .filter((r) => r.from < r.to && r.to <= tr.state.doc.length)
+          .sort((a, b) => a.from - b.from || a.to - b.to)
+          .map((r) =>
+            Decoration.mark({
+              class: r.type === 'delete' ? 'cm-suggestion-delete' : 'cm-suggestion-insert',
+            }).range(r.from, r.to)
+          );
+        decorations = Decoration.set(marks, true);
+      }
+    }
+    return decorations;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+// Suggest-mode transaction rewriting — active only while the compartment
+// below holds this extension (toggled via the setSuggestMode ref method,
+// no remount needed, same idea as the spellcheck Compartment). Only user
+// typing/deleting/pasting is rewritten; remote sync updates (pushed in by
+// y-codemirror.next's ySync plugin via plain view.dispatch({changes})
+// with no userEvent annotation) and undo/redo (no matching userEvent
+// prefix either) fall through untouched by construction of the check
+// below, not by special-casing their origin.
+//
+// The resulting suggestion metadata can't be reported synchronously from
+// inside the filter: encoding a Yjs anchor needs the shared ytext to
+// already contain the edit, and the filter runs *before* the transaction
+// is applied to the view (and therefore before y-codemirror.next's ySync
+// ViewPlugin has pushed the change into ytext, which happens during
+// view.update(), after the filtered transaction exists). So the filter
+// only queues {type, from, to} objects into pendingSuggestionsRef; the
+// EditorView.updateListener below (which fires after every ViewPlugin,
+// including ySync, has processed the update) drains the queue and calls
+// onSuggestedChange with positions that are now valid against ytext.
+function suggestModeFilter(pendingSuggestionsRef) {
+  return EditorState.transactionFilter.of((tr) => {
+    if (!tr.docChanged) return tr;
+    const userEvent = tr.annotation(Transaction.userEvent);
+    const isDirectUserEdit =
+      typeof userEvent === 'string' &&
+      (userEvent.startsWith('input') || userEvent.startsWith('delete') || userEvent.startsWith('move'));
+    if (!isDirectUserEdit) return tr;
+
+    const chunks = [];
+    tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+      chunks.push({ fromA, toA, fromB, toB, text: inserted.toString() });
+    });
+    // Multi-range edits (e.g. multi-cursor) are rare enough here that
+    // rewriting them correctly isn't worth the complexity — let them
+    // through unmodified rather than mishandling them.
+    if (chunks.length !== 1) return tr;
+
+    const { fromA, toA, fromB, toB, text } = chunks[0];
+    const isPureInsert = fromA === toA && text.length > 0;
+    const isPureDelete = fromA < toA && text.length === 0;
+
+    if (isPureInsert) {
+      pendingSuggestionsRef.current.push({ type: 'insert', from: fromB, to: toB });
+      return tr;
+    }
+    if (isPureDelete) {
+      pendingSuggestionsRef.current.push({ type: 'delete', from: fromA, to: toA });
+      // Keep the text but move the cursor to the start of the marked
+      // range — backspace then walks leftward marking successive
+      // characters instead of re-marking the same one forever.
+      return { selection: EditorSelection.cursor(fromA) };
+    }
+    // Replacement (paste over a selection, etc.): don't remove the old
+    // text — keep it (as a pending delete-suggestion) and insert the new
+    // text immediately after it (as a pending insert-suggestion), instead
+    // of the in-place replacement the user's keystroke asked for.
+    pendingSuggestionsRef.current.push({ type: 'delete', from: fromA, to: toA });
+    pendingSuggestionsRef.current.push({ type: 'insert', from: toA, to: toA + text.length });
+    return {
+      changes: { from: toA, to: toA, insert: text },
+      selection: EditorSelection.cursor(toA + text.length),
+    };
+  });
+}
 
 // Compile diagnostics — CodeMirror's @codemirror/lint package isn't an
 // installed dependency here, so this is a small hand-rolled equivalent:
@@ -236,30 +335,36 @@ const Editor = forwardRef(function Editor(
     readOnly,
     spellcheck,
     vimMode,
+    suggestMode,
     onChange,
     onJumpToPdf,
     onStatus,
     bibEntries,
     onCollabHandles,
     onSelectionChange,
+    onSuggestedChange,
   },
   ref
 ) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const spellcheckCompartmentRef = useRef(null);
+  const suggestModeCompartmentRef = useRef(null);
+  const pendingSuggestionsRef = useRef([]);
   const onChangeRef = useRef(onChange);
   const onJumpToPdfRef = useRef(onJumpToPdf);
   const onStatusRef = useRef(onStatus);
   const bibEntriesRef = useRef(bibEntries ?? []);
   const onCollabHandlesRef = useRef(onCollabHandles);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const onSuggestedChangeRef = useRef(onSuggestedChange);
   onChangeRef.current = onChange;
   onJumpToPdfRef.current = onJumpToPdf;
   onStatusRef.current = onStatus;
   bibEntriesRef.current = bibEntries ?? [];
   onCollabHandlesRef.current = onCollabHandles;
   onSelectionChangeRef.current = onSelectionChange;
+  onSuggestedChangeRef.current = onSuggestedChange;
 
   useImperativeHandle(ref, () => ({
     goToLine: (line) => {
@@ -289,10 +394,39 @@ const Editor = forwardRef(function Editor(
         viewRef.current.dispatch({ effects: setCommentRangesEffect.of(ranges) });
       }
     },
+    setSuggestionRanges: (ranges) => {
+      if (viewRef.current) {
+        viewRef.current.dispatch({ effects: setSuggestionRangesEffect.of(ranges) });
+      }
+    },
     setDiagnostics: (list) => {
       if (viewRef.current) {
         viewRef.current.dispatch({ effects: setDiagnosticsEffect.of(list ?? []) });
       }
+    },
+    // Reconfigures the transactionFilter compartment in place — same
+    // no-remount approach as setSpellcheck. Off by default: an empty
+    // extension array is a true no-op, so normal editing is unaffected
+    // when suggest mode has never been turned on.
+    setSuggestMode: (enabled) => {
+      const view = viewRef.current;
+      const compartment = suggestModeCompartmentRef.current;
+      if (view && compartment) {
+        view.dispatch({
+          effects: compartment.reconfigure(enabled ? suggestModeFilter(pendingSuggestionsRef) : []),
+        });
+      }
+    },
+    // Used by accept/reject to apply (or undo) a suggestion's doc edit.
+    // Dispatched with no userEvent annotation, so even while suggest mode
+    // is on, the transactionFilter above leaves it alone — this is the
+    // resolution of a suggestion, not a new one.
+    replaceRange: (from, to, text) => {
+      const view = viewRef.current;
+      if (!view) return;
+      const clampedFrom = Math.max(0, Math.min(from, view.state.doc.length));
+      const clampedTo = Math.max(0, Math.min(to, view.state.doc.length));
+      view.dispatch({ changes: { from: clampedFrom, to: clampedTo, insert: text ?? '' } });
     },
     // Reconfigures spellcheck in place via a Compartment rather than
     // remounting the whole editor (unlike vimMode, which does remount) —
@@ -332,6 +466,8 @@ const Editor = forwardRef(function Editor(
     ytext.observe(reportChange);
 
     spellcheckCompartmentRef.current = new Compartment();
+    suggestModeCompartmentRef.current = new Compartment();
+    pendingSuggestionsRef.current = [];
 
     const state = EditorState.create({
       doc: ytext.toString(),
@@ -347,6 +483,7 @@ const Editor = forwardRef(function Editor(
         EditorView.lineWrapping,
         yCollab(ytext, provider.awareness),
         spellcheckCompartmentRef.current.of(EditorView.contentAttributes.of(spellcheckAttrs(spellcheck))),
+        suggestModeCompartmentRef.current.of(suggestMode ? suggestModeFilter(pendingSuggestionsRef) : []),
         // enableAutocomplete disabled here so we can fold in our own
         // \cite{} source alongside the built-in command/environment
         // completions — codemirror-lang-latex's own autocomplete uses
@@ -373,6 +510,7 @@ const Editor = forwardRef(function Editor(
         }),
         keymap.of([...yUndoManagerKeymap, ...defaultKeymap, ...searchKeymap]),
         commentHighlightField,
+        suggestionHighlightField,
         diagnosticsField,
         diagnosticDecorationField,
         diagnosticGutter,
@@ -381,12 +519,26 @@ const Editor = forwardRef(function Editor(
             const { from, to } = update.state.selection.main;
             onSelectionChangeRef.current?.(from !== to);
           }
+          // Drain suggestion metadata queued by suggestModeFilter during
+          // this same dispatch — see the long comment on suggestModeFilter
+          // for why this has to happen post-update rather than inside the
+          // filter itself (ySync has pushed the edit into ytext by now).
+          if (pendingSuggestionsRef.current.length > 0) {
+            const queued = pendingSuggestionsRef.current;
+            pendingSuggestionsRef.current = [];
+            for (const change of queued) onSuggestedChangeRef.current?.(change);
+          }
         }),
         EditorView.theme({
           '&': { height: '100%', fontSize: '14px' },
           '.cm-scroller': { overflow: 'auto', fontFamily: 'ui-monospace, monospace' },
           '.cm-comment-range': { backgroundColor: 'rgba(255, 205, 60, 0.35)' },
           '.cm-comment-range-resolved': { backgroundColor: 'rgba(150, 150, 150, 0.2)' },
+          '.cm-suggestion-insert': { backgroundColor: 'rgba(60, 200, 90, 0.25)' },
+          '.cm-suggestion-delete': {
+            backgroundColor: 'rgba(220, 70, 70, 0.2)',
+            textDecoration: 'line-through',
+          },
           '.cm-diagnostic-error': {
             textDecoration: 'underline wavy #d64545',
             textDecorationSkipInk: 'none',
