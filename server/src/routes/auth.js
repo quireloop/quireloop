@@ -1,30 +1,71 @@
 import {
   createUser,
+  deleteUser,
   findUserByEmail,
   findUserById,
   updateUser,
   verifyPassword,
+  hashPassword,
   publicUser,
   signTempToken,
   verifyTempToken,
+  usersExist,
 } from '../lib/auth.js';
 import { createSecret, checkCode, enrollmentDetails } from '../lib/twoFactor.js';
 import { requireAuth } from '../lib/authMiddleware.js';
+import { consumeInvite, isInviteValid } from '../lib/invites.js';
+import { registerFailure, isBlocked, clear } from '../lib/rateLimit.js';
+
+// Open signup is only possible for the very first account (bootstrapping
+// a fresh deployment) or when the operator explicitly opts back in.
+async function inviteRequired() {
+  if (process.env.QUIRELOOP_OPEN_SIGNUP === 'true') return false;
+  return usersExist();
+}
+
+function tooManyAttempts(reply, seconds) {
+  reply.header('Retry-After', String(seconds));
+  return reply.code(429).send({ error: `too many attempts, retry in ${seconds} seconds` });
+}
 
 export default async function authRoutes(app) {
+  app.get('/api/auth/config', async () => {
+    return { inviteRequired: await inviteRequired() };
+  });
+
   app.post('/api/auth/signup', async (req, reply) => {
-    const { email, password } = req.body ?? {};
+    const { email, password, inviteCode } = req.body ?? {};
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return reply.code(400).send({ error: 'a valid email is required' });
     }
     if (!password || password.length < 8) {
       return reply.code(400).send({ error: 'password must be at least 8 characters' });
     }
+
+    const needsInvite = await inviteRequired();
+    if (needsInvite) {
+      if (!inviteCode || typeof inviteCode !== 'string' || !(await isInviteValid(inviteCode))) {
+        return reply.code(403).send({ error: 'invalid or already-used invite code' });
+      }
+    }
+
     let user;
     try {
       user = await createUser(email, password);
     } catch (err) {
       return reply.code(400).send({ error: err.message });
+    }
+    if (needsInvite) {
+      // Atomic check-and-mark now that we know the new user's id — closes
+      // the race where two signups redeem the same code between the peek
+      // above and here.
+      const redeemed = await consumeInvite(inviteCode, user.id);
+      if (!redeemed) {
+        // The account was already created — remove it, or the race loser
+        // would keep a working login despite never redeeming an invite.
+        await deleteUser(user.id);
+        return reply.code(403).send({ error: 'invite code was already used, try again' });
+      }
     }
     req.session.set('userId', user.id);
     return reply.code(201).send(publicUser(user));
@@ -32,13 +73,29 @@ export default async function authRoutes(app) {
 
   app.post('/api/auth/login', async (req, reply) => {
     const { email, password } = req.body ?? {};
+    const ipKey = `ip:${req.ip}`;
+    const emailKey = `email:${(email ?? '').toLowerCase()}`;
+
+    const ipBlocked = isBlocked(ipKey);
+    const emailBlocked = isBlocked(emailKey);
+    if (ipBlocked || emailBlocked) {
+      return tooManyAttempts(reply, Math.max(ipBlocked || 0, emailBlocked || 0));
+    }
+
     const user = await findUserByEmail(email ?? '');
     if (!user || !verifyPassword(password ?? '', user.passwordHash)) {
+      registerFailure(ipKey);
+      registerFailure(emailKey);
       return reply.code(401).send({ error: 'invalid email or password' });
+    }
+    if (user.disabled) {
+      return reply.code(403).send({ error: 'this account has been disabled' });
     }
     if (user.twoFactorEnabled) {
       return { needsTwoFactor: true, tempToken: signTempToken(user.id) };
     }
+    clear(ipKey);
+    clear(emailKey);
     req.session.set('userId', user.id);
     return publicUser(user);
   });
@@ -49,9 +106,25 @@ export default async function authRoutes(app) {
     if (!userId) return reply.code(401).send({ error: 'login attempt expired, please try again' });
     const user = await findUserById(userId);
     if (!user?.twoFactorEnabled) return reply.code(400).send({ error: '2FA is not enabled for this account' });
+
+    const ipKey = `ip:${req.ip}`;
+    const emailKey = `email:${user.email.toLowerCase()}`;
+    const ipBlocked = isBlocked(ipKey);
+    const emailBlocked = isBlocked(emailKey);
+    if (ipBlocked || emailBlocked) {
+      return tooManyAttempts(reply, Math.max(ipBlocked || 0, emailBlocked || 0));
+    }
+
     if (!(await checkCode(user.twoFactorSecret, code))) {
+      registerFailure(ipKey);
+      registerFailure(emailKey);
       return reply.code(401).send({ error: 'invalid code' });
     }
+    if (user.disabled) {
+      return reply.code(403).send({ error: 'this account has been disabled' });
+    }
+    clear(ipKey);
+    clear(emailKey);
     req.session.set('userId', user.id);
     return publicUser(user);
   });
@@ -65,6 +138,19 @@ export default async function authRoutes(app) {
     const user = await findUserById(req.userId);
     if (!user) return reply.code(401).send({ error: 'not authenticated' });
     return publicUser(user);
+  });
+
+  app.post('/api/auth/change-password', { preHandler: requireAuth }, async (req, reply) => {
+    const { currentPassword, newPassword } = req.body ?? {};
+    const user = await findUserById(req.userId);
+    if (!verifyPassword(currentPassword ?? '', user.passwordHash)) {
+      return reply.code(401).send({ error: 'current password is incorrect' });
+    }
+    if (!newPassword || newPassword.length < 8) {
+      return reply.code(400).send({ error: 'new password must be at least 8 characters' });
+    }
+    await updateUser(req.userId, { passwordHash: hashPassword(newPassword) });
+    return { ok: true };
   });
 
   app.post('/api/auth/2fa/setup', { preHandler: requireAuth }, async (req) => {

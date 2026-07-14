@@ -13,6 +13,7 @@ export const DATA_DIR = process.env.QUIRELOOP_DATA_DIR
 
 export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 export const USERS_FILE = path.join(DATA_DIR, 'users.json');
+export const INVITES_FILE = path.join(DATA_DIR, 'invites.json');
 export const SESSION_KEY_FILE = path.join(DATA_DIR, 'session-key');
 export const PROJECTS_INDEX_FILE = path.join(DATA_DIR, 'projects-index.json');
 export const SHARED_INDEX_FILE = path.join(DATA_DIR, 'shared-index.json');

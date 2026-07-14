@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { authApi } from '../lib/auth.js';
 import Logo from '../components/Logo.jsx';
 import ReactiveBackground from '../components/ReactiveBackground.jsx';
@@ -126,6 +126,8 @@ export default function LoginPage({ onAuthenticated }) {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteRequired, setInviteRequired] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -134,13 +136,26 @@ export default function LoginPage({ onAuthenticated }) {
   const [tempToken, setTempToken] = useState(null);
   const [code, setCode] = useState('');
 
+  useEffect(() => {
+    authApi
+      .config()
+      .then((cfg) => setInviteRequired(cfg.inviteRequired))
+      .catch(() => {});
+    const params = new URLSearchParams(window.location.search);
+    const invite = params.get('invite');
+    if (invite) {
+      setInviteCode(invite);
+      setMode('signup');
+    }
+  }, []);
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setBusy(true);
     try {
       if (mode === 'signup') {
-        const user = await authApi.signup(email.trim(), password);
+        const user = await authApi.signup(email.trim(), password, inviteCode.trim() || undefined);
         onAuthenticated(user);
         return;
       }
@@ -238,6 +253,15 @@ export default function LoginPage({ onAuthenticated }) {
             type="password"
             style={{ padding: 8 }}
           />
+          {mode === 'signup' && inviteRequired && (
+            <input
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              placeholder="Invite code"
+              required
+              style={{ padding: 8 }}
+            />
+          )}
           {error && <p style={{ color: 'crimson', margin: 0 }}>{error}</p>}
           <button type="submit" disabled={busy} style={{ padding: 8 }}>
             {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Log in'}

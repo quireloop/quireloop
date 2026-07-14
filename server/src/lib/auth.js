@@ -34,6 +34,10 @@ export async function usersExist() {
   return (await readUsers()).length > 0;
 }
 
+export async function listUsers() {
+  return readUsers();
+}
+
 export async function findUserByEmail(email) {
   const users = await readUsers();
   return users.find((u) => u.email.toLowerCase() === email.toLowerCase()) ?? null;
@@ -56,6 +60,10 @@ export async function createUser(email, password) {
     twoFactorEnabled: false,
     twoFactorSecret: null,
     pendingTwoFactorSecret: null,
+    // The very first account on a fresh deployment is the admin; everyone
+    // else signs up as a plain member (via invite, unless open signup).
+    role: users.length === 0 ? 'admin' : 'member',
+    disabled: false,
     createdAt: new Date().toISOString(),
   };
   users.push(user);
@@ -72,10 +80,30 @@ export async function updateUser(id, patch) {
   return user;
 }
 
+export async function deleteUser(id) {
+  const users = await readUsers();
+  await writeUsers(users.filter((u) => u.id !== id));
+}
+
+// Deployments that predate the role field have users.json with no `role`
+// key at all. Run once at startup: earliest-created user becomes admin,
+// everyone else member. No-op once every user already has a role.
+export async function migrateUserRoles() {
+  const users = await readUsers();
+  if (users.length === 0 || users.every((u) => u.role)) return;
+  const byCreatedAt = [...users].sort((a, b) => new Date(a.createdAt ?? 0) - new Date(b.createdAt ?? 0));
+  const earliestId = byCreatedAt[0].id;
+  for (const u of users) {
+    if (!u.role) u.role = u.id === earliestId ? 'admin' : 'member';
+    if (u.disabled === undefined) u.disabled = false;
+  }
+  await writeUsers(users);
+}
+
 // Strips the password hash and 2FA secrets before a user record ever goes
 // into an HTTP response.
 export function publicUser(user) {
-  return { id: user.id, email: user.email, twoFactorEnabled: user.twoFactorEnabled };
+  return { id: user.id, email: user.email, twoFactorEnabled: user.twoFactorEnabled, role: user.role };
 }
 
 // Bridges "password verified" to "2FA code verified" during login without

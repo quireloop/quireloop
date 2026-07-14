@@ -8,6 +8,39 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPwError('');
+    setPwSuccess('');
+    if (newPassword.length < 8) {
+      setPwError('new password must be at least 8 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError('new passwords do not match');
+      return;
+    }
+    setPwBusy(true);
+    try {
+      await authApi.changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPwSuccess('Password changed.');
+    } catch (err) {
+      setPwError(err.message);
+    } finally {
+      setPwBusy(false);
+    }
+  }
+
   async function handleStartSetup() {
     setError('');
     setBusy(true);
@@ -58,6 +91,8 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
         top: 40,
         right: 0,
         width: 320,
+        maxHeight: 480,
+        overflowY: 'auto',
         padding: 16,
         background: 'var(--panel-bg)',
         border: '1px solid var(--border)',
@@ -117,6 +152,38 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
           </button>
         </form>
       )}
+
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '12px 0' }} />
+
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Change password</div>
+      <form onSubmit={handleChangePassword} style={{ display: 'grid', gap: 8 }}>
+        <input
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          placeholder="Current password"
+          type="password"
+          style={{ padding: 6, fontSize: 13 }}
+        />
+        <input
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="New password"
+          type="password"
+          style={{ padding: 6, fontSize: 13 }}
+        />
+        <input
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Confirm new password"
+          type="password"
+          style={{ padding: 6, fontSize: 13 }}
+        />
+        {pwError && <p style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{pwError}</p>}
+        {pwSuccess && <p style={{ color: 'seagreen', fontSize: 12, margin: 0 }}>{pwSuccess}</p>}
+        <button type="submit" disabled={pwBusy} style={{ padding: 6, fontSize: 13 }}>
+          {pwBusy ? 'Saving…' : 'Change password'}
+        </button>
+      </form>
     </div>
   );
 }

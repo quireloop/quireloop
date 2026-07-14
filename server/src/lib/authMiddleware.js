@@ -1,12 +1,29 @@
 import * as projectIndex from './projectIndex.js';
 import { readManifest } from './manifest.js';
+import { findUserById } from './auth.js';
 
 export async function requireAuth(req, reply) {
   const userId = req.session.get('userId');
   if (!userId) {
     return reply.code(401).send({ error: 'not authenticated' });
   }
+  // A disabled account's existing session cookie must stop working
+  // immediately, not just its future logins.
+  const user = await findUserById(userId);
+  if (!user || user.disabled) {
+    req.session.delete();
+    return reply.code(401).send({ error: 'not authenticated' });
+  }
   req.userId = userId;
+}
+
+export async function requireAdmin(req, reply) {
+  await requireAuth(req, reply);
+  if (reply.sent) return;
+  const user = await findUserById(req.userId);
+  if (user.role !== 'admin') {
+    return reply.code(403).send({ error: 'admin access required' });
+  }
 }
 
 function hasProjectAccess(manifest, userId) {

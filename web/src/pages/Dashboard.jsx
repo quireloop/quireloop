@@ -4,6 +4,7 @@ import { authApi } from '../lib/auth.js';
 import { useDarkMode } from '../lib/theme.js';
 import Logo from '../components/Logo.jsx';
 import AccountSettings from '../components/AccountSettings.jsx';
+import AdminPanel from '../components/AdminPanel.jsx';
 import ReactiveBackground from '../components/ReactiveBackground.jsx';
 
 function ImportFromthe hosted editor({ onClose, onImported }) {
@@ -89,6 +90,7 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [dark, setDark] = useDarkMode();
   const uploadInputRef = useRef(null);
 
@@ -160,6 +162,11 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
           Quireloop
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+          {user?.role === 'admin' && (
+            <button onClick={() => setShowAdmin(true)} style={{ fontSize: 13, height: 32 }}>
+              Admin
+            </button>
+          )}
           <button onClick={() => setShowSettings((v) => !v)} style={{ fontSize: 13, height: 32 }}>
             {user?.email}
           </button>
@@ -174,6 +181,7 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
           </button>
         </div>
       </div>
+      {showAdmin && <AdminPanel user={user} onClose={() => setShowAdmin(false)} />}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>

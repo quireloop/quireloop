@@ -5,8 +5,9 @@ import fastifySecureSession from '@fastify/secure-session';
 import fastifyWebsocket from '@fastify/websocket';
 import fs from 'node:fs';
 import { PORT, HOST, PUBLIC_DIR } from './config.js';
-import { loadOrCreateSessionKey } from './lib/auth.js';
+import { loadOrCreateSessionKey, migrateUserRoles } from './lib/auth.js';
 import authRoutes from './routes/auth.js';
+import adminRoutes from './routes/admin.js';
 import projectsRoutes from './routes/projects.js';
 import filesRoutes from './routes/files.js';
 import compileRoutes from './routes/compile.js';
@@ -23,15 +24,24 @@ app.addContentTypeParser('text/plain', { parseAs: 'string' }, (req, body, done) 
   done(null, body);
 });
 
+await migrateUserRoles();
+
 await app.register(fastifyCookie);
 await app.register(fastifySecureSession, {
   key: await loadOrCreateSessionKey(),
-  cookie: { path: '/', httpOnly: true, sameSite: 'lax' },
+  cookie: {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 30,
+    secure: process.env.QUIRELOOP_SECURE_COOKIES === 'true',
+  },
 });
 
 await registerMultipart(app);
 await app.register(fastifyWebsocket);
 await app.register(authRoutes);
+await app.register(adminRoutes);
 await app.register(projectsRoutes);
 await app.register(filesRoutes);
 await app.register(compileRoutes);
