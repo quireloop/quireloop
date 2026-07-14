@@ -6,6 +6,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import fs from 'node:fs';
 import { PORT, HOST, PUBLIC_DIR } from './config.js';
 import { loadOrCreateSessionKey, migrateUserRoles } from './lib/auth.js';
+import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import projectsRoutes from './routes/projects.js';
@@ -43,6 +44,7 @@ await app.register(fastifySecureSession, {
 
 await registerMultipart(app);
 await app.register(fastifyWebsocket);
+await app.register(healthRoutes);
 await app.register(authRoutes);
 await app.register(adminRoutes);
 await app.register(projectsRoutes);

@@ -1,0 +1,26 @@
+# Keep the Docker build context small and avoid ever baking local state
+# (or someone's real papers, if they happen to be running this from a repo
+# checkout that already has a populated data/) into an image layer.
+node_modules
+server/node_modules
+web/node_modules
+
+# Real project data never belongs in an image — it's meant to live in the
+# bind-mounted /data volume (see docker-compose.yml), not baked in.
+data/
+
+.git
+.gitignore
+
+# Rebuilt fresh inside the image by `npm run build --workspace=web`
+# (stage 1 of the Dockerfile) — shipping a stale host-built copy in the
+# build context would be at best wasted context upload, at worst a stale
+# bundle silently winning if a COPY step were ever reordered.
+server/public
+
+*.log
+.DS_Store
+
+Dockerfile
+.dockerignore
+docker-compose.yml

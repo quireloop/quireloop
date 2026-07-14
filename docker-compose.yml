@@ -1,0 +1,38 @@
+# One-service deployment: `docker compose up -d` builds the image (from
+# the Dockerfile in this same directory) and runs it. See DEPLOYMENT.md
+# for the full walkthrough — first visit to the running app creates the
+# admin account, then everyone else comes in via admin-issued invites.
+services:
+  quireloop:
+    build: .
+    # Swap `build: .` for `image: ghcr.io/<you>/quireloop:latest` if you'd
+    # rather pull a pre-built image than build one locally.
+    restart: unless-stopped
+    ports:
+      # host:container — change the left side if 4173 is already taken on
+      # this machine. Left as-is, the app is reachable at
+      # http://<this-host>:4173 directly; put nginx (deploy/nginx.conf.example)
+      # in front of it for TLS/a real domain instead of exposing this port
+      # straight to the internet.
+      - '4173:4173'
+    volumes:
+      # Everything Quireloop keeps state in — accounts, invites, the
+      # session-signing key, every project (with its own git history and
+      # version snapshots) — lives under here. This bind mount is the
+      # entire backup surface; see DEPLOYMENT.md's backup section.
+      - ./data:/data
+    environment:
+      # Passed through from the host shell/`.env` file if set, otherwise
+      # left unset so the image's own defaults apply (invite-only signup,
+      # cookie without the `secure` flag). See DEPLOYMENT.md's
+      # configuration reference for what each one does.
+      QUIRELOOP_OPEN_SIGNUP: ${QUIRELOOP_OPEN_SIGNUP:-}
+      QUIRELOOP_SECURE_COOKIES: ${QUIRELOOP_SECURE_COOKIES:-}
+    healthcheck:
+      # Mirrors the Dockerfile's own HEALTHCHECK; declared again here so
+      # `docker compose ps` surfaces status without needing `docker inspect`.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4173/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3

@@ -1,0 +1,72 @@
+# systemd unit for a bare-metal (non-Docker) install. Copy to
+# /etc/systemd/system/quireloop.service, edit the CHANGE-ME bits, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now quireloop
+# Logs: `journalctl -u quireloop -f`.
+#
+# Assumes: this repo is already cloned, `npm ci` has run at the repo root
+# (installs both the server/ and web/ workspaces), and `npm run build
+# --workspace=web` has produced server/public — see DEPLOYMENT.md's bare
+# metal section for the full sequence. This unit only runs the already-
+# built app; it does not build anything itself.
+
+[Unit]
+Description=Quireloop — self-hosted LaTeX IDE
+After=network.target
+
+[Service]
+Type=simple
+
+# CHANGE-ME: a dedicated, unprivileged user for this service — don't run
+# it as root or as your own login user. Create one first if it doesn't
+# exist yet: `sudo useradd --system --create-home --shell /usr/sbin/nologin quireloop`
+User=quireloop
+Group=quireloop
+
+# CHANGE-ME: wherever you cloned the repo.
+WorkingDirectory=/opt/quireloop/server
+
+# CHANGE-ME: the absolute path to `node` — `which node` as the quireloop
+# user to confirm (nvm-installed Node lives under that user's home dir,
+# a system package under /usr/bin).
+ExecStart=/usr/bin/node /opt/quireloop/server/src/index.js
+
+# CHANGE-ME: where project data (accounts, invites, every project + its
+# git history + version snapshots) is stored — pick a path on a disk with
+# room to grow, ideally one that's part of your backup routine. Defaults
+# to <repo>/data if unset, which is fine too as long as that's backed up.
+Environment=QUIRELOOP_DATA_DIR=/var/lib/quireloop/data
+Environment=PORT=4173
+
+# Uncomment if nginx is terminating TLS in front of this (see
+# deploy/nginx.conf.example) — without it the session cookie lacks the
+# `secure` flag, which is fine over plain HTTP but wrong once there's TLS.
+# Environment=QUIRELOOP_SECURE_COOKIES=true
+
+# Uncomment to re-open public signup instead of the default invite-only
+# mode (see DEPLOYMENT.md's configuration reference).
+# Environment=QUIRELOOP_OPEN_SIGNUP=true
+
+# CRITICAL: unlike a login shell, systemd services get a minimal PATH by
+# default that will NOT include a TeX Live install — compiles will fail
+# with "latexmk: command not found" until this is set. Find your install's
+# bin dir with `which latexmk` (as the quireloop user) and include it here
+# alongside the normal system paths; a typical TeX Live install on Linux
+# puts it under /usr/local/texlive/<year>/bin/<arch>, e.g.:
+Environment=PATH=/usr/local/texlive/2025/bin/x86_64-linux:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Restart on crash, but not in a tight loop if something is fundamentally
+# broken (e.g. the data dir is unwritable) — 10s between attempts, and
+# systemd's own default StartLimitBurst (5 restarts within
+# StartLimitIntervalSec, default 10s window... effectively 10s) will stop
+# retrying and mark the unit failed if it keeps dying immediately.
+Restart=on-failure
+RestartSec=10
+
+# Modest hardening — the process only needs to read the repo and read/
+# write its own data directory, nothing else on the system.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

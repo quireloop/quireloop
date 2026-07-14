@@ -1,0 +1,123 @@
+# nginx reference config for putting Quireloop behind TLS on a real
+# domain. Copy this to /etc/nginx/sites-available/quireloop, edit the
+# CHANGE-ME bits, symlink it into sites-enabled, then `nginx -t && systemctl
+# reload nginx`. Written for someone who has never configured nginx before —
+# every line that isn't self-explanatory has a comment above it.
+#
+# This assumes Quireloop itself is already running and reachable on
+# 127.0.0.1:4173 — either the Docker container with `ports: ["4173:4173"]`
+# (docker-compose.yml) or the systemd unit (deploy/quireloop.service.example).
+# nginx's job here is TLS termination + being the public-facing address;
+# it is not required to run Quireloop at all.
+
+# ---- Plain HTTP: redirect everything to HTTPS ----
+server {
+    listen 80;
+    listen [::]:80;
+    server_name CHANGE-ME.example.com;
+
+    # Certbot (Let's Encrypt) needs to answer a plain-HTTP challenge on
+    # this path *before* a certificate exists — carve it out of the
+    # redirect so `certbot --nginx` (or a standalone renewal) still works
+    # once this file is live. Harmless to leave in permanently.
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    # 301 (permanent redirect) — search engines and browsers cache this,
+    # so once you're sure HTTPS works, this is the right status code.
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ---- HTTPS: the real server block ----
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    # HTTP/2 is worth having (multiplexes the many small asset requests a
+    # JS app makes) — on nginx 1.25+ enable it with: listen 443 ssl http2;
+    server_name CHANGE-ME.example.com;
+
+    # Certbot writes certificates to this path by convention
+    # (/etc/letsencrypt/live/<domain>/...) when you run:
+    #   sudo certbot --nginx -d CHANGE-ME.example.com
+    # which will also edit these two lines in place for you. If you're
+    # using a certificate from elsewhere, point these at your own files.
+    ssl_certificate     /etc/letsencrypt/live/CHANGE-ME.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/CHANGE-ME.example.com/privkey.pem;
+
+    # Reasonable modern TLS defaults. If certbot already manages an
+    # /etc/letsencrypt/options-ssl-nginx.conf on this machine, `include`
+    # that instead of hand-maintaining protocol/cipher lists here.
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    # Uploads: project .zip imports and file/image uploads go through
+    # multipart form posts. The app itself caps each individual uploaded
+    # file at 50MB (server/src/plugins/multipart.js) — this is nginx's
+    # own ceiling on the *whole* request body, set a bit above that so a
+    # multi-file upload isn't cut off by nginx before the app even sees it.
+    # nginx's default is 1m, which would reject basically every zip import.
+    client_max_body_size 100m;
+
+    # Compress the text-based assets (JS bundle, CSS, the app shell HTML,
+    # JSON API responses) nginx serves/proxies — this is the biggest single
+    # win for initial page-load time on a slow connection. Don't bother
+    # compressing images/PDFs/fonts, they're already compressed formats.
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json
+               application/xml text/xml image/svg+xml;
+    gzip_min_length 1024;
+
+    # ---- The collaborative-editing WebSocket endpoint ----
+    # Matched separately from the general proxy block below because
+    # WebSockets need the Upgrade/Connection headers forwarded (nginx does
+    # not do this by default for a plain proxy_pass) and a much longer idle
+    # timeout — collaborators can sit reading/thinking for many minutes
+    # without sending a WS frame, and nginx's default 60s proxy_read_timeout
+    # would silently kill that socket out from under them, which then
+    # shows up as "why did my collaborator's cursor disappear".
+    location /ws/ {
+        proxy_pass http://127.0.0.1:4173;
+        proxy_http_version 1.1;
+        # These two headers are the actual WebSocket upgrade handshake —
+        # without both, the connection falls back to a normal HTTP
+        # request/response and the app's websocket route rejects it.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Default is 60s; an idle collab session (someone reading, not
+        # typing) easily exceeds that. 1 day is generous on purpose — the
+        # app-level websocket has its own reconnect logic if a connection
+        # does drop, so erring long here just avoids nginx being the thing
+        # that causes the drop in the first place.
+        proxy_read_timeout 86400s;
+    }
+
+    # ---- Everything else: the app itself (API + the built frontend) ----
+    location / {
+        proxy_pass http://127.0.0.1:4173;
+        proxy_http_version 1.1;
+
+        # Forwarded so the app (and its logs) see the real client IP/host/
+        # scheme instead of "127.0.0.1" and "http" for every request — the
+        # per-IP login rate limiter in particular needs a real client IP
+        # to be meaningful behind a proxy.
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Belt-and-suspenders: `Connection ""` clears any stray Upgrade
+        # header on ordinary requests so nginx's connection reuse to the
+        # upstream behaves normally (only the /ws/ block above should ever
+        # actually upgrade).
+        proxy_set_header Connection "";
+    }
+}
