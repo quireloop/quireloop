@@ -25,7 +25,9 @@ It is **not** a public multi-tenant SaaS — there's no database, no
 per-tenant isolation beyond per-user file ownership, and it's sized for
 "tens of users on hardware a lab already owns," not thousands of strangers
 signing up over the open internet. See [DEPLOYMENT.md](DEPLOYMENT.md) for
-running it as a shared server for your team, with TLS in front of it.
+running it as a shared server for your team, with TLS in front of it, and
+[USER_GUIDE.md](USER_GUIDE.md) for a complete walkthrough of every feature
+once it's running.
 
 ## Features
 
