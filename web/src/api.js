@@ -130,6 +130,9 @@ export const api = {
       body: JSON.stringify({ label }),
     }),
   restoreVersion: (id, versionId) => request(`/projects/${id}/versions/${versionId}/restore`, { method: 'POST' }),
+  listSnapshotFiles: (id, versionId) => request(`/projects/${id}/versions/${versionId}/files`),
+  readSnapshotFile: (id, versionId, path) =>
+    request(`/projects/${id}/versions/${versionId}/file?path=${encodeURIComponent(path)}`),
 
   gitStatus: (id) => request(`/projects/${id}/git/status`),
   gitCommit: (id, message) =>

@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { EditorView, keymap, lineNumbers, Decoration, gutter, GutterMarker } from '@codemirror/view';
-import { EditorState, StateField, StateEffect } from '@codemirror/state';
+import { EditorView, keymap, lineNumbers, Decoration, gutter, GutterMarker, drawSelection } from '@codemirror/view';
+import { EditorState, StateField, StateEffect, Compartment } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
 import { defaultHighlightStyle, syntaxHighlighting, foldGutter } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
@@ -10,6 +10,28 @@ import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
+import { vim, CodeMirror as VimCodeMirror } from '@replit/codemirror-vim';
+
+// @replit/codemirror-vim's normal-mode 'u' / Ctrl-r drive its own internal
+// CodeMirror.commands.undo/redo, which by default call @codemirror/commands'
+// history — a StateField this editor never installs, since undo here goes
+// through Yjs's UndoManager instead (see yCollab below), which is the only
+// thing that stays correct under concurrent remote edits. y-codemirror.next
+// doesn't export its `undo`/`redo` StateCommand functions directly, but they
+// are the `run` handlers already wired into yUndoManagerKeymap (the keymap
+// this editor uses for Mod-z/Mod-y outside vim mode) — pulling them out of
+// there and patching Vim's internal commands routes vim's keys through the
+// same Yjs-aware commands. This is a one-time patch of the imported
+// module's shared class, not per-editor-instance state, so it's done once
+// here at import time.
+const yUndoCommand = yUndoManagerKeymap.find((k) => k.key === 'Mod-z').run;
+const yRedoCommand = yUndoManagerKeymap.find((k) => k.key === 'Mod-y').run;
+VimCodeMirror.commands.undo = (cm) => {
+  yUndoCommand(cm.cm6);
+};
+VimCodeMirror.commands.redo = (cm) => {
+  yRedoCommand(cm.cm6);
+};
 
 // \cite{...} and its many variants (\citep, \citet, \parencite, \autocite,
 // \footcite, biblatex's capitalized forms, ...) — matched generically by
@@ -173,6 +195,18 @@ const diagnosticGutter = gutter({
   },
 });
 
+// Browser-native spell check — CodeMirror's content DOM is contenteditable,
+// so the browser's own spell checker (dictionary = the user's OS/browser
+// language, not a bundled word list) already works if the contenteditable
+// attributes ask for it. Off by default: it happily underlines LaTeX
+// commands and math as "misspelled" too, which is noisy enough that it
+// needs to be an opt-in toggle rather than always-on.
+function spellcheckAttrs(enabled) {
+  return enabled
+    ? { spellcheck: 'true', autocorrect: 'off', autocapitalize: 'off' }
+    : { spellcheck: 'false', autocorrect: 'off', autocapitalize: 'off' };
+}
+
 function insertAtCursor(view, text) {
   const { from, to } = view.state.selection.main;
   view.dispatch({
@@ -200,6 +234,8 @@ const Editor = forwardRef(function Editor(
     dark,
     user,
     readOnly,
+    spellcheck,
+    vimMode,
     onChange,
     onJumpToPdf,
     onStatus,
@@ -211,6 +247,7 @@ const Editor = forwardRef(function Editor(
 ) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
+  const spellcheckCompartmentRef = useRef(null);
   const onChangeRef = useRef(onChange);
   const onJumpToPdfRef = useRef(onJumpToPdf);
   const onStatusRef = useRef(onStatus);
@@ -257,6 +294,18 @@ const Editor = forwardRef(function Editor(
         viewRef.current.dispatch({ effects: setDiagnosticsEffect.of(list ?? []) });
       }
     },
+    // Reconfigures spellcheck in place via a Compartment rather than
+    // remounting the whole editor (unlike vimMode, which does remount) —
+    // toggling it shouldn't tear down and resync the Yjs doc/provider.
+    setSpellcheck: (enabled) => {
+      const view = viewRef.current;
+      const compartment = spellcheckCompartmentRef.current;
+      if (view && compartment) {
+        view.dispatch({
+          effects: compartment.reconfigure(EditorView.contentAttributes.of(spellcheckAttrs(enabled))),
+        });
+      }
+    },
   }));
 
   useEffect(() => {
@@ -282,13 +331,22 @@ const Editor = forwardRef(function Editor(
     const reportChange = () => onChangeRef.current?.(ytext.toString());
     ytext.observe(reportChange);
 
+    spellcheckCompartmentRef.current = new Compartment();
+
     const state = EditorState.create({
       doc: ytext.toString(),
       extensions: [
+        // vim() must come first in the extensions array so it can intercept
+        // keys before other keymaps see them (per the package's own README).
+        // drawSelection() is also needed alongside it — without it, visual
+        // mode's block/line selections render with the browser's native
+        // (non-block-aware) selection instead of vim's expected highlight.
+        ...(vimMode ? [vim(), drawSelection()] : []),
         lineNumbers(),
         foldGutter(),
         EditorView.lineWrapping,
         yCollab(ytext, provider.awareness),
+        spellcheckCompartmentRef.current.of(EditorView.contentAttributes.of(spellcheckAttrs(spellcheck))),
         // enableAutocomplete disabled here so we can fold in our own
         // \cite{} source alongside the built-in command/environment
         // completions — codemirror-lang-latex's own autocomplete uses
@@ -361,7 +419,7 @@ const Editor = forwardRef(function Editor(
       ydoc.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, filePath, collabGeneration, dark, readOnly]);
+  }, [projectId, filePath, collabGeneration, dark, readOnly, vimMode]);
 
   return <div ref={containerRef} style={{ height: '100%' }} />;
 });

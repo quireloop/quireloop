@@ -7,8 +7,84 @@ import { readManifest, writeManifest } from './manifest.js';
 const MAX_AUTO_SNAPSHOTS = 20;
 const SKIP_ENTRIES = new Set(['build', 'versions']);
 
+// Same idea as manifest.js's BOOKKEEPING_ENTRIES/walkFiles — a snapshot is a
+// full copy of the project tree (see copyProjectContents), so it carries
+// manifest.json along with it; that's Quireloop's own bookkeeping, never a
+// project file to list or diff.
+const SNAPSHOT_BOOKKEEPING_ENTRIES = new Set(['manifest.json']);
+
+// Extensions treated as binary — not worth listing for a text diff view.
+// Mirrors search.js's BINARY_EXTS (kept separate since that's a route file).
+const BINARY_EXTS = new Set([
+  '.pdf',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.zip',
+  '.gz',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+  '.eot',
+  '.ico',
+]);
+
+function isBinaryPath(relPath) {
+  const ext = path.extname(relPath).toLowerCase();
+  return BINARY_EXTS.has(ext);
+}
+
 function versionsDir(ownerId, projectId) {
   return path.join(projectDir(ownerId, projectId), 'versions');
+}
+
+function assertSafeVersionId(id) {
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+    throw new Error(`invalid version id: ${id}`);
+  }
+}
+
+async function walkTextFiles(root, base = '') {
+  const entries = await fs.readdir(path.join(root, base), { withFileTypes: true });
+  let files = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') || entry.name === '__MACOSX') continue;
+    if (!base && SNAPSHOT_BOOKKEEPING_ENTRIES.has(entry.name)) continue;
+    const relPath = base ? `${base}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      files = files.concat(await walkTextFiles(root, relPath));
+    } else {
+      if (isBinaryPath(relPath)) continue;
+      files.push(relPath);
+    }
+  }
+  return files;
+}
+
+// Lists the text files present in a saved snapshot, for the version diff
+// view's file picker. Throws if the version id isn't a known snapshot.
+export async function listSnapshotFiles(ownerId, projectId, versionId) {
+  assertSafeVersionId(versionId);
+  const index = await readIndex(ownerId, projectId);
+  if (!index.some((v) => v.id === versionId)) {
+    throw new Error('version not found');
+  }
+  return walkTextFiles(path.join(versionsDir(ownerId, projectId), versionId));
+}
+
+// Resolves a URL-supplied relative file path against a version snapshot's
+// folder, same containment check as storage.js's resolveProjectPath —
+// throws if it would escape the snapshot root (e.g. via "../..").
+export function resolveSnapshotFilePath(ownerId, projectId, versionId, relPath) {
+  assertSafeVersionId(versionId);
+  const base = path.join(versionsDir(ownerId, projectId), versionId);
+  const resolved = path.resolve(base, relPath);
+  if (resolved !== base && !resolved.startsWith(base + path.sep)) {
+    throw new Error(`path escapes version root: ${relPath}`);
+  }
+  return resolved;
 }
 
 function indexPath(ownerId, projectId) {

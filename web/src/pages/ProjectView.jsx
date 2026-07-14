@@ -25,6 +25,8 @@ const CHAT_OPEN_POLL_MS = 4000;
 const CHAT_CLOSED_POLL_MS = 15000;
 const AUTO_COMPILE_IDLE_MS = 2500;
 const AUTO_COMPILE_STORAGE_KEY = 'quireloop:autoCompile';
+const SPELLCHECK_STORAGE_KEY = 'quireloop:spellcheck';
+const VIM_MODE_STORAGE_KEY = 'quireloop:vimMode';
 
 const STATUS_LABEL = {
   connecting: 'Connecting…',
@@ -63,6 +65,15 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [autoCompile, setAutoCompile] = useState(
     () => localStorage.getItem(AUTO_COMPILE_STORAGE_KEY) === 'true'
   );
+
+  // Spell check (browser-native, toggled via a Compartment — see Editor's
+  // setSpellcheck) and vim keybindings (toggled by remounting the editor,
+  // simplest correct thing per Editor's [vimMode] effect dep). Both default
+  // off and persist per-browser, same pattern as autoCompile above.
+  const [spellcheck, setSpellcheck] = useState(
+    () => localStorage.getItem(SPELLCHECK_STORAGE_KEY) === 'true'
+  );
+  const [vimMode, setVimMode] = useState(() => localStorage.getItem(VIM_MODE_STORAGE_KEY) === 'true');
   const autoCompileRef = useRef(autoCompile);
   const compilingRef = useRef(false);
   const activePathRef = useRef(activePath);
@@ -98,6 +109,15 @@ export default function ProjectView({ projectId, onBack, user }) {
     localStorage.setItem(AUTO_COMPILE_STORAGE_KEY, String(autoCompile));
     autoCompileRef.current = autoCompile;
   }, [autoCompile]);
+
+  useEffect(() => {
+    localStorage.setItem(SPELLCHECK_STORAGE_KEY, String(spellcheck));
+    editorRef.current?.setSpellcheck(spellcheck);
+  }, [spellcheck]);
+
+  useEffect(() => {
+    localStorage.setItem(VIM_MODE_STORAGE_KEY, String(vimMode));
+  }, [vimMode]);
 
   useEffect(() => {
     activePathRef.current = activePath;
@@ -507,6 +527,24 @@ export default function ProjectView({ projectId, onBack, user }) {
           >
             {dark ? '☀ Light' : '🌙 Dark'}
           </button>
+          <button
+            onClick={() => setSpellcheck((v) => !v)}
+            title={
+              spellcheck
+                ? 'Browser spell check is on — uses your OS/browser dictionary, so it will flag LaTeX commands too'
+                : 'Browser spell check is off'
+            }
+            style={{ fontSize: 13, background: spellcheck ? 'var(--accent-bg)' : undefined }}
+          >
+            Aa
+          </button>
+          <button
+            onClick={() => setVimMode((v) => !v)}
+            title={vimMode ? 'Vim keybindings are on' : 'Vim keybindings are off'}
+            style={{ fontSize: 13, background: vimMode ? 'var(--accent-bg)' : undefined }}
+          >
+            Vim
+          </button>
           <button onClick={() => setShowSymbols((v) => !v)} style={{ fontSize: 13 }}>
             Insert
           </button>
@@ -516,7 +554,9 @@ export default function ProjectView({ projectId, onBack, user }) {
           </button>
           {showHistory && (
             <VersionHistoryPanel
+              projectId={projectId}
               versions={versions}
+              files={manifest?.files ?? []}
               readOnly={isViewer}
               onSave={handleSaveVersion}
               onRestore={handleRestoreVersion}
@@ -708,6 +748,8 @@ export default function ProjectView({ projectId, onBack, user }) {
                     dark={dark}
                     user={user}
                     readOnly={isViewer}
+                    spellcheck={spellcheck}
+                    vimMode={vimMode}
                     onChange={handleEditorChange}
                     onStatus={setCollabStatus}
                     onJumpToPdf={jumpToPdfAtLine}

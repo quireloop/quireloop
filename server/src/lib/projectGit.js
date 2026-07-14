@@ -20,6 +20,9 @@ const GITIGNORE_CONTENT = `# Quireloop bookkeeping — not part of your project
 /build/
 /versions/
 /${CREDENTIALS_FILE}
+.quireloop-ydoc/
+.quireloop-comments.json
+.quireloop-chat.json
 .DS_Store
 `;
 

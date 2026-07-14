@@ -1,10 +1,11 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import * as Y from 'yjs';
 import * as syncProtocol from 'y-protocols/sync.js';
 import * as awarenessProtocol from 'y-protocols/awareness.js';
 import * as encoding from 'lib0/encoding.js';
 import * as decoding from 'lib0/decoding.js';
-import { resolveProjectPath } from './storage.js';
+import { projectDir, resolveProjectPath } from './storage.js';
 
 // Hand-rolled y-websocket wire protocol — y-websocket v3 ships no
 // server-side utilities, only the browser client, so the sync/awareness
@@ -34,6 +35,41 @@ async function loadInitialContent(ownerId, projectId, filePath) {
   }
 }
 
+// The Y.Doc binary is persisted alongside the plain-text file so a room
+// keeps its CRDT identity across server restarts. Without this, every
+// restart re-seeded a fresh doc from the .tex file with brand-new item
+// ids — and any client still holding IndexedDB state from before the
+// restart would merge the two docs into duplicated content.
+function ydocStatePath(ownerId, projectId, filePath) {
+  return path.join(projectDir(ownerId, projectId), '.quireloop-ydoc', `${encodeURIComponent(filePath)}.bin`);
+}
+
+async function loadYdocState(ownerId, projectId, filePath) {
+  try {
+    return await fs.readFile(ydocStatePath(ownerId, projectId, filePath));
+  } catch {
+    return null;
+  }
+}
+
+async function persistYdocState(room) {
+  const target = ydocStatePath(room.ownerId, room.projectId, room.filePath);
+  try {
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, Buffer.from(Y.encodeStateAsUpdate(room.doc)));
+  } catch {
+    // same failure modes as the text write — project gone mid-session
+  }
+}
+
+export async function dropYdocState(ownerId, projectId, filePath) {
+  try {
+    await fs.rm(ydocStatePath(ownerId, projectId, filePath), { force: true });
+  } catch {
+    // best-effort
+  }
+}
+
 function broadcast(room, message, excludeConn) {
   for (const conn of room.conns.keys()) {
     if (conn === excludeConn) continue;
@@ -50,6 +86,7 @@ async function persistRoom(room) {
   } catch {
     // file/project gone (deleted, restored, renamed mid-session) — nothing to persist to
   }
+  await persistYdocState(room);
 }
 
 function schedulePersist(room) {
@@ -110,7 +147,28 @@ export async function getRoom(ownerId, projectId, filePath) {
     room = createRoom(ownerId, projectId, filePath);
     rooms.set(key, room);
     const initial = await loadInitialContent(ownerId, projectId, filePath);
-    if (initial) {
+    const savedState = await loadYdocState(ownerId, projectId, filePath);
+    let restored = false;
+    if (savedState) {
+      // Restore the previous Y.Doc only if it still reflects the file on
+      // disk — if the file was changed outside collab (git pull, zip
+      // upload, direct API write), the saved doc is stale and reviving it
+      // would resurrect the old content over the external change.
+      try {
+        const candidate = new Y.Doc();
+        Y.applyUpdate(candidate, savedState);
+        if (candidate.getText('content').toString() === initial) {
+          Y.applyUpdate(room.doc, savedState);
+          restored = true;
+        }
+      } catch {
+        // corrupt state file — fall through to a fresh seed
+      }
+      if (!restored) {
+        await dropYdocState(ownerId, projectId, filePath);
+      }
+    }
+    if (!restored && initial) {
       room.doc.getText('content').insert(0, initial);
     }
   }
@@ -231,4 +289,7 @@ export function invalidateProject(ownerId, projectId) {
     }
     rooms.delete(key);
   }
+  // The saved doc binaries describe pre-restore content — the content
+  // check in getRoom would reject them anyway, but clean them up now.
+  fs.rm(path.join(projectDir(ownerId, projectId), '.quireloop-ydoc'), { recursive: true, force: true }).catch(() => {});
 }

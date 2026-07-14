@@ -1,10 +1,15 @@
+import { useState } from 'react';
+import VersionDiffModal from './VersionDiffModal.jsx';
+
 const TRIGGER_LABELS = {
   compile: 'Auto (compile)',
   manual: 'Saved',
   restore: 'Before restore',
 };
 
-export default function VersionHistoryPanel({ versions, readOnly, onSave, onRestore, onClose }) {
+export default function VersionHistoryPanel({ projectId, versions, files, readOnly, onSave, onRestore, onClose }) {
+  const [diffVersion, setDiffVersion] = useState(null);
+
   function handleSave() {
     const label = prompt('Label for this version (optional):');
     onSave(label || undefined);
@@ -51,13 +56,26 @@ export default function VersionHistoryPanel({ versions, readOnly, onSave, onRest
             <strong>{v.label || TRIGGER_LABELS[v.trigger] || v.trigger}</strong>
           </div>
           <div style={{ color: 'var(--text-muted)' }}>{new Date(v.createdAt).toLocaleString()}</div>
-          {!readOnly && (
-            <button onClick={() => handleRestore(v)} style={{ fontSize: 11, marginTop: 4 }}>
-              Restore
+          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+            <button onClick={() => setDiffVersion(v)} style={{ fontSize: 11 }}>
+              Diff
             </button>
-          )}
+            {!readOnly && (
+              <button onClick={() => handleRestore(v)} style={{ fontSize: 11 }}>
+                Restore
+              </button>
+            )}
+          </div>
         </div>
       ))}
+      {diffVersion && (
+        <VersionDiffModal
+          projectId={projectId}
+          version={diffVersion}
+          liveFiles={files}
+          onClose={() => setDiffVersion(null)}
+        />
+      )}
     </div>
   );
 }
