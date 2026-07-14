@@ -244,7 +244,7 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
                     color: 'var(--text-muted)',
                   }}
                 >
-                  Shared
+                  Shared{p.yourRole ? ` · ${p.yourRole}` : ''}
                 </span>
               )}
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>

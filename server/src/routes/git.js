@@ -1,6 +1,6 @@
 import { gitStatus, gitCommit, setRemote, pushProject, pullProject } from '../lib/projectGit.js';
 import { syncFilesFromDisk } from '../lib/manifest.js';
-import { requireProjectAccess } from '../lib/authMiddleware.js';
+import { requireProjectAccess, requireProjectWrite } from '../lib/authMiddleware.js';
 import * as collab from '../lib/collab.js';
 
 export default async function gitRoutes(app) {
@@ -13,7 +13,7 @@ export default async function gitRoutes(app) {
     }
   });
 
-  app.post('/api/projects/:id/git/commit', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.post('/api/projects/:id/git/commit', { preHandler: requireProjectWrite }, async (req, reply) => {
     const { message } = req.body ?? {};
     try {
       await collab.flushProject(req.ownerId, req.params.id);
@@ -23,7 +23,7 @@ export default async function gitRoutes(app) {
     }
   });
 
-  app.post('/api/projects/:id/git/remote', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.post('/api/projects/:id/git/remote', { preHandler: requireProjectWrite }, async (req, reply) => {
     const { url, token } = req.body ?? {};
     if (!url) return reply.code(400).send({ error: 'a git URL is required' });
     try {
@@ -33,7 +33,7 @@ export default async function gitRoutes(app) {
     }
   });
 
-  app.post('/api/projects/:id/git/push', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.post('/api/projects/:id/git/push', { preHandler: requireProjectWrite }, async (req, reply) => {
     try {
       return await pushProject(req.ownerId, req.params.id);
     } catch (err) {
@@ -41,7 +41,7 @@ export default async function gitRoutes(app) {
     }
   });
 
-  app.post('/api/projects/:id/git/pull', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.post('/api/projects/:id/git/pull', { preHandler: requireProjectWrite }, async (req, reply) => {
     try {
       const result = await pullProject(req.ownerId, req.params.id);
       await syncFilesFromDisk(req.ownerId, req.params.id);

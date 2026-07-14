@@ -10,9 +10,16 @@ import { TEMPLATES } from '../lib/templates.js';
 import { projectDir } from '../lib/storage.js';
 import { importFromGit } from '../lib/gitImport.js';
 import { importFromZip } from '../lib/zipImport.js';
-import { requireAuth, requireProjectAccess, requireProjectOwner } from '../lib/authMiddleware.js';
-import { findUserByEmail } from '../lib/auth.js';
+import {
+  requireAuth,
+  requireProjectAccess,
+  requireProjectOwner,
+  requireProjectWrite,
+  resolveRole,
+} from '../lib/authMiddleware.js';
+import { findUserByEmail, findUserById } from '../lib/auth.js';
 import * as sharedIndex from '../lib/sharedIndex.js';
+import * as shareLinks from '../lib/shareLinks.js';
 
 export default async function projectsRoutes(app) {
   app.get('/api/templates', { preHandler: requireAuth }, async () => {
@@ -20,7 +27,8 @@ export default async function projectsRoutes(app) {
   });
 
   app.get('/api/projects', { preHandler: requireAuth }, async (req) => {
-    return listProjectsForUser(req.userId);
+    const projects = await listProjectsForUser(req.userId);
+    return projects.map((p) => ({ ...p, yourRole: resolveRole(p, req.userId) }));
   });
 
   app.post('/api/projects', { preHandler: requireAuth }, async (req, reply) => {
@@ -58,10 +66,10 @@ export default async function projectsRoutes(app) {
   });
 
   app.get('/api/projects/:id', { preHandler: requireProjectAccess }, async (req) => {
-    return req.manifest;
+    return { ...req.manifest, yourRole: req.projectRole };
   });
 
-  app.patch('/api/projects/:id', { preHandler: requireProjectAccess }, async (req) => {
+  app.patch('/api/projects/:id', { preHandler: requireProjectWrite }, async (req) => {
     const manifest = req.manifest;
     const { name, mainFile, compiler } = req.body ?? {};
     if (name) manifest.name = name;
@@ -87,7 +95,7 @@ export default async function projectsRoutes(app) {
   });
 
   app.post('/api/projects/:id/share', { preHandler: requireProjectOwner }, async (req, reply) => {
-    const { email } = req.body ?? {};
+    const { email, role } = req.body ?? {};
     if (!email || typeof email !== 'string') {
       return reply.code(400).send({ error: 'email is required' });
     }
@@ -100,7 +108,7 @@ export default async function projectsRoutes(app) {
     const manifest = req.manifest;
     manifest.collaborators = manifest.collaborators ?? [];
     if (!manifest.collaborators.some((c) => c.userId === user.id)) {
-      manifest.collaborators.push({ userId: user.id, email: user.email });
+      manifest.collaborators.push({ userId: user.id, email: user.email, role: role === 'viewer' ? 'viewer' : 'editor' });
     }
     await writeManifest(req.ownerId, req.params.id, manifest);
     await sharedIndex.addShare(user.id, req.params.id, req.ownerId);
@@ -117,5 +125,72 @@ export default async function projectsRoutes(app) {
     await writeManifest(req.ownerId, req.params.id, manifest);
     await sharedIndex.removeShare(userId, req.params.id);
     return manifest;
+  });
+
+  app.post('/api/projects/:id/collaborators/:userId/role', { preHandler: requireProjectOwner }, async (req, reply) => {
+    const { role } = req.body ?? {};
+    if (role !== 'editor' && role !== 'viewer') {
+      return reply.code(400).send({ error: "role must be 'editor' or 'viewer'" });
+    }
+    const manifest = req.manifest;
+    const collaborator = (manifest.collaborators ?? []).find((c) => c.userId === req.params.userId);
+    if (!collaborator) return reply.code(404).send({ error: 'not a collaborator on this project' });
+    collaborator.role = role;
+    await writeManifest(req.ownerId, req.params.id, manifest);
+    return manifest;
+  });
+
+  app.post('/api/projects/:id/share-links', { preHandler: requireProjectOwner }, async (req, reply) => {
+    const { role } = req.body ?? {};
+    const finalRole = role === 'viewer' ? 'viewer' : 'editor';
+    const link = await shareLinks.createShareLink(req.params.id, req.ownerId, finalRole);
+    return reply.code(201).send({ token: link.token, role: link.role });
+  });
+
+  app.get('/api/projects/:id/share-links', { preHandler: requireProjectOwner }, async (req) => {
+    return shareLinks.listShareLinks(req.params.id);
+  });
+
+  app.delete('/api/projects/:id/share-links/:token', { preHandler: requireProjectOwner }, async (req, reply) => {
+    const ok = await shareLinks.revokeShareLink(req.params.id, req.params.token);
+    if (!ok) return reply.code(404).send({ error: 'share link not found' });
+    return reply.code(204).send();
+  });
+
+  // Redemption — any authenticated user, not just the project owner, so
+  // it needs its own auth-only guard rather than requireProjectAccess
+  // (which would 403 before the link has a chance to grant access).
+  app.post('/api/share-links/:token/join', { preHandler: requireAuth }, async (req, reply) => {
+    const link = await shareLinks.findShareLink(req.params.token);
+    if (!link) return reply.code(404).send({ error: 'invite link not found or revoked' });
+
+    let manifest;
+    try {
+      manifest = await readManifest(link.ownerId, link.projectId);
+    } catch {
+      return reply.code(404).send({ error: 'project no longer exists' });
+    }
+
+    if (manifest.ownerId === req.userId) {
+      // Owner following their own link — nothing to do.
+      return { projectId: link.projectId };
+    }
+
+    manifest.collaborators = manifest.collaborators ?? [];
+    const existing = manifest.collaborators.find((c) => c.userId === req.userId);
+    if (existing) {
+      // Idempotent join — never downgrade an existing editor to viewer.
+      if (existing.role === 'viewer' && link.role === 'editor') {
+        existing.role = 'editor';
+        await writeManifest(link.ownerId, link.projectId, manifest);
+      }
+      return { projectId: link.projectId };
+    }
+
+    const user = await findUserById(req.userId);
+    manifest.collaborators.push({ userId: req.userId, email: user?.email ?? '', role: link.role });
+    await writeManifest(link.ownerId, link.projectId, manifest);
+    await sharedIndex.addShare(req.userId, link.projectId, link.ownerId);
+    return { projectId: link.projectId };
   });
 }

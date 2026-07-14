@@ -96,6 +96,8 @@ export default function ProjectView({ projectId, onBack, user }) {
     };
   }, [projectId, activePath]);
 
+  const isViewer = manifest?.yourRole === 'viewer';
+
   const outline = useMemo(() => buildOutline(content ?? ''), [content]);
   const wordCount = useMemo(() => countWords(content ?? ''), [content]);
 
@@ -249,6 +251,20 @@ export default function ProjectView({ projectId, onBack, user }) {
         <span style={{ color: collabStatus === 'disconnected' ? '#e0a030' : 'var(--text-muted)', fontSize: 12 }}>
           {STATUS_LABEL[collabStatus] ?? collabStatus}
         </span>
+        {isViewer && (
+          <span
+            title="You have view-only access to this project"
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              borderRadius: 4,
+              background: 'var(--accent-bg)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            Read-only
+          </span>
+        )}
         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{wordCount} words</span>
         {recentEditors.length > 0 && (
           <span style={{ color: 'var(--text-muted)', fontSize: 12 }} title={recentEditors.map((e) => e.email).join(', ')}>
@@ -273,6 +289,7 @@ export default function ProjectView({ projectId, onBack, user }) {
           {showHistory && (
             <VersionHistoryPanel
               versions={versions}
+              readOnly={isViewer}
               onSave={handleSaveVersion}
               onRestore={handleRestoreVersion}
               onClose={() => setShowHistory(false)}
@@ -295,6 +312,7 @@ export default function ProjectView({ projectId, onBack, user }) {
             <select
               value={manifest.compiler ?? 'pdflatex'}
               onChange={(e) => handleCompilerChange(e.target.value)}
+              disabled={isViewer}
               style={{ fontSize: 13 }}
             >
               <option value="pdflatex">pdfLaTeX</option>
@@ -367,6 +385,7 @@ export default function ProjectView({ projectId, onBack, user }) {
               <FileTree
                 files={manifest.files}
                 activePath={activePath}
+                readOnly={isViewer}
                 onSelect={handleSelectFile}
                 onUpload={handleUpload}
                 onCreate={handleCreate}
@@ -376,7 +395,7 @@ export default function ProjectView({ projectId, onBack, user }) {
               />
             )}
             {sidebarTab === 'outline' && <OutlinePanel entries={outline} onJump={handleOutlineJump} />}
-            {sidebarTab === 'git' && <SourceControlPanel projectId={projectId} />}
+            {sidebarTab === 'git' && <SourceControlPanel projectId={projectId} readOnly={isViewer} />}
           </div>
         </div>
         )}
@@ -398,6 +417,7 @@ export default function ProjectView({ projectId, onBack, user }) {
                     initialLine={initialLine}
                     dark={dark}
                     user={user}
+                    readOnly={isViewer}
                     onChange={handleEditorChange}
                     onStatus={setCollabStatus}
                     onJumpToPdf={jumpToPdfAtLine}

@@ -4,7 +4,7 @@ const TRIGGER_LABELS = {
   restore: 'Before restore',
 };
 
-export default function VersionHistoryPanel({ versions, onSave, onRestore, onClose }) {
+export default function VersionHistoryPanel({ versions, readOnly, onSave, onRestore, onClose }) {
   function handleSave() {
     const label = prompt('Label for this version (optional):');
     onSave(label || undefined);
@@ -39,9 +39,11 @@ export default function VersionHistoryPanel({ versions, onSave, onRestore, onClo
           Close
         </button>
       </div>
-      <button onClick={handleSave} style={{ fontSize: 12, marginBottom: 8, width: '100%' }}>
-        Save current version
-      </button>
+      {!readOnly && (
+        <button onClick={handleSave} style={{ fontSize: 12, marginBottom: 8, width: '100%' }}>
+          Save current version
+        </button>
+      )}
       {versions.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No versions yet — compile or save one.</p>}
       {versions.map((v) => (
         <div key={v.id} style={{ padding: '6px 4px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
@@ -49,9 +51,11 @@ export default function VersionHistoryPanel({ versions, onSave, onRestore, onClo
             <strong>{v.label || TRIGGER_LABELS[v.trigger] || v.trigger}</strong>
           </div>
           <div style={{ color: 'var(--text-muted)' }}>{new Date(v.createdAt).toLocaleString()}</div>
-          <button onClick={() => handleRestore(v)} style={{ fontSize: 11, marginTop: 4 }}>
-            Restore
-          </button>
+          {!readOnly && (
+            <button onClick={() => handleRestore(v)} style={{ fontSize: 11, marginTop: 4 }}>
+              Restore
+            </button>
+          )}
         </div>
       ))}
     </div>

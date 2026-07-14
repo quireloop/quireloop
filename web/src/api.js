@@ -50,11 +50,11 @@ export const api = {
   downloadUrl: (id) => `${BASE}/projects/${id}/download`,
   clean: (id) => request(`/projects/${id}/clean`, { method: 'POST' }),
 
-  shareProject: (id, email) =>
+  shareProject: (id, email, role) =>
     request(`/projects/${id}/share`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, role }),
     }),
   unshareProject: (id, userId) =>
     request(`/projects/${id}/unshare`, {
@@ -62,6 +62,22 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ userId }),
     }),
+  setCollaboratorRole: (id, userId, role) =>
+    request(`/projects/${id}/collaborators/${userId}/role`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ role }),
+    }),
+
+  createShareLink: (id, role) =>
+    request(`/projects/${id}/share-links`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ role }),
+    }),
+  listShareLinks: (id) => request(`/projects/${id}/share-links`),
+  revokeShareLink: (id, token) => request(`/projects/${id}/share-links/${token}`, { method: 'DELETE' }),
+  joinShareLink: (token) => request(`/share-links/${token}/join`, { method: 'POST' }),
 
   readFile: (id, path) => request(`/projects/${id}/files/${path}`),
   writeFile: (id, path, content) =>

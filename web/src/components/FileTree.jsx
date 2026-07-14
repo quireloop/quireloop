@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { buildTree } from '../lib/fileTree.js';
 
-function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, ...handlers }) {
+function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, readOnly, ...handlers }) {
   const isCollapsed = collapsed.has(node.path);
   return (
     <div>
@@ -31,17 +31,26 @@ function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, ...ha
               collapsed={collapsed}
               onToggle={onToggle}
               depth={depth + 1}
+              readOnly={readOnly}
               {...handlers}
             />
           ) : (
-            <FileRow key={child.path} file={child} activePath={activePath} dirty={dirty} depth={depth + 1} {...handlers} />
+            <FileRow
+              key={child.path}
+              file={child}
+              activePath={activePath}
+              dirty={dirty}
+              depth={depth + 1}
+              readOnly={readOnly}
+              {...handlers}
+            />
           )
         )}
     </div>
   );
 }
 
-function FileRow({ file, activePath, dirty, depth, onSelect, onRename, onDelete }) {
+function FileRow({ file, activePath, dirty, depth, readOnly, onSelect, onRename, onDelete }) {
   function handleRename(e) {
     e.stopPropagation();
     const name = prompt('Rename to:', file.path);
@@ -72,17 +81,32 @@ function FileRow({ file, activePath, dirty, depth, onSelect, onRename, onDelete 
         {file.name}
         {file.path === activePath && dirty && <span title="Unsaved changes"> •</span>}
       </span>
-      <button onClick={handleRename} title="Rename" style={{ fontSize: 11, padding: '1px 4px' }}>
-        ✎
-      </button>
-      <button onClick={handleDelete} title="Delete" style={{ fontSize: 11, padding: '1px 4px', color: 'crimson' }}>
-        ×
-      </button>
+      {!readOnly && (
+        <>
+          <button onClick={handleRename} title="Rename" style={{ fontSize: 11, padding: '1px 4px' }}>
+            ✎
+          </button>
+          <button onClick={handleDelete} title="Delete" style={{ fontSize: 11, padding: '1px 4px', color: 'crimson' }}>
+            ×
+          </button>
+        </>
+      )}
     </div>
   );
 }
 
-export default function FileTree({ files, activePath, dirty, onSelect, onUpload, onCreate, onCreateFolder, onRename, onDelete }) {
+export default function FileTree({
+  files,
+  activePath,
+  dirty,
+  readOnly,
+  onSelect,
+  onUpload,
+  onCreate,
+  onCreateFolder,
+  onRename,
+  onDelete,
+}) {
   const fileInputRef = useRef(null);
   const [collapsed, setCollapsed] = useState(new Set());
   const [dragOver, setDragOver] = useState(false);
@@ -117,6 +141,7 @@ export default function FileTree({ files, activePath, dirty, onSelect, onUpload,
   async function handleDrop(e) {
     e.preventDefault();
     setDragOver(false);
+    if (readOnly) return;
     const dropped = Array.from(e.dataTransfer.files ?? []);
     for (const file of dropped) await onUpload(file);
   }
@@ -124,6 +149,7 @@ export default function FileTree({ files, activePath, dirty, onSelect, onUpload,
   return (
     <div
       onDragOver={(e) => {
+        if (readOnly) return;
         e.preventDefault();
         setDragOver(true);
       }}
@@ -138,17 +164,19 @@ export default function FileTree({ files, activePath, dirty, onSelect, onUpload,
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 8px', gap: 4 }}>
         <h4 style={{ margin: 0 }}>Files</h4>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button onClick={handleCreate} style={{ fontSize: 12, padding: '2px 8px' }}>
-            + New
-          </button>
-          <button onClick={handleCreateFolder} style={{ fontSize: 12, padding: '2px 8px' }}>
-            + Folder
-          </button>
-          <button onClick={() => fileInputRef.current.click()} style={{ fontSize: 12, padding: '2px 8px' }}>
-            Upload
-          </button>
-        </div>
+        {!readOnly && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button onClick={handleCreate} style={{ fontSize: 12, padding: '2px 8px' }}>
+              + New
+            </button>
+            <button onClick={handleCreateFolder} style={{ fontSize: 12, padding: '2px 8px' }}>
+              + Folder
+            </button>
+            <button onClick={() => fileInputRef.current.click()} style={{ fontSize: 12, padding: '2px 8px' }}>
+              Upload
+            </button>
+          </div>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -168,12 +196,23 @@ export default function FileTree({ files, activePath, dirty, onSelect, onUpload,
             collapsed={collapsed}
             onToggle={toggleFolder}
             depth={0}
+            readOnly={readOnly}
             onSelect={onSelect}
             onRename={onRename}
             onDelete={onDelete}
           />
         ) : (
-          <FileRow key={node.path} file={node} activePath={activePath} dirty={dirty} depth={0} onSelect={onSelect} onRename={onRename} onDelete={onDelete} />
+          <FileRow
+            key={node.path}
+            file={node}
+            activePath={activePath}
+            dirty={dirty}
+            depth={0}
+            readOnly={readOnly}
+            onSelect={onSelect}
+            onRename={onRename}
+            onDelete={onDelete}
+          />
         )
       )}
     </div>

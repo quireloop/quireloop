@@ -66,7 +66,7 @@ function userColor(userId) {
 }
 
 const Editor = forwardRef(function Editor(
-  { projectId, filePath, collabGeneration, initialLine, dark, user, onChange, onJumpToPdf, onStatus, bibEntries },
+  { projectId, filePath, collabGeneration, initialLine, dark, user, readOnly, onChange, onJumpToPdf, onStatus, bibEntries },
   ref
 ) {
   const containerRef = useRef(null);
@@ -153,6 +153,9 @@ const Editor = forwardRef(function Editor(
           '&': { height: '100%', fontSize: '14px' },
           '.cm-scroller': { overflow: 'auto', fontFamily: 'ui-monospace, monospace' },
         }),
+        // Belt-and-suspenders with the websocket-layer drop of viewer
+        // updates: this keeps a viewer from even trying to type locally.
+        ...(readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
       ],
     });
 
@@ -169,7 +172,7 @@ const Editor = forwardRef(function Editor(
       ydoc.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, filePath, collabGeneration, dark]);
+  }, [projectId, filePath, collabGeneration, dark, readOnly]);
 
   return <div ref={containerRef} style={{ height: '100%' }} />;
 });

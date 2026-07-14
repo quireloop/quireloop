@@ -1,5 +1,5 @@
 import { createSnapshot, listVersions, restoreVersion } from '../lib/versions.js';
-import { requireProjectAccess } from '../lib/authMiddleware.js';
+import { requireProjectAccess, requireProjectWrite } from '../lib/authMiddleware.js';
 import * as collab from '../lib/collab.js';
 
 export default async function versionsRoutes(app) {
@@ -7,13 +7,13 @@ export default async function versionsRoutes(app) {
     return listVersions(req.ownerId, req.params.id);
   });
 
-  app.post('/api/projects/:id/versions', { preHandler: requireProjectAccess }, async (req) => {
+  app.post('/api/projects/:id/versions', { preHandler: requireProjectWrite }, async (req) => {
     const { label } = req.body ?? {};
     await collab.flushProject(req.ownerId, req.params.id);
     return createSnapshot(req.ownerId, req.params.id, { label, trigger: 'manual' });
   });
 
-  app.post('/api/projects/:id/versions/:versionId/restore', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.post('/api/projects/:id/versions/:versionId/restore', { preHandler: requireProjectWrite }, async (req, reply) => {
     try {
       const result = await restoreVersion(req.ownerId, req.params.id, req.params.versionId);
       collab.invalidateProject(req.ownerId, req.params.id);

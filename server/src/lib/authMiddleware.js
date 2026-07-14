@@ -26,9 +26,19 @@ export async function requireAdmin(req, reply) {
   }
 }
 
-function hasProjectAccess(manifest, userId) {
-  if (manifest.ownerId === userId) return true;
-  return (manifest.collaborators ?? []).some((c) => c.userId === userId);
+// A collaborator entry with no `role` predates Stage B — treat it as an
+// editor (the only level that existed before roles). Normalized here on
+// read rather than via a startup migration.
+export function normalizeCollabRole(collaborator) {
+  return collaborator.role === 'viewer' ? 'viewer' : 'editor';
+}
+
+// 'owner' | 'editor' | 'viewer' | null (no access at all).
+export function resolveRole(manifest, userId) {
+  if (manifest.ownerId === userId) return 'owner';
+  const collaborator = (manifest.collaborators ?? []).find((c) => c.userId === userId);
+  if (!collaborator) return null;
+  return normalizeCollabRole(collaborator);
 }
 
 // Resolves :id -> its owner via the project index (the URL only ever
@@ -51,19 +61,33 @@ export async function requireProjectAccess(req, reply) {
     return reply.code(404).send({ error: 'project not found' });
   }
 
-  if (!hasProjectAccess(manifest, req.userId)) {
+  const role = resolveRole(manifest, req.userId);
+  if (!role) {
     return reply.code(403).send({ error: 'forbidden' });
   }
 
   req.ownerId = ownerId;
   req.manifest = manifest;
+  req.projectRole = role;
 }
 
 export async function requireProjectOwner(req, reply) {
   await requireProjectAccess(req, reply);
   if (reply.sent) return;
 
-  if (req.manifest.ownerId !== req.userId) {
+  if (req.projectRole !== 'owner') {
     return reply.code(403).send({ error: 'forbidden' });
+  }
+}
+
+// Viewers get every read (including compile/SyncTeX, which they need for
+// the PDF) but no write — anything that changes files, the git working
+// tree, or version history requires this instead of requireProjectAccess.
+export async function requireProjectWrite(req, reply) {
+  await requireProjectAccess(req, reply);
+  if (reply.sent) return;
+
+  if (req.projectRole === 'viewer') {
+    return reply.code(403).send({ error: 'read-only access' });
   }
 }

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolveProjectPath } from '../lib/storage.js';
 import { upsertFileEntry, removeFileEntry, renameFileEntry } from '../lib/manifest.js';
-import { requireProjectAccess } from '../lib/authMiddleware.js';
+import { requireProjectAccess, requireProjectWrite } from '../lib/authMiddleware.js';
 
 export default async function filesRoutes(app) {
   app.get('/api/projects/:id/files/*', { preHandler: requireProjectAccess }, async (req, reply) => {
@@ -15,7 +15,7 @@ export default async function filesRoutes(app) {
     }
   });
 
-  app.put('/api/projects/:id/files/*', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.put('/api/projects/:id/files/*', { preHandler: requireProjectWrite }, async (req, reply) => {
     const relPath = req.params['*'];
     try {
       const filePath = resolveProjectPath(req.ownerId, req.params.id, relPath);
@@ -29,7 +29,7 @@ export default async function filesRoutes(app) {
     }
   });
 
-  app.delete('/api/projects/:id/files/*', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.delete('/api/projects/:id/files/*', { preHandler: requireProjectWrite }, async (req, reply) => {
     const relPath = req.params['*'];
     try {
       const filePath = resolveProjectPath(req.ownerId, req.params.id, relPath);
@@ -41,7 +41,7 @@ export default async function filesRoutes(app) {
     }
   });
 
-  app.post('/api/projects/:id/rename', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.post('/api/projects/:id/rename', { preHandler: requireProjectWrite }, async (req, reply) => {
     const { oldPath, newPath } = req.body ?? {};
     if (!oldPath || !newPath) {
       return reply.code(400).send({ error: 'oldPath and newPath are required' });
@@ -58,7 +58,7 @@ export default async function filesRoutes(app) {
     }
   });
 
-  app.post('/api/projects/:id/folders', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.post('/api/projects/:id/folders', { preHandler: requireProjectWrite }, async (req, reply) => {
     const { path: folderPath } = req.body ?? {};
     if (!folderPath) return reply.code(400).send({ error: 'path is required' });
     try {
@@ -71,7 +71,7 @@ export default async function filesRoutes(app) {
     }
   });
 
-  app.post('/api/projects/:id/upload', { preHandler: requireProjectAccess }, async (req, reply) => {
+  app.post('/api/projects/:id/upload', { preHandler: requireProjectWrite }, async (req, reply) => {
     const data = await req.file();
     if (!data) return reply.code(400).send({ error: 'no file uploaded' });
 

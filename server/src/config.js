@@ -17,6 +17,7 @@ export const INVITES_FILE = path.join(DATA_DIR, 'invites.json');
 export const SESSION_KEY_FILE = path.join(DATA_DIR, 'session-key');
 export const PROJECTS_INDEX_FILE = path.join(DATA_DIR, 'projects-index.json');
 export const SHARED_INDEX_FILE = path.join(DATA_DIR, 'shared-index.json');
+export const SHARE_LINKS_FILE = path.join(DATA_DIR, 'share-links.json');
 export const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 export const PORT = process.env.PORT ? Number(process.env.PORT) : 4173;
 export const HOST = '0.0.0.0';

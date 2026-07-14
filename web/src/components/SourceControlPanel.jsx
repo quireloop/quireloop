@@ -29,7 +29,7 @@ function StatusBadge({ status }) {
   );
 }
 
-export default function SourceControlPanel({ projectId, beforeAction }) {
+export default function SourceControlPanel({ projectId, beforeAction, readOnly }) {
   const [status, setStatus] = useState(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -122,18 +122,22 @@ export default function SourceControlPanel({ projectId, beforeAction }) {
         {status.remote ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
             <code style={{ fontSize: 11, wordBreak: 'break-all', color: 'var(--text-muted)' }}>{status.remote}</code>
-            <button onClick={() => setShowRemoteForm((v) => !v)} style={{ fontSize: 11, flexShrink: 0 }}>
-              Change
-            </button>
+            {!readOnly && (
+              <button onClick={() => setShowRemoteForm((v) => !v)} style={{ fontSize: 11, flexShrink: 0 }}>
+                Change
+              </button>
+            )}
           </div>
         ) : (
-          <button onClick={() => setShowRemoteForm((v) => !v)} style={{ fontSize: 12, marginTop: 4 }}>
-            Set remote (GitHub, the hosted editor, …)
-          </button>
+          !readOnly && (
+            <button onClick={() => setShowRemoteForm((v) => !v)} style={{ fontSize: 12, marginTop: 4 }}>
+              Set remote (GitHub, the hosted editor, …)
+            </button>
+          )
         )}
       </div>
 
-      {showRemoteForm && (
+      {!readOnly && showRemoteForm && (
         <form
           onSubmit={handleSaveRemote}
           style={{
@@ -170,10 +174,10 @@ export default function SourceControlPanel({ projectId, beforeAction }) {
       )}
 
       <div style={{ display: 'flex', gap: 6 }}>
-        <button onClick={handlePull} disabled={busy || !status.remote} style={{ flex: 1, fontSize: 12 }}>
+        <button onClick={handlePull} disabled={readOnly || busy || !status.remote} style={{ flex: 1, fontSize: 12 }}>
           Pull
         </button>
-        <button onClick={handlePush} disabled={busy || !status.remote} style={{ flex: 1, fontSize: 12 }}>
+        <button onClick={handlePush} disabled={readOnly || busy || !status.remote} style={{ flex: 1, fontSize: 12 }}>
           Push
         </button>
         <button onClick={refresh} disabled={busy} title="Refresh status" style={{ fontSize: 12 }}>
@@ -184,22 +188,24 @@ export default function SourceControlPanel({ projectId, beforeAction }) {
       {error && <p style={{ color: 'crimson', margin: 0, fontSize: 12 }}>{error}</p>}
       {notice && !error && <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 12 }}>{notice}</p>}
 
-      <div>
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Commit message"
-          rows={2}
-          style={{ width: '100%', padding: 6, fontSize: 12, resize: 'vertical', fontFamily: 'inherit' }}
-        />
-        <button
-          onClick={handleCommit}
-          disabled={busy || status.files.length === 0}
-          style={{ width: '100%', marginTop: 6, padding: 6, fontSize: 12 }}
-        >
-          Commit {status.files.length > 0 ? `(${status.files.length})` : ''}
-        </button>
-      </div>
+      {!readOnly && (
+        <div>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Commit message"
+            rows={2}
+            style={{ width: '100%', padding: 6, fontSize: 12, resize: 'vertical', fontFamily: 'inherit' }}
+          />
+          <button
+            onClick={handleCommit}
+            disabled={busy || status.files.length === 0}
+            style={{ width: '100%', marginTop: 6, padding: 6, fontSize: 12 }}
+          >
+            Commit {status.files.length > 0 ? `(${status.files.length})` : ''}
+          </button>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {status.files.length === 0 && <p style={{ color: 'var(--text-muted)', margin: 0 }}>No changes.</p>}
