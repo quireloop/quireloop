@@ -10,12 +10,18 @@ import SymbolPalette from '../components/SymbolPalette.jsx';
 import VersionHistoryPanel from '../components/VersionHistoryPanel.jsx';
 import SourceControlPanel from '../components/SourceControlPanel.jsx';
 import ShareModal from '../components/ShareModal.jsx';
+import CommentsPanel from '../components/CommentsPanel.jsx';
+import ChatPanel from '../components/ChatPanel.jsx';
 import Logo from '../components/Logo.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
 import { useDarkMode, useSidebarOpen } from '../lib/theme.js';
 import { parseBibEntries } from '../lib/bibtex.js';
+import { encodeAnchor, decodeAnchor } from '../lib/commentAnchors.js';
 
 const RECENT_EDITORS_POLL_MS = 8000;
+const COMMENTS_POLL_MS = 8000;
+const CHAT_OPEN_POLL_MS = 4000;
+const CHAT_CLOSED_POLL_MS = 15000;
 
 const STATUS_LABEL = {
   connecting: 'Connecting…',
@@ -45,6 +51,22 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
   const editorRef = useRef(null);
   const pdfViewerRef = useRef(null);
+
+  // Comments — collabHandles is the { ydoc, ytext, view } trio Editor hands
+  // up once its Yjs doc exists, needed to encode/decode the relative-
+  // position anchors comment threads are attached to.
+  const [collabHandles, setCollabHandles] = useState(null);
+  const [selectionNonEmpty, setSelectionNonEmpty] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [showResolvedComments, setShowResolvedComments] = useState(false);
+  const [commentThreads, setCommentThreads] = useState([]);
+
+  // Chat — unread count is derived from a per-project "last seen message
+  // id" kept in localStorage so it survives a page reload.
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [unreadChat, setUnreadChat] = useState(0);
+  const lastSeenChatIdRef = useRef(localStorage.getItem(`quireloop:chat-seen:${projectId}`) || null);
 
   useEffect(() => {
     api.getProject(projectId).then((m) => {
@@ -96,7 +118,89 @@ export default function ProjectView({ projectId, onBack, user }) {
     };
   }, [projectId, activePath]);
 
+  // Comment threads for the open file — polled so collaborators see new
+  // comments/replies without a refresh, same pattern as recentEditors above.
+  useEffect(() => {
+    if (!activePath) {
+      setCommentThreads([]);
+      return;
+    }
+    let cancelled = false;
+    function poll() {
+      api
+        .listComments(projectId, activePath)
+        .then((list) => !cancelled && setCommentThreads(list))
+        .catch(() => {});
+    }
+    poll();
+    const timer = setInterval(poll, COMMENTS_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [projectId, activePath]);
+
+  // Decode each thread's Yjs relative-position anchor against the live doc
+  // and push the resulting ranges into the editor as highlight decorations
+  // — recomputed whenever the thread list changes or the doc's content
+  // changes (cheap: relative positions resolve in O(1) against the doc).
+  useEffect(() => {
+    if (!collabHandles) return;
+    const ranges = commentThreads
+      .map((t) => {
+        const range = decodeAnchor(collabHandles.ydoc, t.anchor);
+        return range && { ...range, resolved: t.resolved };
+      })
+      .filter(Boolean);
+    editorRef.current?.setCommentRanges(ranges);
+  }, [collabHandles, commentThreads, content]);
+
+  // Chat — polls faster while the panel is open (so an active conversation
+  // feels live) and slower while closed (just enough to keep the unread
+  // badge current).
+  useEffect(() => {
+    let cancelled = false;
+    function poll() {
+      api
+        .listChat(projectId, null)
+        .then((list) => {
+          if (cancelled) return;
+          setChatMessages(list);
+          if (!showChat && list.length > 0) {
+            const lastSeen = lastSeenChatIdRef.current;
+            const idx = lastSeen ? list.findIndex((m) => m.id === lastSeen) : -1;
+            setUnreadChat(idx === -1 ? list.length : list.length - idx - 1);
+          }
+        })
+        .catch(() => {});
+    }
+    poll();
+    const timer = setInterval(poll, showChat ? CHAT_OPEN_POLL_MS : CHAT_CLOSED_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [projectId, showChat]);
+
+  useEffect(() => {
+    if (showChat && chatMessages.length > 0) {
+      const lastId = chatMessages[chatMessages.length - 1].id;
+      lastSeenChatIdRef.current = lastId;
+      localStorage.setItem(`quireloop:chat-seen:${projectId}`, lastId);
+      setUnreadChat(0);
+    }
+  }, [showChat, chatMessages, projectId]);
+
   const isViewer = manifest?.yourRole === 'viewer';
+  const isOwner = manifest?.ownerId === user?.id;
+
+  // Flags a thread as "orphaned" once its anchor can no longer be resolved
+  // against the live doc (the commented text was deleted) — same decode
+  // used for the editor highlight decorations above.
+  const commentThreadsWithStatus = useMemo(() => {
+    if (!collabHandles) return commentThreads.map((t) => ({ ...t, orphaned: false }));
+    return commentThreads.map((t) => ({ ...t, orphaned: !decodeAnchor(collabHandles.ydoc, t.anchor) }));
+  }, [commentThreads, collabHandles, content]);
 
   const outline = useMemo(() => buildOutline(content ?? ''), [content]);
   const wordCount = useMemo(() => countWords(content ?? ''), [content]);
@@ -190,6 +294,53 @@ export default function ProjectView({ projectId, onBack, user }) {
 
   function handleInsertSnippet(text) {
     editorRef.current?.insertAtCursor(text);
+  }
+
+  async function refreshComments() {
+    if (!activePath) return;
+    setCommentThreads(await api.listComments(projectId, activePath));
+  }
+
+  async function handleCreateComment() {
+    const view = collabHandles?.view;
+    const ytext = collabHandles?.ytext;
+    if (!view || !ytext) return;
+    const { from, to } = view.state.selection.main;
+    if (from === to) return;
+    const text = prompt('Comment:');
+    if (!text || !text.trim()) return;
+    const anchor = encodeAnchor(ytext, from, to);
+    await api.createComment(projectId, activePath, anchor, text.trim());
+    await refreshComments();
+    setShowComments(true);
+  }
+
+  function handleSelectThread(thread) {
+    if (!collabHandles) return;
+    const range = decodeAnchor(collabHandles.ydoc, thread.anchor);
+    if (!range) return;
+    editorRef.current?.selectRange(range.from, range.to);
+  }
+
+  async function handleReplyComment(threadId, text) {
+    await api.replyToComment(projectId, threadId, text);
+    await refreshComments();
+  }
+
+  async function handleResolveComment(threadId, resolved) {
+    await api.resolveComment(projectId, threadId, resolved);
+    await refreshComments();
+  }
+
+  async function handleDeleteComment(threadId) {
+    if (!confirm('Delete this comment thread?')) return;
+    await api.deleteComment(projectId, threadId);
+    await refreshComments();
+  }
+
+  async function handleSendChat(text) {
+    const message = await api.sendChat(projectId, text);
+    setChatMessages((list) => [...list, message]);
   }
 
   async function refreshVersions() {
@@ -295,6 +446,43 @@ export default function ProjectView({ projectId, onBack, user }) {
               onClose={() => setShowHistory(false)}
             />
           )}
+          <button
+            onClick={handleCreateComment}
+            disabled={!selectionNonEmpty}
+            title={selectionNonEmpty ? 'Comment on the selected text' : 'Select some text to comment on it'}
+            style={{ fontSize: 13 }}
+          >
+            💬 Comment
+          </button>
+          <button
+            onClick={() => setShowComments((v) => !v)}
+            style={{ fontSize: 13, background: showComments ? 'var(--accent-bg)' : undefined }}
+          >
+            Comments{commentThreads.filter((t) => !t.resolved).length > 0 ? ` (${commentThreads.filter((t) => !t.resolved).length})` : ''}
+          </button>
+          <button
+            onClick={() => setShowChat((v) => !v)}
+            style={{ fontSize: 13, background: showChat ? 'var(--accent-bg)' : undefined, position: 'relative' }}
+          >
+            Chat
+            {unreadChat > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                  background: '#d64545',
+                  color: 'white',
+                  borderRadius: 8,
+                  fontSize: 10,
+                  padding: '1px 5px',
+                  lineHeight: 1.4,
+                }}
+              >
+                {unreadChat}
+              </span>
+            )}
+          </button>
           {manifest && (
             <button onClick={() => setShowShare((v) => !v)} style={{ fontSize: 13 }}>
               Share
@@ -422,6 +610,8 @@ export default function ProjectView({ projectId, onBack, user }) {
                     onStatus={setCollabStatus}
                     onJumpToPdf={jumpToPdfAtLine}
                     bibEntries={bibEntries}
+                    onCollabHandles={setCollabHandles}
+                    onSelectionChange={setSelectionNonEmpty}
                   />
                 )}
               </div>
@@ -447,6 +637,28 @@ export default function ProjectView({ projectId, onBack, user }) {
             <PdfViewer ref={pdfViewerRef} url={pdfUrl} projectId={projectId} onJumpToSource={jumpToSource} />
           </Panel>
         </PanelGroup>
+        {showComments && (
+          <CommentsPanel
+            threads={commentThreadsWithStatus}
+            showResolved={showResolvedComments}
+            onToggleShowResolved={() => setShowResolvedComments((v) => !v)}
+            currentUserId={user?.id}
+            isOwner={isOwner}
+            onSelectThread={handleSelectThread}
+            onReply={handleReplyComment}
+            onResolve={handleResolveComment}
+            onDelete={handleDeleteComment}
+            onClose={() => setShowComments(false)}
+          />
+        )}
+        {showChat && (
+          <ChatPanel
+            messages={chatMessages}
+            currentUserId={user?.id}
+            onSend={handleSendChat}
+            onClose={() => setShowChat(false)}
+          />
+        )}
       </div>
     </div>
   );

@@ -146,4 +146,34 @@ export const api = {
   gitPull: (id) => request(`/projects/${id}/git/pull`, { method: 'POST' }),
 
   recentEditors: (id, path) => request(`/projects/${id}/recent-editors/${path}`),
+
+  listComments: (id, filePath) =>
+    request(`/projects/${id}/comments${filePath ? `?file=${encodeURIComponent(filePath)}` : ''}`),
+  createComment: (id, filePath, anchor, text) =>
+    request(`/projects/${id}/comments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filePath, anchor, text }),
+    }),
+  replyToComment: (id, threadId, text) =>
+    request(`/projects/${id}/comments/${threadId}/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }),
+  resolveComment: (id, threadId, resolved) =>
+    request(`/projects/${id}/comments/${threadId}/resolve`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ resolved }),
+    }),
+  deleteComment: (id, threadId) => request(`/projects/${id}/comments/${threadId}`, { method: 'DELETE' }),
+
+  listChat: (id, after) => request(`/projects/${id}/chat${after ? `?after=${encodeURIComponent(after)}` : ''}`),
+  sendChat: (id, text) =>
+    request(`/projects/${id}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }),
 };

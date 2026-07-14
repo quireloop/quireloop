@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { EditorView, keymap, lineNumbers } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { EditorView, keymap, lineNumbers, Decoration } from '@codemirror/view';
+import { EditorState, StateField, StateEffect } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
 import { defaultHighlightStyle, syntaxHighlighting, foldGutter } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
@@ -47,6 +47,38 @@ function jumpToLine(view, line) {
   view.focus();
 }
 
+// Comment range highlighting — a StateField so ranges survive concurrent
+// document edits via CodeMirror's own change-mapping (`Decoration.map`),
+// same idea as the Yjs relative positions used to compute them in the
+// first place. ProjectView recomputes absolute ranges from the threads'
+// relative positions and pushes them in via setCommentRangesEffect.
+const setCommentRangesEffect = StateEffect.define();
+
+const commentHighlightField = StateField.define({
+  create() {
+    return Decoration.none;
+  },
+  update(decorations, tr) {
+    decorations = decorations.map(tr.changes);
+    for (const effect of tr.effects) {
+      if (effect.is(setCommentRangesEffect)) {
+        const marks = effect.value
+          .filter((r) => r.from < r.to && r.to <= tr.state.doc.length)
+          .sort((a, b) => a.from - b.from || a.to - b.to)
+          .map((r) =>
+            Decoration.mark({ class: r.resolved ? 'cm-comment-range-resolved' : 'cm-comment-range' }).range(
+              r.from,
+              r.to
+            )
+          );
+        decorations = Decoration.set(marks, true);
+      }
+    }
+    return decorations;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 function insertAtCursor(view, text) {
   const { from, to } = view.state.selection.main;
   view.dispatch({
@@ -66,7 +98,21 @@ function userColor(userId) {
 }
 
 const Editor = forwardRef(function Editor(
-  { projectId, filePath, collabGeneration, initialLine, dark, user, readOnly, onChange, onJumpToPdf, onStatus, bibEntries },
+  {
+    projectId,
+    filePath,
+    collabGeneration,
+    initialLine,
+    dark,
+    user,
+    readOnly,
+    onChange,
+    onJumpToPdf,
+    onStatus,
+    bibEntries,
+    onCollabHandles,
+    onSelectionChange,
+  },
   ref
 ) {
   const containerRef = useRef(null);
@@ -75,10 +121,14 @@ const Editor = forwardRef(function Editor(
   const onJumpToPdfRef = useRef(onJumpToPdf);
   const onStatusRef = useRef(onStatus);
   const bibEntriesRef = useRef(bibEntries ?? []);
+  const onCollabHandlesRef = useRef(onCollabHandles);
+  const onSelectionChangeRef = useRef(onSelectionChange);
   onChangeRef.current = onChange;
   onJumpToPdfRef.current = onJumpToPdf;
   onStatusRef.current = onStatus;
   bibEntriesRef.current = bibEntries ?? [];
+  onCollabHandlesRef.current = onCollabHandles;
+  onSelectionChangeRef.current = onSelectionChange;
 
   useImperativeHandle(ref, () => ({
     goToLine: (line) => {
@@ -91,6 +141,22 @@ const Editor = forwardRef(function Editor(
       if (!viewRef.current) return 1;
       const state = viewRef.current.state;
       return state.doc.lineAt(state.selection.main.head).number;
+    },
+    selectRange: (from, to) => {
+      const view = viewRef.current;
+      if (!view) return;
+      const clampedFrom = Math.max(0, Math.min(from, view.state.doc.length));
+      const clampedTo = Math.max(0, Math.min(to, view.state.doc.length));
+      view.dispatch({
+        selection: { anchor: clampedFrom, head: clampedTo },
+        effects: EditorView.scrollIntoView(clampedFrom, { y: 'center' }),
+      });
+      view.focus();
+    },
+    setCommentRanges: (ranges) => {
+      if (viewRef.current) {
+        viewRef.current.dispatch({ effects: setCommentRangesEffect.of(ranges) });
+      }
     },
   }));
 
@@ -149,9 +215,18 @@ const Editor = forwardRef(function Editor(
           },
         }),
         keymap.of([...yUndoManagerKeymap, ...defaultKeymap, ...searchKeymap]),
+        commentHighlightField,
+        EditorView.updateListener.of((update) => {
+          if (update.selectionSet) {
+            const { from, to } = update.state.selection.main;
+            onSelectionChangeRef.current?.(from !== to);
+          }
+        }),
         EditorView.theme({
           '&': { height: '100%', fontSize: '14px' },
           '.cm-scroller': { overflow: 'auto', fontFamily: 'ui-monospace, monospace' },
+          '.cm-comment-range': { backgroundColor: 'rgba(255, 205, 60, 0.35)' },
+          '.cm-comment-range-resolved': { backgroundColor: 'rgba(150, 150, 150, 0.2)' },
         }),
         // Belt-and-suspenders with the websocket-layer drop of viewer
         // updates: this keeps a viewer from even trying to type locally.
@@ -164,7 +239,10 @@ const Editor = forwardRef(function Editor(
 
     if (initialLine) jumpToLine(view, initialLine);
 
+    onCollabHandlesRef.current?.({ ydoc, ytext, view });
+
     return () => {
+      onCollabHandlesRef.current?.(null);
       ytext.unobserve(reportChange);
       view.destroy();
       provider.destroy();
