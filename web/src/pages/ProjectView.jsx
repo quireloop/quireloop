@@ -9,6 +9,7 @@ import OutlinePanel from '../components/OutlinePanel.jsx';
 import SymbolPalette from '../components/SymbolPalette.jsx';
 import VersionHistoryPanel from '../components/VersionHistoryPanel.jsx';
 import SourceControlPanel from '../components/SourceControlPanel.jsx';
+import SearchPanel from '../components/SearchPanel.jsx';
 import ShareModal from '../components/ShareModal.jsx';
 import CommentsPanel from '../components/CommentsPanel.jsx';
 import ChatPanel from '../components/ChatPanel.jsx';
@@ -22,6 +23,8 @@ const RECENT_EDITORS_POLL_MS = 8000;
 const COMMENTS_POLL_MS = 8000;
 const CHAT_OPEN_POLL_MS = 4000;
 const CHAT_CLOSED_POLL_MS = 15000;
+const AUTO_COMPILE_IDLE_MS = 2500;
+const AUTO_COMPILE_STORAGE_KEY = 'quireloop:autoCompile';
 
 const STATUS_LABEL = {
   connecting: 'Connecting…',
@@ -52,6 +55,21 @@ export default function ProjectView({ projectId, onBack, user }) {
   const editorRef = useRef(null);
   const pdfViewerRef = useRef(null);
 
+  // Auto-compile on idle — toggle persisted in localStorage, default off.
+  // The debounce timer only fires on real edits: the ref below is set
+  // whenever the open file changes so the doc-load-triggered content
+  // update right after switching files (or opening the project) doesn't
+  // itself count as an edit and kick off a compile.
+  const [autoCompile, setAutoCompile] = useState(
+    () => localStorage.getItem(AUTO_COMPILE_STORAGE_KEY) === 'true'
+  );
+  const autoCompileRef = useRef(autoCompile);
+  const compilingRef = useRef(false);
+  const activePathRef = useRef(activePath);
+  const skipNextContentChangeRef = useRef(true);
+  const autoCompileTimerRef = useRef(null);
+  const pendingAutoCompileRef = useRef(false);
+
   // Comments — collabHandles is the { ydoc, ytext, view } trio Editor hands
   // up once its Yjs doc exists, needed to encode/decode the relative-
   // position anchors comment threads are attached to.
@@ -75,6 +93,49 @@ export default function ProjectView({ projectId, onBack, user }) {
       if (textFile) setActivePath(textFile.path);
     });
   }, [projectId]);
+
+  useEffect(() => {
+    localStorage.setItem(AUTO_COMPILE_STORAGE_KEY, String(autoCompile));
+    autoCompileRef.current = autoCompile;
+  }, [autoCompile]);
+
+  useEffect(() => {
+    activePathRef.current = activePath;
+    // The next content update for the newly-opened file is the doc
+    // loading in, not a user edit — don't let it start the idle timer.
+    skipNextContentChangeRef.current = true;
+  }, [activePath]);
+
+  // Idle-triggered auto-compile: debounce every content change, and if a
+  // compile is already in flight when the timer fires, remember to run
+  // one more once it finishes rather than dropping the edit on the floor.
+  useEffect(() => {
+    if (skipNextContentChangeRef.current) {
+      skipNextContentChangeRef.current = false;
+      return;
+    }
+    if (!autoCompileRef.current) return;
+    if (autoCompileTimerRef.current) clearTimeout(autoCompileTimerRef.current);
+    autoCompileTimerRef.current = setTimeout(() => {
+      if (compilingRef.current) {
+        pendingAutoCompileRef.current = true;
+      } else {
+        handleCompile();
+      }
+    }, AUTO_COMPILE_IDLE_MS);
+    return () => {
+      if (autoCompileTimerRef.current) clearTimeout(autoCompileTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content]);
+
+  // Re-apply the last compile's problems to the editor whenever the open
+  // file changes (Editor remounts per file, so its diagnostics reset).
+  useEffect(() => {
+    if (!compileResult) return;
+    applyDiagnosticsToEditor(compileResult.problems);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePath, compileResult]);
 
   // Powers \cite{} autocomplete — re-parsed whenever the project's file
   // list changes (a .bib was added, removed, or the active one saved a new
@@ -255,16 +316,32 @@ export default function ProjectView({ projectId, onBack, user }) {
     }
   }
 
+  // Maps the compile's flat problem list down to the currently-open file
+  // and pushes it into the editor as diagnostics; called both right after
+  // a compile finishes and whenever the open file changes.
+  function applyDiagnosticsToEditor(problems) {
+    const forFile = (problems ?? []).filter((p) => p.file === activePathRef.current);
+    editorRef.current?.setDiagnostics(forFile);
+  }
+
   async function handleCompile() {
     setCompiling(true);
+    compilingRef.current = true;
+    editorRef.current?.setDiagnostics([]);
     try {
       const result = await api.compile(projectId);
       setCompileResult(result);
+      applyDiagnosticsToEditor(result.problems);
       if (result.success) {
         setPdfUrl(api.pdfUrl(projectId));
       }
     } finally {
       setCompiling(false);
+      compilingRef.current = false;
+      if (pendingAutoCompileRef.current) {
+        pendingAutoCompileRef.current = false;
+        if (autoCompileRef.current) handleCompile();
+      }
     }
   }
 
@@ -522,6 +599,17 @@ export default function ProjectView({ projectId, onBack, user }) {
           <button onClick={handleCompile} disabled={compiling} style={{ padding: '6px 16px' }}>
             {compiling ? 'Compiling…' : 'Compile'}
           </button>
+          <button
+            onClick={() => setAutoCompile((v) => !v)}
+            title={
+              autoCompile
+                ? 'Auto-compile is on — compiles automatically after edits settle'
+                : 'Auto-compile is off — click Compile manually'
+            }
+            style={{ fontSize: 13, background: autoCompile ? 'var(--accent-bg)' : undefined }}
+          >
+            Auto
+          </button>
         </div>
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -567,6 +655,19 @@ export default function ProjectView({ projectId, onBack, user }) {
             >
               Source Control
             </button>
+            <button
+              onClick={() => setSidebarTab('search')}
+              style={{
+                flex: 1,
+                border: 'none',
+                borderRadius: 0,
+                background: sidebarTab === 'search' ? 'var(--accent-bg)' : 'transparent',
+                fontSize: 13,
+                padding: 6,
+              }}
+            >
+              Search
+            </button>
           </div>
           <div style={{ flex: 1, minHeight: 0 }}>
             {sidebarTab === 'files' && manifest && (
@@ -584,6 +685,7 @@ export default function ProjectView({ projectId, onBack, user }) {
             )}
             {sidebarTab === 'outline' && <OutlinePanel entries={outline} onJump={handleOutlineJump} />}
             {sidebarTab === 'git' && <SourceControlPanel projectId={projectId} readOnly={isViewer} />}
+            {sidebarTab === 'search' && <SearchPanel projectId={projectId} onJump={jumpToSource} />}
           </div>
         </div>
         )}
@@ -619,6 +721,7 @@ export default function ProjectView({ projectId, onBack, user }) {
                 <CompileLogPanel
                   log={compileResult.log}
                   success={compileResult.success}
+                  problems={compileResult.problems}
                   onClose={() => setCompileResult(null)}
                   onJump={jumpToSource}
                 />

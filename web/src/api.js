@@ -108,6 +108,8 @@ export const api = {
   compile: (id) => request(`/projects/${id}/compile`, { method: 'POST' }),
   pdfUrl: (id) => `${BASE}/projects/${id}/pdf?t=${Date.now()}`,
 
+  searchProject: (id, q) => request(`/projects/${id}/search?q=${encodeURIComponent(q)}`),
+
   synctexToSource: (id, page, x, y) =>
     request(`/projects/${id}/synctex/to-source`, {
       method: 'POST',

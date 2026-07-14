@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { EditorView, keymap, lineNumbers, Decoration } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, Decoration, gutter, GutterMarker } from '@codemirror/view';
 import { EditorState, StateField, StateEffect } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
 import { defaultHighlightStyle, syntaxHighlighting, foldGutter } from '@codemirror/language';
@@ -77,6 +77,100 @@ const commentHighlightField = StateField.define({
     return decorations;
   },
   provide: (f) => EditorView.decorations.from(f),
+});
+
+// Compile diagnostics — CodeMirror's @codemirror/lint package isn't an
+// installed dependency here, so this is a small hand-rolled equivalent:
+// a StateField holding the raw {line, severity, message} list (pushed in
+// via ProjectView after each compile, mapped down to the current file),
+// a derived Decoration field for the wavy underline, and a gutter that
+// marks the same lines. Line numbers from the compile log can drift past
+// the current doc (edits since the last compile) — clamped everywhere,
+// and any further edit just clears the diagnostics outright rather than
+// trying to remap stale positions.
+const setDiagnosticsEffect = StateEffect.define();
+
+const diagnosticsField = StateField.define({
+  create() {
+    return [];
+  },
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setDiagnosticsEffect)) return effect.value;
+    }
+    if (tr.docChanged) return [];
+    return value;
+  },
+});
+
+function diagnosticsForLine(state, lineNumber) {
+  const diagnostics = state.field(diagnosticsField, false) ?? [];
+  const total = state.doc.lines;
+  return diagnostics.filter((d) => Math.min(Math.max(d.line, 1), total) === lineNumber);
+}
+
+function computeDiagnosticDecorations(state) {
+  const diagnostics = state.field(diagnosticsField, false) ?? [];
+  const doc = state.doc;
+  const marks = diagnostics
+    .map((d) => {
+      const lineNum = Math.min(Math.max(d.line, 1), doc.lines);
+      const line = doc.line(lineNum);
+      if (line.to <= line.from) return null;
+      return Decoration.mark({
+        class: d.severity === 'error' ? 'cm-diagnostic-error' : 'cm-diagnostic-warning',
+        attributes: { title: d.message },
+      }).range(line.from, line.to);
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.from - b.from || a.to - b.to);
+  return Decoration.set(marks, true);
+}
+
+const diagnosticDecorationField = StateField.define({
+  create(state) {
+    return computeDiagnosticDecorations(state);
+  },
+  update(decorations, tr) {
+    const touched = tr.effects.some((e) => e.is(setDiagnosticsEffect));
+    if (touched) return computeDiagnosticDecorations(tr.state);
+    if (tr.docChanged) return Decoration.none;
+    return decorations.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+class DiagnosticGutterMarker extends GutterMarker {
+  constructor(severity, message) {
+    super();
+    this.severity = severity;
+    this.message = message;
+  }
+
+  toDOM() {
+    const span = document.createElement('span');
+    span.textContent = this.severity === 'error' ? '●' : '▲';
+    span.title = this.message;
+    span.style.color = this.severity === 'error' ? '#d64545' : '#e0a030';
+    span.style.fontSize = '10px';
+    span.style.cursor = 'default';
+    return span;
+  }
+}
+
+const diagnosticGutter = gutter({
+  class: 'cm-diagnostic-gutter',
+  lineMarker(view, line) {
+    const lineNumber = view.state.doc.lineAt(line.from).number;
+    const matches = diagnosticsForLine(view.state, lineNumber);
+    if (matches.length === 0) return null;
+    const severity = matches.some((d) => d.severity === 'error') ? 'error' : 'warning';
+    const message = matches.map((d) => d.message).join('; ');
+    return new DiagnosticGutterMarker(severity, message);
+  },
+  lineMarkerChange(update) {
+    return update.docChanged || update.transactions.some((tr) => tr.effects.some((e) => e.is(setDiagnosticsEffect)));
+  },
 });
 
 function insertAtCursor(view, text) {
@@ -158,6 +252,11 @@ const Editor = forwardRef(function Editor(
         viewRef.current.dispatch({ effects: setCommentRangesEffect.of(ranges) });
       }
     },
+    setDiagnostics: (list) => {
+      if (viewRef.current) {
+        viewRef.current.dispatch({ effects: setDiagnosticsEffect.of(list ?? []) });
+      }
+    },
   }));
 
   useEffect(() => {
@@ -216,6 +315,9 @@ const Editor = forwardRef(function Editor(
         }),
         keymap.of([...yUndoManagerKeymap, ...defaultKeymap, ...searchKeymap]),
         commentHighlightField,
+        diagnosticsField,
+        diagnosticDecorationField,
+        diagnosticGutter,
         EditorView.updateListener.of((update) => {
           if (update.selectionSet) {
             const { from, to } = update.state.selection.main;
@@ -227,6 +329,15 @@ const Editor = forwardRef(function Editor(
           '.cm-scroller': { overflow: 'auto', fontFamily: 'ui-monospace, monospace' },
           '.cm-comment-range': { backgroundColor: 'rgba(255, 205, 60, 0.35)' },
           '.cm-comment-range-resolved': { backgroundColor: 'rgba(150, 150, 150, 0.2)' },
+          '.cm-diagnostic-error': {
+            textDecoration: 'underline wavy #d64545',
+            textDecorationSkipInk: 'none',
+          },
+          '.cm-diagnostic-warning': {
+            textDecoration: 'underline wavy #e0a030',
+            textDecorationSkipInk: 'none',
+          },
+          '.cm-diagnostic-gutter': { width: '14px' },
         }),
         // Belt-and-suspenders with the websocket-layer drop of viewer
         // updates: this keeps a viewer from even trying to type locally.

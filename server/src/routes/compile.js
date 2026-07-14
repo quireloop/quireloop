@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { compileProject, cleanProject } from '../lib/latex.js';
+import { parseLatexLog } from '../lib/latexLog.js';
 import { resolveProjectPath } from '../lib/storage.js';
 import { createSnapshot } from '../lib/versions.js';
 import { requireProjectAccess } from '../lib/authMiddleware.js';
@@ -10,10 +11,11 @@ export default async function compileRoutes(app) {
     const manifest = req.manifest;
     await collab.flushProject(req.ownerId, req.params.id);
     const result = await compileProject(req.ownerId, req.params.id, manifest.mainFile, manifest.compiler);
+    const problems = parseLatexLog(result.log, manifest.mainFile);
     if (result.success) {
       await createSnapshot(req.ownerId, req.params.id, { trigger: 'compile' });
     }
-    return result;
+    return { ...result, problems };
   });
 
   app.post('/api/projects/:id/clean', { preHandler: requireProjectAccess }, async (req) => {
