@@ -80,7 +80,22 @@ once it's running.
 - **Dark mode** — toggle on the dashboard or in the editor; defaults to your
   system's light/dark setting on first visit.
 
-## Prerequisites
+## Two editions, one codebase
+
+| | **Solo Edition** | **Server Edition** |
+|---|---|---|
+| For | One researcher, on their own machine | A lab or team, on a shared server |
+| Install | Clone + `npm install` + run (below) | Docker or bare metal behind TLS — see [DEPLOYMENT.md](DEPLOYMENT.md) |
+| Accounts | Just yours (first signup = admin) | Invite-only signup, roles, admin panel |
+| Collaboration | Everything still works if you later invite someone on your LAN | Real-time editing, comments, chat, track changes over the network |
+| Where papers live | `data/` on your machine | `data/` on the server (the one thing to back up) |
+
+There is no feature switch — the Solo Edition **is** the full app running
+locally for one person. If your lab later wants in, the same install
+becomes a Server Edition by putting it on a shared machine per
+[DEPLOYMENT.md](DEPLOYMENT.md); your `data/` directory moves with it.
+
+## Prerequisites (both editions)
 
 - **Node.js 20+**
 - **A LaTeX distribution** with `latexmk` and `synctex` on your `PATH` —
@@ -99,19 +114,20 @@ once it's running.
   "Upload Project (.zip)". Both ship by default on macOS and most Linux
   distros.
 
-## Setup
+## Solo Edition — install and run
 
 ```
-git clone <this-repo-url> quireloop
+git clone https://github.com/arjunpogaku/quireloop.git
 cd quireloop
 npm install
+npm run build --workspace=web
+cd server && npm start
 ```
 
-This installs dependencies for both the `server/` and `web/` workspaces.
+Open **http://localhost:4173**, sign up (your account is the admin), and
+write. That's the whole install.
 
-## Running it
-
-**Always-on (recommended for day-to-day writing), macOS only:**
+**Always-on (recommended for day-to-day solo writing), macOS only:**
 
 The friction of "open a terminal and start the server" before you can even
 begin writing is real — this makes Quireloop behave like an installed app
@@ -135,18 +151,14 @@ On Linux, the equivalent is a `systemd --user` unit running
 `node server/src/index.js` with `WantedBy=default.target`; there's no
 installer script for that here yet.
 
-**Quick start (manual, any OS):**
+The port can be changed with the `PORT` environment variable, e.g.
+`PORT=8080 npm start`. To reach it from another device on your network,
+use `http://<this-machine's-LAN-IP>:4173` — the server binds to all
+interfaces.
 
-```
-cd web && npm run build && cd ..
-cd server && npm start
-```
-
-Then open **http://localhost:4173**. The port can be changed with the
-`PORT` environment variable, e.g. `PORT=8080 npm start`.
-
-To reach it from another device on your network, use
-`http://<this-machine's-LAN-IP>:4173` — the server binds to all interfaces.
+**Server Edition:** same code, run on a shared machine with TLS in front —
+Docker, nginx, and systemd walkthroughs are in
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
 **Development mode (auto-reload while hacking on the app itself):**
 

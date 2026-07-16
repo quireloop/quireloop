@@ -2,13 +2,30 @@ import fs from 'node:fs/promises';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireProjectAccess } from '../lib/authMiddleware.js';
 import { resolveProjectPath } from '../lib/storage.js';
+import { getSettings } from '../lib/settings.js';
 
-// The AI writing assistant is opt-in: it only exists when the server
-// operator provides an Anthropic API key. Without one, the endpoint 503s
-// and the frontend hides the panel entirely — Quireloop stays fully
-// functional (and fully offline) without it.
-const API_KEY = process.env.QUIRELOOP_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '';
-const MODEL = process.env.QUIRELOOP_ASSISTANT_MODEL || 'claude-opus-4-8';
+// The AI writing assistant is opt-in: it only exists when an Anthropic API
+// key is provided — either pasted by the admin in the Admin panel (stored
+// in data/settings.json) or via environment variable. Without one, the
+// endpoint 503s and the frontend hides the panel entirely — Quireloop
+// stays fully functional (and fully offline) without it.
+//
+// Resolved per-request, not at boot, so a key saved in the Admin panel
+// takes effect immediately with no restart. Env var wins over the stored
+// setting so ops-managed deployments stay deterministic.
+export const DEFAULT_ASSISTANT_MODEL = 'claude-opus-4-8';
+
+async function assistantConfig() {
+  const settings = await getSettings();
+  return {
+    apiKey:
+      process.env.QUIRELOOP_ANTHROPIC_API_KEY ||
+      process.env.ANTHROPIC_API_KEY ||
+      settings.anthropicApiKey ||
+      '',
+    model: process.env.QUIRELOOP_ASSISTANT_MODEL || settings.assistantModel || DEFAULT_ASSISTANT_MODEL,
+  };
+}
 
 // Deliberate cost cap for a chat panel — long enough for a rewritten
 // section or a full derivation, short enough that one runaway question
@@ -28,9 +45,6 @@ Rules:
 - Never fabricate citations. If asked for references you cannot verify, say so and give a placeholder \\cite key the user must fill in.
 - You see the file as it is on disk right now; collaborators may be editing live.`;
 
-function buildClient() {
-  return new Anthropic({ apiKey: API_KEY });
-}
 
 async function readFileContext(ownerId, projectId, filePath) {
   if (!filePath) return null;
@@ -48,14 +62,16 @@ async function readFileContext(ownerId, projectId, filePath) {
 export default async function assistantRoutes(app) {
   // Lets the frontend decide whether to render the Assistant button at all.
   app.get('/api/assistant/config', async () => {
-    return { enabled: Boolean(API_KEY), model: API_KEY ? MODEL : null };
+    const { apiKey, model } = await assistantConfig();
+    return { enabled: Boolean(apiKey), model: apiKey ? model : null };
   });
 
   // Viewers can use the assistant too — asking questions about a paper
   // doesn't touch the document (inserting the answer does, and the editor
   // is read-only for them anyway).
   app.post('/api/projects/:id/assistant', { preHandler: requireProjectAccess }, async (req, reply) => {
-    if (!API_KEY) {
+    const { apiKey, model } = await assistantConfig();
+    if (!apiKey) {
       return reply.code(503).send({ error: 'assistant not configured on this server' });
     }
 
@@ -101,10 +117,10 @@ export default async function assistantRoutes(app) {
       reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
-    const client = buildClient();
+    const client = new Anthropic({ apiKey });
     try {
       const stream = client.messages.stream({
-        model: MODEL,
+        model,
         max_tokens: MAX_TOKENS,
         system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
         messages: apiMessages,

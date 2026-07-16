@@ -197,8 +197,118 @@ function InvitesSection() {
   );
 }
 
+function AssistantSection() {
+  const [settings, setSettings] = useState(null);
+  const [key, setKey] = useState('');
+  const [model, setModel] = useState('');
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    try {
+      const s = await adminApi.getSettings();
+      setSettings(s);
+      setModel(s.assistantModel || '');
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  async function save(patch) {
+    setError('');
+    setStatus('');
+    setBusy(true);
+    try {
+      await adminApi.saveSettings(patch);
+      setKey('');
+      setStatus('Saved — takes effect immediately, no restart needed.');
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!settings) return <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{error || 'Loading…'}</p>;
+
+  return (
+    <div style={{ display: 'grid', gap: 10, fontSize: 13 }}>
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+        The ✨ Assistant panel is powered by the Anthropic API. Paste an API key from{' '}
+        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
+          console.anthropic.com
+        </a>{' '}
+        to enable it for everyone on this server. Usage is billed to this key. Claude Pro/Max subscriptions
+        don&apos;t include API access — an API key is a separate pay-as-you-go account.
+      </p>
+      {settings.keyFromEnv ? (
+        <p style={{ margin: 0, fontSize: 12 }}>
+          ✅ Key is set via environment variable — that takes precedence, so this field is disabled.
+        </p>
+      ) : settings.anthropicApiKey ? (
+        <p style={{ margin: 0, fontSize: 12 }}>
+          ✅ Assistant enabled with key <code>{settings.anthropicApiKey}</code>{' '}
+          <button
+            style={{ fontSize: 11, marginLeft: 6, color: 'crimson' }}
+            disabled={busy}
+            onClick={() => save({ anthropicApiKey: '' })}
+          >
+            Remove key
+          </button>
+        </p>
+      ) : (
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Assistant is currently disabled — no key set.</p>
+      )}
+      {!settings.keyFromEnv && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (key.trim()) save({ anthropicApiKey: key.trim() });
+          }}
+          style={{ display: 'flex', gap: 6 }}
+        >
+          <input
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="sk-ant-…"
+            style={{ flex: 1, padding: 6, fontSize: 12 }}
+          />
+          <button type="submit" disabled={busy || !key.trim()} style={{ fontSize: 12 }}>
+            Save key
+          </button>
+        </form>
+      )}
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        Model
+        <select
+          value={model}
+          disabled={busy}
+          onChange={(e) => {
+            setModel(e.target.value);
+            save({ assistantModel: e.target.value });
+          }}
+          style={{ fontSize: 12 }}
+        >
+          <option value="claude-opus-4-8">Claude Opus 4.8 (best, default)</option>
+          <option value="claude-sonnet-5">Claude Sonnet 5 (cheaper)</option>
+          <option value="claude-haiku-4-5">Claude Haiku 4.5 (cheapest)</option>
+        </select>
+      </label>
+      {status && <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>{status}</p>}
+      {error && <p style={{ margin: 0, fontSize: 12, color: 'crimson' }}>{error}</p>}
+    </div>
+  );
+}
+
 export default function AdminPanel({ user, onClose }) {
-  const [tab, setTab] = useState('users'); // 'users' | 'invites'
+  const [tab, setTab] = useState('users'); // 'users' | 'invites' | 'assistant'
 
   return (
     <div
@@ -246,8 +356,16 @@ export default function AdminPanel({ user, onClose }) {
           >
             Invites
           </button>
+          <button
+            onClick={() => setTab('assistant')}
+            style={{ flex: 1, background: tab === 'assistant' ? 'var(--accent-bg)' : undefined }}
+          >
+            ✨ Assistant
+          </button>
         </div>
-        {tab === 'users' ? <UsersSection currentUserId={user?.id} /> : <InvitesSection />}
+        {tab === 'users' && <UsersSection currentUserId={user?.id} />}
+        {tab === 'invites' && <InvitesSection />}
+        {tab === 'assistant' && <AssistantSection />}
       </div>
     </div>
   );

@@ -358,10 +358,20 @@ both.
 
 ## The AI writing assistant
 
-If your server admin has configured an Anthropic API key (see
-[DEPLOYMENT.md](DEPLOYMENT.md), `QUIRELOOP_ANTHROPIC_API_KEY`), a
-**✨ Assistant** button appears in the editor toolbar. It opens a Claude-powered
-side panel that helps you write the paper you have open:
+Enable it from inside the app: **Admin panel → ✨ Assistant tab**, paste an
+Anthropic API key (from [console.anthropic.com](https://console.anthropic.com/settings/keys)),
+pick a model — it takes effect immediately, no restart, no terminal.
+(Ops-managed servers can set `QUIRELOOP_ANTHROPIC_API_KEY` in the
+environment instead; the env var wins. See [DEPLOYMENT.md](DEPLOYMENT.md).)
+
+> **API key, not a Claude subscription.** Claude Pro/Max plans cover
+> claude.ai and Claude Code but do not include API access — the assistant
+> needs a pay-as-you-go API key from the Anthropic console. Typical
+> paper-writing questions cost fractions of a cent to a few cents each.
+
+Once a key is set, a **✨ Assistant** button appears in the editor toolbar.
+It opens a Claude-powered side panel that helps you write the paper you
+have open:
 
 - **It sees your open file** — ask "why doesn't this compile?", "tighten my
   abstract", "turn this list into a table", or "rewrite this paragraph in a

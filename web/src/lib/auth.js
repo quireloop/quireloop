@@ -58,4 +58,6 @@ export const adminApi = {
   listInvites: () => adminRequest('/invites'),
   createInvite: () => adminPost('/invites'),
   revokeInvite: (code) => adminRequest(`/invites/${code}`, { method: 'DELETE' }),
+  getSettings: () => adminRequest('/settings'),
+  saveSettings: (patch) => adminPost('/settings', patch),
 };
