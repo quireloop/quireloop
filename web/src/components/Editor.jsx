@@ -373,6 +373,12 @@ const Editor = forwardRef(function Editor(
     insertAtCursor: (text) => {
       if (viewRef.current) insertAtCursor(viewRef.current, text);
     },
+    getSelectedText: () => {
+      const view = viewRef.current;
+      if (!view) return '';
+      const { from, to } = view.state.selection.main;
+      return from === to ? '' : view.state.doc.sliceString(from, to);
+    },
     getCursorLine: () => {
       if (!viewRef.current) return 1;
       const state = viewRef.current.state;

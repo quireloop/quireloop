@@ -14,6 +14,7 @@ import ShareModal from '../components/ShareModal.jsx';
 import CommentsPanel from '../components/CommentsPanel.jsx';
 import SuggestionsPanel from '../components/SuggestionsPanel.jsx';
 import ChatPanel from '../components/ChatPanel.jsx';
+import AssistantPanel from '../components/AssistantPanel.jsx';
 import Logo from '../components/Logo.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
 import { useDarkMode, useSidebarOpen } from '../lib/theme.js';
@@ -105,6 +106,17 @@ export default function ProjectView({ projectId, onBack, user }) {
   // Chat — unread count is derived from a per-project "last seen message
   // id" kept in localStorage so it survives a page reload.
   const [showChat, setShowChat] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
+  const [assistantEnabled, setAssistantEnabled] = useState(false);
+
+  // The AI assistant only exists when the server has an Anthropic API key —
+  // hide the button entirely on servers that haven't opted in.
+  useEffect(() => {
+    fetch('/api/assistant/config')
+      .then((r) => (r.ok ? r.json() : { enabled: false }))
+      .then((cfg) => setAssistantEnabled(Boolean(cfg.enabled)))
+      .catch(() => {});
+  }, []);
   const [chatMessages, setChatMessages] = useState([]);
   const [unreadChat, setUnreadChat] = useState(0);
   const lastSeenChatIdRef = useRef(localStorage.getItem(`quireloop:chat-seen:${projectId}`) || null);
@@ -748,6 +760,15 @@ export default function ProjectView({ projectId, onBack, user }) {
               </span>
             )}
           </button>
+          {assistantEnabled && (
+            <button
+              onClick={() => setShowAssistant((v) => !v)}
+              title="AI writing assistant — ask about your paper, fix LaTeX, draft passages"
+              style={{ fontSize: 13, background: showAssistant ? 'var(--accent-bg)' : undefined }}
+            >
+              ✨ Assistant
+            </button>
+          )}
           {manifest && (
             <button onClick={() => setShowShare((v) => !v)} style={{ fontSize: 13 }}>
               Share
@@ -961,6 +982,15 @@ export default function ProjectView({ projectId, onBack, user }) {
             currentUserId={user?.id}
             onSend={handleSendChat}
             onClose={() => setShowChat(false)}
+          />
+        )}
+        {showAssistant && (
+          <AssistantPanel
+            projectId={projectId}
+            activePath={activePath}
+            editorRef={editorRef}
+            readOnly={isViewer}
+            onClose={() => setShowAssistant(false)}
           />
         )}
       </div>

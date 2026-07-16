@@ -1,11 +1,13 @@
-// Most git hosts that use token auth over HTTPS (GitHub, GitLab, and
-// the hosted editor's git bridge) accept the token as the URL's username with an
-// empty password — no separate "password" concept to ask the user for.
+// Token auth over HTTPS, in the one form every major host accepts:
+// username "git", token as the password. GitHub and GitLab take a PAT as
+// the password with any username, and the hosted editor's git bridge specifically
+// documents "git" + token. (Token-as-username with an empty password —
+// the previous form here — works on GitHub but NOT on the hosted editor.)
 export function withToken(gitUrl, token) {
   const url = new URL(gitUrl);
   if (token) {
-    url.username = token;
-    url.password = '';
+    url.username = 'git';
+    url.password = token;
   }
   return url.toString();
 }

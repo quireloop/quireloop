@@ -20,10 +20,12 @@ and come back here.
 11. [Comments](#comments)
 12. [Project chat](#project-chat)
 13. [Track changes (suggest mode)](#track-changes-suggest-mode)
-14. [Version history](#version-history)
-15. [Git integration](#git-integration)
-16. [Where your data lives, and backups](#where-your-data-lives-and-backups)
-17. [Troubleshooting](#troubleshooting)
+14. [The AI writing assistant](#the-ai-writing-assistant)
+15. [Version history](#version-history)
+16. [Git integration](#git-integration)
+17. [Syncing with an the hosted editor project](#syncing-with-an-hosted-editor-project)
+18. [Where your data lives, and backups](#where-your-data-lives-and-backups)
+19. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -354,6 +356,40 @@ both.
 
 ---
 
+## The AI writing assistant
+
+If your server admin has configured an Anthropic API key (see
+[DEPLOYMENT.md](DEPLOYMENT.md), `QUIRELOOP_ANTHROPIC_API_KEY`), a
+**✨ Assistant** button appears in the editor toolbar. It opens a Claude-powered
+side panel that helps you write the paper you have open:
+
+- **It sees your open file** — ask "why doesn't this compile?", "tighten my
+  abstract", "turn this list into a table", or "rewrite this paragraph in a
+  more formal register" without pasting anything.
+- **Select text first** to ask about a specific passage — the selection is
+  sent along with your question.
+- **Code blocks are one-click**: any LaTeX the assistant produces appears in
+  a code block with **Copy** and **Insert** buttons; Insert drops it at your
+  cursor (and plays nicely with track changes — insert while Suggest mode is
+  on and it becomes a reviewable suggestion).
+- **Stop** cancels a response mid-stream; **Clear** starts a fresh
+  conversation. Conversations are per-panel-session and are not stored on
+  the server.
+
+Everyone with access to the project can use it, including viewers (they just
+don't get the Insert button). The assistant reads the file as saved on disk —
+in a live collaboration it may lag your unsynced keystrokes by a second or
+two.
+
+> **Costs**: assistant usage is billed to the server's API key. Be
+> reasonable; your admin can see the aggregate usage in the Anthropic
+> console.
+
+> **It never edits on its own.** The assistant only produces text in the
+> panel — nothing touches your document until you click Insert.
+
+---
+
 ## Version history
 
 The **History** button opens the version panel.
@@ -398,6 +434,35 @@ a clean LaTeX repository containing only your paper.
 > insists on working locally can clone the repo). For everyday
 > collaboration, the real-time editor is the primary path — you never need
 > to pull before editing.
+
+---
+
+## Syncing with an the hosted editor project
+
+You can keep a Quireloop project and an the hosted editor project pointing at the
+same paper, using the hosted editor's official **git bridge** (available on paid
+the hosted editor plans, and on the hosted editor Server Pro):
+
+1. In the hosted editor: **Account Settings → Git integration** — generate a git
+   authentication token. Note your project's git URL:
+   `https://git.hosted-editor.com/<project id>` (the id is in the project's URL).
+2. In Quireloop: open the project's **Source Control** tab → **Set remote**,
+   paste the the hosted editor git URL and the token.
+3. **Pull** brings down the collaborators' the hosted editor edits; **Commit** +
+   **Push** sends your Quireloop edits to the hosted editor, where they appear in the
+   project (and in its history) like any other change.
+
+This is *synchronized*, not live: the hosted editor does not offer a public realtime
+API, so their keystrokes appear when you Pull and yours when you Push —
+the same model as the hosted editor's own GitHub sync or the VS Code extension
+workflows. Pull before a work session, push after, and don't edit the same
+paragraph simultaneously on both sides (git will flag it as a conflict to
+resolve rather than merging character-by-character).
+
+The natural workflow: use the hosted editor as the interchange point with co-authors
+who live there, and Quireloop for everything else — your lab collaborates
+in real time inside Quireloop, and the paper syncs to/from the hosted editor at
+whatever cadence you push and pull.
 
 ---
 

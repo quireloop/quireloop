@@ -20,6 +20,7 @@ import collabRoutes from './routes/collab.js';
 import commentsRoutes from './routes/comments.js';
 import suggestionsRoutes from './routes/suggestions.js';
 import chatRoutes from './routes/chat.js';
+import assistantRoutes from './routes/assistant.js';
 import registerMultipart from './plugins/multipart.js';
 
 const app = Fastify({ logger: true });
@@ -59,6 +60,7 @@ await app.register(collabRoutes);
 await app.register(commentsRoutes);
 await app.register(suggestionsRoutes);
 await app.register(chatRoutes);
+await app.register(assistantRoutes);
 
 if (fs.existsSync(PUBLIC_DIR)) {
   await app.register(fastifyStatic, { root: PUBLIC_DIR });
