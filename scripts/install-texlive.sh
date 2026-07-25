@@ -9,6 +9,11 @@
 # families) and texlive-lang-* (non-Latin language packs) to keep the
 # install lean — add them yourself below if your lab needs either, or run
 # `sudo apt-get install texlive-full` instead for "everything".
+#
+# Even this is not a complete match for the hosted editor's near-full CTAN install
+# — if a specific template still hits a missing .sty, find the Debian
+# package that provides it (https://ctan.org/pkg/<name>, or
+# `apt-cache search <name>`) and add it to the list below.
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ] && ! command -v sudo >/dev/null 2>&1; then
@@ -22,8 +27,9 @@ SUDO=""
 if ! command -v apt-get >/dev/null 2>&1; then
   echo "error: apt-get not found — this script is for Debian/Ubuntu." >&2
   echo "On other distros, install the equivalent of: texlive-latex-base," >&2
-  echo "texlive-latex-recommended, texlive-latex-extra, texlive-fonts-recommended," >&2
-  echo "texlive-xetex, texlive-luatex, texlive-bibtex-extra, biber, latexmk, git, unzip." >&2
+  echo "texlive-latex-recommended, texlive-latex-extra, texlive-science," >&2
+  echo "texlive-publishers, texlive-fonts-recommended, texlive-xetex," >&2
+  echo "texlive-luatex, texlive-bibtex-extra, biber, latexmk, git, unzip." >&2
   exit 1
 fi
 
@@ -33,6 +39,8 @@ $SUDO apt-get install -y --no-install-recommends \
   texlive-latex-base \
   texlive-latex-recommended \
   texlive-latex-extra \
+  texlive-science \
+  texlive-publishers \
   texlive-fonts-recommended \
   texlive-xetex \
   texlive-luatex \

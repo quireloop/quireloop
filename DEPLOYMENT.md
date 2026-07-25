@@ -92,9 +92,14 @@ TeX Live package set the Docker image also uses — enough for
 pdflatex/xelatex/lualatex + modern biblatex/biber, without the ~6-7GB of
 `texlive-full`. It's Debian/Ubuntu-only (`apt-get`); on another distro,
 install the equivalent of `texlive-latex-base`, `texlive-latex-recommended`,
-`texlive-latex-extra`, `texlive-fonts-recommended`, `texlive-xetex`,
-`texlive-luatex`, `texlive-bibtex-extra`, `biber`, `latexmk`, `git`,
-`unzip` yourself, or just run `texlive-full` if disk space isn't a
+`texlive-latex-extra`, `texlive-science`, `texlive-publishers`,
+`texlive-fonts-recommended`, `texlive-xetex`, `texlive-luatex`,
+`texlive-bibtex-extra`, `biber`, `latexmk`, `git`, `unzip` yourself
+(`texlive-science` covers `algorithm.sty`/`algorithmic.sty`,
+`texlive-publishers` covers IEEEtran and other conference/journal
+classes — templates needing something more obscure than that will still
+need a manually-added package, see the note below), or just run
+`texlive-full` if disk space isn't a
 concern.
 
 **Run it** directly to sanity-check before wiring up systemd:

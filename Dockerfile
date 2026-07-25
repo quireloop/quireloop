@@ -61,13 +61,20 @@ RUN npm prune --omit=dev
 #
 #   The set below — latex-recommended (pdflatex + core packages),
 #   latex-extra (the long tail of commonly-used packages: algorithm2e,
-#   todonotes, etc.), fonts-recommended, xetex, luatex, bibtex-extra +
-#   biber — covers latexmk with all three engines and modern
-#   bibliography (biblatex/biber, not just legacy bibtex) at roughly
-#   2-2.5GB. It deliberately excludes texlive-fonts-extra (~1.5GB of
+#   todonotes, etc.), science (algorithm.sty/algorithmic.sty — a
+#   *different* package from algorithm2e, commonly pulled in by
+#   \usepackage{algorithm}), publishers (IEEEtran and other conference/
+#   journal document classes), fonts-recommended, xetex, luatex,
+#   bibtex-extra + biber — covers latexmk with all three engines and
+#   modern bibliography (biblatex/biber, not just legacy bibtex) at
+#   roughly 3GB. It deliberately excludes texlive-fonts-extra (~1.5GB of
 #   additional font families) and texlive-lang-* (non-Latin language
 #   support) to keep the image reasonable; if your lab needs either,
 #   add the relevant package(s) to the apt-get line below and rebuild.
+#   Even so, no curated subset matches the hosted editor's near-complete CTAN
+#   install — if a specific template still hits a missing .sty, add the
+#   Debian package that provides it (https://ctan.org/pkg/<name> lists
+#   it, or `apt-cache search <name>`) and rebuild.
 FROM debian:bookworm-slim AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -96,6 +103,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-base \
     texlive-latex-recommended \
     texlive-latex-extra \
+    texlive-science \
+    texlive-publishers \
     texlive-fonts-recommended \
     texlive-xetex \
     texlive-luatex \

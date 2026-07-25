@@ -1,4 +1,5 @@
 import { execa } from 'execa';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { projectDir } from './storage.js';
 
@@ -15,6 +16,13 @@ export async function compileProject(ownerId, projectId, mainFile, compiler = 'p
   const cwd = projectDir(ownerId, projectId);
   const outdir = 'build';
   const engineFlag = ENGINE_FLAGS[compiler] ?? ENGINE_FLAGS.pdflatex;
+  const pdfName = mainFile.replace(/\.tex$/, '.pdf');
+  const pdfPath = path.join(outdir, pdfName);
+
+  // Otherwise a totally broken compile (source now fails outright) would
+  // leave a stale PDF from the last *successful* run sitting in build/,
+  // and the disk-existence check below would wrongly call that success.
+  await fs.rm(path.join(cwd, pdfPath), { force: true });
 
   try {
     const result = await execa(
@@ -23,12 +31,17 @@ export async function compileProject(ownerId, projectId, mainFile, compiler = 'p
       // recompiling (and skips emitting fresh error text) whenever it thinks
       // sources are unchanged since the last run, even if that run failed.
       // -synctex=1 produces a .synctex.gz for PDF<->source jumping.
+      // No -halt-on-error: that stops at the very first error (an
+      // "Emergency stop", zero output) instead of pushing through like
+      // the hosted editor does. -interaction=nonstopmode alone already prevents
+      // hanging on a prompt; LaTeX will skip a missing package/command and
+      // keep going, usually still reaching \end{document} with a real PDF
+      // even when the log has errors in it.
       [
         engineFlag,
         '-g',
         '-synctex=1',
         '-interaction=nonstopmode',
-        '-halt-on-error',
         '-file-line-error',
         `-outdir=${outdir}`,
         mainFile,
@@ -37,13 +50,20 @@ export async function compileProject(ownerId, projectId, mainFile, compiler = 'p
     );
 
     const log = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
-    const success = result.exitCode === 0;
-    const pdfName = mainFile.replace(/\.tex$/, '.pdf');
+    // latexmk/pdflatex exit non-zero whenever the log has any error in it,
+    // even if a PDF was still produced (the hosted editor shows that PDF with the
+    // errors listed alongside it, rather than nothing) — so success is
+    // "did a PDF actually come out of this", checked on disk, not the exit
+    // code alone.
+    const pdfExists = await fs
+      .access(path.join(cwd, pdfPath))
+      .then(() => true)
+      .catch(() => false);
 
     return {
-      success,
+      success: pdfExists,
       log,
-      pdfPath: success ? path.join(outdir, pdfName) : null,
+      pdfPath: pdfExists ? pdfPath : null,
     };
   } catch (err) {
     // execa with reject:false shouldn't throw for process errors, but guard
