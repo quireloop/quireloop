@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolveProjectPath } from '../lib/storage.js';
-import { upsertFileEntry, removeFileEntry, renameFileEntry } from '../lib/manifest.js';
+import { upsertFileEntry, removeFileEntry, renameFileEntry, syncFilesFromDisk } from '../lib/manifest.js';
 import { requireProjectAccess, requireProjectWrite } from '../lib/authMiddleware.js';
 
 export default async function filesRoutes(app) {
@@ -36,6 +36,26 @@ export default async function filesRoutes(app) {
       await fs.rm(filePath, { force: true });
       await removeFileEntry(req.ownerId, req.params.id, relPath);
       return reply.code(204).send();
+    } catch (err) {
+      return reply.code(400).send({ error: err.message });
+    }
+  });
+
+  // Deletes any mix of files and folders in one request — folders recurse.
+  // Reuses syncFilesFromDisk (same function the git-pull route relies on)
+  // to rebuild the manifest in one pass instead of hand-tracking prefix
+  // matches for folder entries.
+  app.post('/api/projects/:id/files/delete-many', { preHandler: requireProjectWrite }, async (req, reply) => {
+    const { paths } = req.body ?? {};
+    if (!Array.isArray(paths) || paths.length === 0) {
+      return reply.code(400).send({ error: 'paths required' });
+    }
+    try {
+      for (const relPath of paths) {
+        const filePath = resolveProjectPath(req.ownerId, req.params.id, relPath);
+        await fs.rm(filePath, { recursive: true, force: true });
+      }
+      return await syncFilesFromDisk(req.ownerId, req.params.id);
     } catch (err) {
       return reply.code(400).send({ error: err.message });
     }

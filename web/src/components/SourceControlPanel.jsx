@@ -29,7 +29,7 @@ function StatusBadge({ status }) {
   );
 }
 
-export default function SourceControlPanel({ projectId, beforeAction, readOnly }) {
+export default function SourceControlPanel({ projectId, beforeAction, onPulled, readOnly }) {
   const [status, setStatus] = useState(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -87,6 +87,7 @@ export default function SourceControlPanel({ projectId, beforeAction, readOnly }
     runAction(async () => {
       await api.gitPull(projectId);
       setNotice('Pulled.');
+      await onPulled?.();
     });
   }
 

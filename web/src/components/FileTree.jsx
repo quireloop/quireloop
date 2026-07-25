@@ -1,16 +1,14 @@
 import { useRef, useState } from 'react';
 import { buildTree } from '../lib/fileTree.js';
 
-function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, readOnly, ...handlers }) {
+function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, readOnly, selected, onToggleSelect, ...handlers }) {
   const isCollapsed = collapsed.has(node.path);
   return (
     <div>
       <div
-        onClick={() => onToggle(node.path)}
         style={{
           padding: '6px 8px',
           paddingLeft: 8 + depth * 14,
-          cursor: 'pointer',
           fontSize: 13,
           fontWeight: 600,
           display: 'flex',
@@ -18,7 +16,18 @@ function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, readO
           gap: 4,
         }}
       >
-        <span>{isCollapsed ? '▶' : '▼'}</span> {node.name}/
+        {!readOnly && (
+          <input
+            type="checkbox"
+            checked={selected.has(node.path)}
+            onChange={() => onToggleSelect(node.path)}
+            onClick={(e) => e.stopPropagation()}
+            style={{ margin: 0 }}
+          />
+        )}
+        <span onClick={() => onToggle(node.path)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+          <span>{isCollapsed ? '▶' : '▼'}</span> {node.name}/
+        </span>
       </div>
       {!isCollapsed &&
         node.children.map((child) =>
@@ -32,6 +41,8 @@ function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, readO
               onToggle={onToggle}
               depth={depth + 1}
               readOnly={readOnly}
+              selected={selected}
+              onToggleSelect={onToggleSelect}
               {...handlers}
             />
           ) : (
@@ -42,6 +53,8 @@ function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, readO
               dirty={dirty}
               depth={depth + 1}
               readOnly={readOnly}
+              selected={selected}
+              onToggleSelect={onToggleSelect}
               {...handlers}
             />
           )
@@ -50,7 +63,7 @@ function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, readO
   );
 }
 
-function FileRow({ file, activePath, dirty, depth, readOnly, onSelect, onRename, onDelete }) {
+function FileRow({ file, activePath, dirty, depth, readOnly, selected, onToggleSelect, onSelect, onRename, onDelete }) {
   function handleRename(e) {
     e.stopPropagation();
     const name = prompt('Rename to:', file.path);
@@ -72,11 +85,20 @@ function FileRow({ file, activePath, dirty, depth, readOnly, onSelect, onRename,
         padding: '6px 8px',
         paddingLeft: 8 + depth * 14,
         cursor: 'pointer',
-        borderRadius: 4,
+        borderRadius: 'var(--radius-sm)',
         background: file.path === activePath ? 'var(--accent-bg)' : 'transparent',
         fontSize: 13,
       }}
     >
+      {!readOnly && (
+        <input
+          type="checkbox"
+          checked={selected.has(file.path)}
+          onChange={() => onToggleSelect(file.path)}
+          onClick={(e) => e.stopPropagation()}
+          style={{ margin: 0 }}
+        />
+      )}
       <span style={{ flex: 1, wordBreak: 'break-all' }}>
         {file.name}
         {file.path === activePath && dirty && <span title="Unsaved changes"> •</span>}
@@ -106,15 +128,26 @@ export default function FileTree({
   onCreateFolder,
   onRename,
   onDelete,
+  onDeleteMany,
 }) {
   const fileInputRef = useRef(null);
   const [collapsed, setCollapsed] = useState(new Set());
   const [dragOver, setDragOver] = useState(false);
+  const [selected, setSelected] = useState(new Set());
 
   const tree = buildTree(files);
 
   function toggleFolder(path) {
     setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
+  function toggleSelect(path) {
+    setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);
@@ -146,6 +179,14 @@ export default function FileTree({
     for (const file of dropped) await onUpload(file);
   }
 
+  async function handleDeleteSelected() {
+    const paths = [...selected];
+    if (paths.length === 0) return;
+    if (!confirm(`Delete ${paths.length} item${paths.length > 1 ? 's' : ''}?`)) return;
+    await onDeleteMany(paths);
+    setSelected(new Set());
+  }
+
   return (
     <div
       onDragOver={(e) => {
@@ -162,30 +203,44 @@ export default function FileTree({
         background: dragOver ? 'var(--accent-bg)' : 'transparent',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 8px', gap: 4 }}>
-        <h4 style={{ margin: 0 }}>Files</h4>
-        {!readOnly && (
+      {selected.size > 0 && !readOnly ? (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 8px', gap: 4 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{selected.size} selected</span>
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={handleCreate} style={{ fontSize: 12, padding: '2px 8px' }}>
-              + New
+            <button onClick={handleDeleteSelected} style={{ fontSize: 12, padding: '2px 8px', color: 'crimson' }}>
+              Delete
             </button>
-            <button onClick={handleCreateFolder} style={{ fontSize: 12, padding: '2px 8px' }}>
-              + Folder
-            </button>
-            <button onClick={() => fileInputRef.current.click()} style={{ fontSize: 12, padding: '2px 8px' }}>
-              Upload
+            <button onClick={() => setSelected(new Set())} style={{ fontSize: 12, padding: '2px 8px' }}>
+              Cancel
             </button>
           </div>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          onChange={handleFileChosen}
-          style={{ display: 'none' }}
-          accept=".png,.jpg,.jpeg,.pdf,.bib"
-        />
-      </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 8px', gap: 4 }}>
+          <h4 style={{ margin: 0 }}>Files</h4>
+          {!readOnly && (
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button onClick={handleCreate} style={{ fontSize: 12, padding: '2px 8px' }}>
+                + New
+              </button>
+              <button onClick={handleCreateFolder} style={{ fontSize: 12, padding: '2px 8px' }}>
+                + Folder
+              </button>
+              <button onClick={() => fileInputRef.current.click()} style={{ fontSize: 12, padding: '2px 8px' }}>
+                Upload
+              </button>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileChosen}
+            style={{ display: 'none' }}
+            accept=".png,.jpg,.jpeg,.pdf,.bib"
+          />
+        </div>
+      )}
       {tree.map((node) =>
         node.type === 'folder' ? (
           <FolderNode
@@ -197,6 +252,8 @@ export default function FileTree({
             onToggle={toggleFolder}
             depth={0}
             readOnly={readOnly}
+            selected={selected}
+            onToggleSelect={toggleSelect}
             onSelect={onSelect}
             onRename={onRename}
             onDelete={onDelete}
@@ -209,6 +266,8 @@ export default function FileTree({
             dirty={dirty}
             depth={0}
             readOnly={readOnly}
+            selected={selected}
+            onToggleSelect={toggleSelect}
             onSelect={onSelect}
             onRename={onRename}
             onDelete={onDelete}

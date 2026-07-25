@@ -89,6 +89,12 @@ export const api = {
       body: content,
     }),
   deleteFile: (id, path) => request(`/projects/${id}/files/${path}`, { method: 'DELETE' }),
+  deleteFiles: (id, paths) =>
+    request(`/projects/${id}/files/delete-many`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ paths }),
+    }),
   createFolder: (id, path) =>
     request(`/projects/${id}/folders`, {
       method: 'POST',

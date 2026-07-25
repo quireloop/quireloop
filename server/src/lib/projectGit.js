@@ -53,6 +53,33 @@ async function hasGitRepo(dir) {
   }
 }
 
+// the hosted editor's git bridge only ever recognizes a `master` ref — but a plain
+// `git init` picks up whatever branch name the host's git defaults to
+// (`main` on any git 2.28+ with the now-common default), so pushes/pulls
+// against the hosted editor were silently talking to the wrong ref. Runs on every
+// ensureGitRepo call (cheap no-op once already on master) so it also
+// self-heals projects that were already created before this fix, without
+// needing a manual migration step.
+async function normalizeBranch(dir) {
+  // Not currentBranch()/`rev-parse --abbrev-ref HEAD` — that fails on an
+  // unborn branch (fresh `git init`, no commit yet), which is exactly the
+  // case a brand-new project hits here. `symbolic-ref` just reads the ref
+  // file, so it works whether or not HEAD has ever pointed at a commit.
+  const branch = await git(dir, ['symbolic-ref', '--short', 'HEAD'])
+    .then((r) => r.stdout.trim())
+    .catch(() => '');
+  if (!branch || branch === 'master') return;
+  const hasCommit = await git(dir, ['rev-parse', '--verify', 'HEAD'])
+    .then(() => true)
+    .catch(() => false);
+  if (hasCommit) {
+    await git(dir, ['branch', '-m', branch, 'master']).catch(() => {});
+  } else {
+    // Fresh `git init`, no commits yet (unborn branch) — just repoint HEAD.
+    await git(dir, ['symbolic-ref', 'HEAD', 'refs/heads/master']);
+  }
+}
+
 // Idempotent: turns a project folder into a git repo if it isn't one yet,
 // and makes sure our own bookkeeping files are ignored. Safe to call before
 // every git operation — a no-op if already set up.
@@ -77,6 +104,8 @@ export async function ensureGitRepo(ownerId, projectId) {
   } catch {
     await fs.writeFile(ignorePath, GITIGNORE_CONTENT);
   }
+
+  await normalizeBranch(dir);
 
   if (!isNewRepo) return;
 
@@ -184,6 +213,9 @@ function friendlyGitError(err) {
   const stderr = err.stderr ?? '';
   if (/authentication|403/i.test(stderr)) return 'authentication failed — check the remote token and try again';
   if (/rejected|non-fast-forward/i.test(stderr)) return 'rejected — pull first to bring in remote changes';
+  if (/conflict/i.test(stderr)) {
+    return 'pull created a merge conflict — open the hosted editor and this project side by side and resolve it there, or in the .tex file directly, then commit and push again';
+  }
   if (err.timedOut) return 'timed out — check the remote URL and your connection';
   return stderr.split('\n').find(Boolean) || 'git command failed';
 }
@@ -213,7 +245,16 @@ export async function pullProject(ownerId, projectId) {
   const branch = await currentBranch(dir);
   const authedUrl = withToken(creds.url, creds.token);
   try {
-    await git(dir, ['pull', '--no-rebase', authedUrl, branch], { timeout: PUSH_PULL_TIMEOUT_MS });
+    // --allow-unrelated-histories: a project connected to an existing
+    // the hosted editor project after already having local commits (the normal
+    // case — Quireloop auto-commits a new project's template files the
+    // first time git touches it) has no shared ancestry with the the hosted editor
+    // side, so a plain `git pull` refuses to merge at all. Safe to pass
+    // unconditionally — it's a no-op when the histories *do* share an
+    // ancestor (e.g. after "Import from the hosted editor", a real `git clone`).
+    await git(dir, ['pull', '--no-rebase', '--allow-unrelated-histories', authedUrl, branch], {
+      timeout: PUSH_PULL_TIMEOUT_MS,
+    });
   } catch (err) {
     throw new Error(friendlyGitError(err));
   }

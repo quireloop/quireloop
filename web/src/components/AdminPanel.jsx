@@ -362,6 +362,7 @@ export default function AdminPanel({ user, onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="pop-in"
         style={{
           width: 480,
           maxWidth: '90vw',
@@ -370,7 +371,7 @@ export default function AdminPanel({ user, onClose }) {
           padding: 20,
           background: 'var(--panel-bg)',
           border: '1px solid var(--border)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius)',
           boxShadow: '0 12px 40px rgba(0,0,0,0.3)',
         }}
       >

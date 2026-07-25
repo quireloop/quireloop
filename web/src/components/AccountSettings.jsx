@@ -253,6 +253,7 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
 
   return (
     <div
+      className="pop-in"
       style={{
         position: 'absolute',
         top: 40,
@@ -263,7 +264,7 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
         padding: 16,
         background: 'var(--panel-bg)',
         border: '1px solid var(--border)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius)',
         boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
         zIndex: 10,
       }}

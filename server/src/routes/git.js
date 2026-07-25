@@ -45,6 +45,10 @@ export default async function gitRoutes(app) {
     try {
       const result = await pullProject(req.ownerId, req.params.id);
       await syncFilesFromDisk(req.ownerId, req.params.id);
+      // A pull overwrites files on disk out from under any live Y.Doc, same
+      // as a version restore — disconnect live collab rooms so they don't
+      // later persist stale in-memory content back over the pulled files.
+      collab.invalidateProject(req.ownerId, req.params.id);
       return result;
     } catch (err) {
       return reply.code(400).send({ error: err.message });

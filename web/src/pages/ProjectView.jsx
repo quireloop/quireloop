@@ -416,6 +416,31 @@ export default function ProjectView({ projectId, onBack, user }) {
     }
   }
 
+  async function handleDeleteMany(paths) {
+    const updated = await api.deleteFiles(projectId, paths);
+    setManifest(updated);
+    if (activePath && !updated.files.some((f) => f.path === activePath)) {
+      const next = updated.files.find((f) => ['tex', 'bib', 'cls', 'sty'].includes(f.type));
+      setContent('');
+      setActivePath(next ? next.path : null);
+    }
+  }
+
+  // After a pull, the manifest (file list) needs a fresh fetch — the
+  // collab server already invalidates any live room for the currently-open
+  // file so its content updates on its own via the websocket reconnecting,
+  // but if that file was removed by the pull entirely we still need to
+  // fall back to another one, same as a manual delete.
+  async function handlePulled() {
+    const updated = await api.getProject(projectId);
+    setManifest(updated);
+    if (activePath && !updated.files.some((f) => f.path === activePath)) {
+      const next = updated.files.find((f) => ['tex', 'bib', 'cls', 'sty'].includes(f.type));
+      setContent('');
+      setActivePath(next ? next.path : null);
+    }
+  }
+
   // Maps the compile's flat problem list down to the currently-open file
   // and pushes it into the editor as diagnostics; called both right after
   // a compile finishes and whenever the open file changes.
@@ -891,10 +916,13 @@ export default function ProjectView({ projectId, onBack, user }) {
                 onCreateFolder={handleCreateFolder}
                 onRename={handleRename}
                 onDelete={handleDelete}
+                onDeleteMany={handleDeleteMany}
               />
             )}
             {sidebarTab === 'outline' && <OutlinePanel entries={outline} onJump={handleOutlineJump} />}
-            {sidebarTab === 'git' && <SourceControlPanel projectId={projectId} readOnly={isViewer} />}
+            {sidebarTab === 'git' && (
+              <SourceControlPanel projectId={projectId} readOnly={isViewer} onPulled={handlePulled} />
+            )}
             {sidebarTab === 'search' && <SearchPanel projectId={projectId} onJump={jumpToSource} />}
           </div>
         </div>
