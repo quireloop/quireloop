@@ -5,7 +5,7 @@ import fastifySecureSession from '@fastify/secure-session';
 import fastifyWebsocket from '@fastify/websocket';
 import fastifyHelmet from '@fastify/helmet';
 import fs from 'node:fs';
-import { PORT, HOST, PUBLIC_DIR } from './config.js';
+import { PORT, HOST, PUBLIC_DIR, BASE_PATH } from './config.js';
 import { loadOrCreateSessionKey, migrateUserRoles } from './lib/auth.js';
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
@@ -52,7 +52,11 @@ await app.register(fastifyCookie);
 await app.register(fastifySecureSession, {
   key: await loadOrCreateSessionKey(),
   cookie: {
-    path: '/',
+    // Scoped to BASE_PATH when mounted under a subpath (default '/')  so a
+    // deployment sharing a domain with sibling apps (e.g. example.org's
+    // /jupyter/, /cloud/, ...) doesn't send this session cookie to every
+    // request on the domain, only requests actually bound for Quireloop.
+    path: BASE_PATH || '/',
     httpOnly: true,
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 30,
@@ -62,26 +66,35 @@ await app.register(fastifySecureSession, {
 
 await registerMultipart(app);
 await app.register(fastifyWebsocket);
-await app.register(healthRoutes);
-await app.register(authRoutes);
-await app.register(adminRoutes);
-await app.register(projectsRoutes);
-await app.register(filesRoutes);
-await app.register(compileRoutes);
-await app.register(searchRoutes);
-await app.register(synctexRoutes);
-await app.register(versionsRoutes);
-await app.register(gitRoutes);
-await app.register(collabRoutes);
-await app.register(commentsRoutes);
-await app.register(suggestionsRoutes);
-await app.register(chatRoutes);
-await app.register(assistantRoutes);
+// Every route file already defines its full path (e.g. '/api/health',
+// '/ws/:id/*'); the prefix here shifts all of them under BASE_PATH as a
+// group so the app can be mounted at the domain root (default, empty
+// prefix) or behind a reverse proxy subpath like '/quireloop'.
+for (const routes of [
+  healthRoutes,
+  authRoutes,
+  adminRoutes,
+  projectsRoutes,
+  filesRoutes,
+  compileRoutes,
+  searchRoutes,
+  synctexRoutes,
+  versionsRoutes,
+  gitRoutes,
+  collabRoutes,
+  commentsRoutes,
+  suggestionsRoutes,
+  chatRoutes,
+  assistantRoutes,
+]) {
+  await app.register(routes, { prefix: BASE_PATH });
+}
 
 if (fs.existsSync(PUBLIC_DIR)) {
-  await app.register(fastifyStatic, { root: PUBLIC_DIR });
+  await app.register(fastifyStatic, { root: PUBLIC_DIR, prefix: `${BASE_PATH}/` });
   app.setNotFoundHandler((req, reply) => {
-    if (req.raw.url?.startsWith('/api')) {
+    const url = req.raw.url || '';
+    if (url.startsWith(`${BASE_PATH}/api`) || (BASE_PATH && !url.startsWith(BASE_PATH))) {
       return reply.code(404).send({ error: 'not found' });
     }
     return reply.sendFile('index.html');

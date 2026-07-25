@@ -27,6 +27,12 @@ RUN npm ci
 # no separate copy step needed.
 COPY server server
 COPY web web
+# Set at build time (docker-compose.yml's build.args) when the app is
+# deployed behind a reverse proxy under a subpath, e.g. "/quireloop" —
+# Vite bakes the base path into the built JS bundle, so this can't be a
+# runtime-only env var the way QUIRELOOP_BASE_PATH is on the server side.
+ARG VITE_BASE_PATH=
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
 RUN npm run build --workspace=web
 
 # Strip devDependencies (vite, @vitejs/plugin-react, etc.) out of the
@@ -131,9 +137,9 @@ USER quireloop
 
 # No `curl`/`wget` in this image (kept out to avoid another apt layer) —
 # Node 22 has a built-in global `fetch`, so the healthcheck shells out to
-# node itself instead. Matches GET /api/health added in
+# node itself instead. Matches GET {QUIRELOOP_BASE_PATH}/api/health added in
 # server/src/routes/health.js, which needs no auth/cookie.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4173)+'/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4173)+(process.env.QUIRELOOP_BASE_PATH||'')+'/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["node", "server/src/index.js"]

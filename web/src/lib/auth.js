@@ -1,4 +1,6 @@
-const BASE = '/api/auth';
+import { BASE_PATH } from '../basePath.js';
+
+const BASE = `${BASE_PATH}/api/auth`;
 
 async function request(path, options = {}) {
   const res = await fetch(BASE + path, options);
@@ -33,7 +35,7 @@ export const authApi = {
   saveAssistantSettings: (patch) => post('/assistant-settings', patch),
 };
 
-const ADMIN_BASE = '/api/admin';
+const ADMIN_BASE = `${BASE_PATH}/api/admin`;
 
 async function adminRequest(path, options = {}) {
   const res = await fetch(ADMIN_BASE + path, options);

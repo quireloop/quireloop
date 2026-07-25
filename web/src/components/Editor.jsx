@@ -11,6 +11,7 @@ import { WebsocketProvider } from 'y-websocket';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import { vim, CodeMirror as VimCodeMirror } from '@replit/codemirror-vim';
+import { BASE_PATH } from '../basePath.js';
 
 // @replit/codemirror-vim's normal-mode 'u' / Ctrl-r drive its own internal
 // CodeMirror.commands.undo/redo, which by default call @codemirror/commands'
@@ -458,7 +459,11 @@ const Editor = forwardRef(function Editor(
     );
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const provider = new WebsocketProvider(`${wsProtocol}//${window.location.host}/ws/${projectId}`, filePath, ydoc);
+    const provider = new WebsocketProvider(
+      `${wsProtocol}//${window.location.host}${BASE_PATH}/ws/${projectId}`,
+      filePath,
+      ydoc
+    );
 
     if (user) {
       const { color, colorLight } = userColor(user.id);

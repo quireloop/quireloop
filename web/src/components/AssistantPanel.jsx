@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { BASE_PATH } from '../basePath.js';
 
 // Splits assistant markdown into text and fenced-code segments so code
 // blocks get their own styling and an insert-at-cursor button. Not a full
@@ -98,7 +99,7 @@ export default function AssistantPanel({ projectId, activePath, editorRef, readO
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const res = await fetch(`/api/projects/${projectId}/assistant`, {
+      const res = await fetch(`${BASE_PATH}/api/projects/${projectId}/assistant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history, file: activePath, selection }),

@@ -4,10 +4,27 @@
 # admin account, then everyone else comes in via admin-issued invites.
 services:
   quireloop:
-    build: .
-    # Swap `build: .` for `image: ghcr.io/<you>/quireloop:latest` if you'd
-    # rather pull a pre-built image than build one locally.
+    build:
+      context: .
+      args:
+        # Baked into the frontend JS bundle at build time — only needed if
+        # you're deploying behind a reverse proxy under a subpath rather than
+        # the domain root (e.g. "/quireloop/", trailing slash required). Must
+        # match QUIRELOOP_BASE_PATH below (same value, no trailing slash).
+        # Leave both unset to mount at the domain root, the default.
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-}
+    # Swap `build:` above for `image: ghcr.io/<you>/quireloop:latest` if
+    # you'd rather pull a pre-built image than build one locally.
     restart: unless-stopped
+    # Joins the host's default `docker0` bridge instead of a fresh
+    # per-project bridge network. Mainly matters if your host firewall
+    # allow-lists specific bridge interfaces (some hand-maintained iptables
+    # setups do) — a new per-compose-project bridge can silently blackhole
+    # traffic on hosts like that. Harmless for the common single-service
+    # case here; drop this line if you need Docker's per-project network
+    # (e.g. adding other services to this compose file that need to reach
+    # `quireloop` by service-name DNS, which the default bridge doesn't do).
+    network_mode: bridge
     ports:
       # host:container — change the left side if 4173 is already taken on
       # this machine. Left as-is, the app is reachable at
@@ -28,10 +45,13 @@ services:
       # configuration reference for what each one does.
       QUIRELOOP_OPEN_SIGNUP: ${QUIRELOOP_OPEN_SIGNUP:-}
       QUIRELOOP_SECURE_COOKIES: ${QUIRELOOP_SECURE_COOKIES:-}
+      # Runtime half of the subpath setting above — must be the same value
+      # as VITE_BASE_PATH minus the trailing slash (e.g. "/quireloop").
+      QUIRELOOP_BASE_PATH: ${QUIRELOOP_BASE_PATH:-}
     healthcheck:
       # Mirrors the Dockerfile's own HEALTHCHECK; declared again here so
       # `docker compose ps` surfaces status without needing `docker inspect`.
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4173/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4173'+(process.env.QUIRELOOP_BASE_PATH||'')+'/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       start_period: 20s

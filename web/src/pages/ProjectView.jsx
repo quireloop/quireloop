@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { api } from '../api.js';
+import { BASE_PATH } from '../basePath.js';
 import FileTree from '../components/FileTree.jsx';
 import Editor from '../components/Editor.jsx';
 import PdfViewer from '../components/PdfViewer.jsx';
@@ -112,7 +113,7 @@ export default function ProjectView({ projectId, onBack, user }) {
   // The AI assistant only exists when the current user (or the server's
   // fallback) has a provider configured — hide the button entirely otherwise.
   useEffect(() => {
-    fetch('/api/assistant/config')
+    fetch(`${BASE_PATH}/api/assistant/config`)
       .then((r) => (r.ok ? r.json() : { enabled: false }))
       .then((cfg) => setAssistantEnabled(Boolean(cfg.enabled)))
       .catch(() => {});

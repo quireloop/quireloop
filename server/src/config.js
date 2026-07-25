@@ -21,3 +21,8 @@ export const SHARE_LINKS_FILE = path.join(DATA_DIR, 'share-links.json');
 export const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 export const PORT = process.env.PORT ? Number(process.env.PORT) : 4173;
 export const HOST = '0.0.0.0';
+
+// Mount everything (API, WebSocket, static assets) under this prefix when
+// deployed behind a reverse proxy at a subpath instead of the domain root,
+// e.g. "/quireloop". Empty string mounts at root, the default.
+export const BASE_PATH = (process.env.QUIRELOOP_BASE_PATH || '').replace(/\/$/, '');
