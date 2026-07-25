@@ -19,7 +19,7 @@ import AssistantPanel from '../components/AssistantPanel.jsx';
 import Logo from '../components/Logo.jsx';
 import ToolbarMenu, { MenuItem } from '../components/ToolbarMenu.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
-import { useDarkMode, useSidebarOpen } from '../lib/theme.js';
+import { useTheme, useSidebarOpen } from '../lib/theme.js';
 import { parseBibEntries } from '../lib/bibtex.js';
 import { encodeAnchor, decodeAnchor } from '../lib/commentAnchors.js';
 
@@ -42,6 +42,13 @@ const STATUS_LABEL = {
   disconnected: 'Offline — changes saved locally',
 };
 
+const THEME_LABEL = {
+  light: { name: 'Light', icon: '☀' },
+  dark: { name: 'Dark', icon: '🌙' },
+  neon: { name: 'Neon', icon: '⚡' },
+};
+const NEXT_THEME_NAME = { light: 'dark', dark: 'neon', neon: 'light' };
+
 export default function ProjectView({ projectId, onBack, user }) {
   const [manifest, setManifest] = useState(null);
   const [activePath, setActivePath] = useState(null);
@@ -51,7 +58,7 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [initialLine, setInitialLine] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [compileResult, setCompileResult] = useState(null);
-  const [logExpanded, setLogExpanded] = useState(false);
+  const [showLogPanel, setShowLogPanel] = useState(false);
   const [compiling, setCompiling] = useState(false);
   const [sidebarTab, setSidebarTab] = useState('files');
   const [showSymbols, setShowSymbols] = useState(false);
@@ -59,10 +66,11 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [showShare, setShowShare] = useState(false);
   const [versions, setVersions] = useState([]);
   const [bibEntries, setBibEntries] = useState([]);
-  const [dark, setDark] = useDarkMode();
+  const [theme, cycleTheme] = useTheme();
   const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
   const editorRef = useRef(null);
   const pdfViewerRef = useRef(null);
+  const handleCompileRef = useRef(() => {});
 
   // Auto-compile on idle — toggle persisted in localStorage, default off.
   // The debounce timer only fires on real edits: the ref below is set
@@ -367,6 +375,7 @@ export default function ProjectView({ projectId, onBack, user }) {
 
   const outline = useMemo(() => buildOutline(content ?? ''), [content]);
   const wordCount = useMemo(() => countWords(content ?? ''), [content]);
+  const problemCount = (compileResult?.problems ?? []).length;
 
   function handleEditorChange(text) {
     setContent(text);
@@ -458,10 +467,6 @@ export default function ProjectView({ projectId, onBack, user }) {
     try {
       const result = await api.compile(projectId);
       setCompileResult(result);
-      // Only pop the log open when there's actually something to look at —
-      // a clean compile just updates the one-line status strip instead of
-      // shoving the editor content out of the way on every single click.
-      setLogExpanded(!result.success || (result.problems ?? []).length > 0);
       applyDiagnosticsToEditor(result.problems);
       if (result.success) {
         setPdfUrl(api.pdfUrl(projectId));
@@ -475,6 +480,23 @@ export default function ProjectView({ projectId, onBack, user }) {
       }
     }
   }
+
+  handleCompileRef.current = handleCompile;
+
+  // Cmd+S (or Ctrl+S on Windows/Linux) compiles instead of triggering the
+  // browser's "Save page" dialog — collaborative edits are already saved
+  // continuously via Yjs, so "save" here means "give me a fresh PDF".
+  useEffect(() => {
+    function onKeyDown(e) {
+      const isSaveShortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's';
+      if (!isSaveShortcut) return;
+      e.preventDefault();
+      if (compilingRef.current) return;
+      handleCompileRef.current();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   async function handleCompilerChange(compiler) {
     await api.setCompiler(projectId, compiler);
@@ -813,11 +835,11 @@ export default function ProjectView({ projectId, onBack, user }) {
           {showSymbols && <SymbolPalette onInsert={handleInsertSnippet} onClose={() => setShowSymbols(false)} />}
 
           <button
-            onClick={() => setDark(!dark)}
-            title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+            onClick={cycleTheme}
+            title={`Theme: ${THEME_LABEL[theme].name} — click to switch to ${THEME_LABEL[NEXT_THEME_NAME[theme]].name}`}
             style={{ fontSize: 13 }}
           >
-            {dark ? '☀ Light' : '🌙 Dark'}
+            {THEME_LABEL[theme].icon} {THEME_LABEL[theme].name}
           </button>
 
           <button onClick={handleToggleHistory} style={{ fontSize: 13 }}>
@@ -835,7 +857,39 @@ export default function ProjectView({ projectId, onBack, user }) {
             />
           )}
 
-          <button onClick={handleCompile} disabled={compiling} className="compile-button" style={{ padding: '6px 16px' }}>
+          <button
+            onClick={() => setShowLogPanel((v) => !v)}
+            disabled={!compileResult}
+            title={compileResult ? "Show this compile's log and errors" : 'Compile to see the log'}
+            style={{ fontSize: 13, background: showLogPanel ? 'var(--accent-bg)' : undefined, position: 'relative' }}
+          >
+            Logs
+            {compileResult && problemCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                  background: compileResult.success ? '#e0a030' : '#d64545',
+                  color: 'white',
+                  borderRadius: 8,
+                  fontSize: 10,
+                  padding: '1px 5px',
+                  lineHeight: 1.4,
+                }}
+              >
+                {problemCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={handleCompile}
+            disabled={compiling}
+            className="compile-button"
+            title="Compile (Cmd/Ctrl+S)"
+            style={{ padding: '6px 16px' }}
+          >
             {compiling ? 'Compiling…' : 'Compile'}
           </button>
         </div>
@@ -936,7 +990,7 @@ export default function ProjectView({ projectId, onBack, user }) {
                     filePath={activePath}
                     collabGeneration={manifest?.collabGeneration ?? 0}
                     initialLine={initialLine}
-                    dark={dark}
+                    theme={theme}
                     user={user}
                     readOnly={isViewer}
                     spellcheck={spellcheck}
@@ -952,14 +1006,12 @@ export default function ProjectView({ projectId, onBack, user }) {
                   />
                 )}
               </div>
-              {compileResult && (
+              {showLogPanel && compileResult && (
                 <CompileLogPanel
                   log={compileResult.log}
                   success={compileResult.success}
                   problems={compileResult.problems}
-                  expanded={logExpanded}
-                  onToggleExpanded={() => setLogExpanded((v) => !v)}
-                  onClose={() => setCompileResult(null)}
+                  onClose={() => setShowLogPanel(false)}
                   onJump={jumpToSource}
                 />
               )}

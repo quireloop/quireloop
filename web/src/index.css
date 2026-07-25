@@ -30,6 +30,34 @@
   --primary-hover: #3fb954;
 }
 
+/* Neon — a cyberpunk-leaning theme for the editor surface (and the chrome
+   around it, so the two don't clash): near-black backgrounds, glowing
+   cyan/magenta accents. */
+:root[data-theme='neon'] {
+  --bg: #05060c;
+  --panel-bg: #0b0e1a;
+  --text: #e6faff;
+  --text-muted: #7a86b8;
+  --border: #232a4d;
+  --accent-bg: #1c2550;
+  --accent: #39f0ff;
+  --pdf-bg: #05060c;
+  --primary: #ff2bd6;
+  --primary-hover: #ff5be0;
+}
+
+:root[data-theme='neon'] .compile-button {
+  box-shadow: 0 0 12px rgba(255, 43, 214, 0.6);
+}
+
+:root[data-theme='neon'] button:focus-visible,
+:root[data-theme='neon'] input:focus-visible,
+:root[data-theme='neon'] select:focus-visible,
+:root[data-theme='neon'] textarea:focus-visible {
+  outline-color: var(--accent);
+  box-shadow: 0 0 8px rgba(57, 240, 255, 0.6);
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

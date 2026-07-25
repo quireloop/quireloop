@@ -2,9 +2,10 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { EditorView, keymap, lineNumbers, Decoration, gutter, GutterMarker, drawSelection } from '@codemirror/view';
 import { EditorState, StateField, StateEffect, Compartment, Transaction, EditorSelection } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
-import { defaultHighlightStyle, syntaxHighlighting, foldGutter } from '@codemirror/language';
+import { defaultHighlightStyle, syntaxHighlighting, foldGutter, HighlightStyle } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { tags as t } from '@lezer/highlight';
 import { latex, latexCompletionSource, autocompletion, completionKeymap } from 'codemirror-lang-latex';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
@@ -316,6 +317,47 @@ function insertAtCursor(view, text) {
   view.focus();
 }
 
+// Neon theme — a cyberpunk-leaning look for the editor surface: near-black
+// background, glowing cyan caret/selection, magenta keywords. Bundled the
+// same way @codemirror/theme-one-dark bundles oneDark: an EditorView.theme
+// for chrome (background, caret, gutters, ...) paired with a HighlightStyle
+// for syntax colors, both applied together wherever `theme === 'neon'`.
+const neonHighlightStyle = HighlightStyle.define([
+  { tag: [t.keyword, t.controlKeyword, t.moduleKeyword], color: '#ff2bd6', fontWeight: 'bold' },
+  { tag: [t.name, t.propertyName, t.tagName], color: '#39f0ff' },
+  { tag: t.function(t.variableName), color: '#39f0ff' },
+  { tag: [t.string, t.special(t.string)], color: '#39ff87' },
+  { tag: t.comment, color: '#6f6f9c', fontStyle: 'italic' },
+  { tag: [t.number, t.bool, t.null], color: '#ffb86c' },
+  { tag: t.operator, color: '#e6faff' },
+  { tag: [t.bracket, t.punctuation], color: '#9aa5d6' },
+  { tag: t.heading, color: '#ff2bd6', fontWeight: 'bold' },
+  { tag: t.invalid, color: '#ff5555' },
+]);
+
+const neonTheme = [
+  EditorView.theme(
+    {
+      '&': { backgroundColor: '#05060c', color: '#e6faff' },
+      '.cm-content': { caretColor: '#39f0ff' },
+      '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#39f0ff', borderLeftWidth: '2px' },
+      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
+        backgroundColor: 'rgba(57, 240, 255, 0.25)',
+      },
+      '.cm-activeLine': { backgroundColor: 'rgba(255, 43, 214, 0.06)' },
+      '.cm-gutters': { backgroundColor: '#05060c', color: '#4d5786', border: 'none' },
+      '.cm-activeLineGutter': { backgroundColor: 'rgba(255, 43, 214, 0.08)', color: '#39f0ff' },
+      '.cm-foldPlaceholder': { backgroundColor: 'transparent', border: 'none', color: '#ff2bd6' },
+      '.cm-matchingBracket, .cm-nonmatchingBracket': {
+        backgroundColor: 'rgba(57, 240, 255, 0.2)',
+        outline: 'none',
+      },
+    },
+    { dark: true }
+  ),
+  syntaxHighlighting(neonHighlightStyle),
+];
+
 // Deterministic per-user color for remote cursors/selections — same user
 // always renders the same color across sessions and browser tabs.
 function userColor(userId) {
@@ -331,7 +373,7 @@ const Editor = forwardRef(function Editor(
     filePath,
     collabGeneration,
     initialLine,
-    dark,
+    theme,
     user,
     readOnly,
     spellcheck,
@@ -507,7 +549,7 @@ const Editor = forwardRef(function Editor(
         keymap.of(completionKeymap),
         search(),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-        ...(dark ? [oneDark] : []),
+        ...(theme === 'dark' ? [oneDark] : theme === 'neon' ? neonTheme : []),
         EditorView.domEventHandlers({
           dblclick(event, view) {
             // Leaves the browser's own double-click word-selection alone —
@@ -542,7 +584,10 @@ const Editor = forwardRef(function Editor(
         }),
         EditorView.theme({
           '&': { height: '100%', fontSize: '14px' },
-          '.cm-scroller': { overflow: 'auto', fontFamily: 'ui-monospace, monospace' },
+          '.cm-scroller': {
+            overflow: 'auto',
+            fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+          },
           '.cm-comment-range': { backgroundColor: 'rgba(255, 205, 60, 0.35)' },
           '.cm-comment-range-resolved': { backgroundColor: 'rgba(150, 150, 150, 0.2)' },
           '.cm-suggestion-insert': { backgroundColor: 'rgba(60, 200, 90, 0.25)' },
@@ -582,7 +627,7 @@ const Editor = forwardRef(function Editor(
       ydoc.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, filePath, collabGeneration, dark, readOnly, vimMode]);
+  }, [projectId, filePath, collabGeneration, theme, readOnly, vimMode]);
 
   return <div ref={containerRef} style={{ height: '100%' }} />;
 });
