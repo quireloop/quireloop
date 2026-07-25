@@ -4,6 +4,7 @@
   "workspaces": ["server", "web"],
   "scripts": {
     "service:install": "bash scripts/install-launchagent.sh",
-    "service:uninstall": "bash scripts/uninstall-launchagent.sh"
+    "service:uninstall": "bash scripts/uninstall-launchagent.sh",
+    "setup:texlive": "bash scripts/install-texlive.sh"
   }
 }

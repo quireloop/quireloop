@@ -12,7 +12,7 @@ async function readInvites() {
 
 async function writeInvites(invites) {
   await fs.mkdir(INVITES_FILE.replace(/\/[^/]+$/, ''), { recursive: true });
-  await fs.writeFile(INVITES_FILE, JSON.stringify(invites, null, 2));
+  await fs.writeFile(INVITES_FILE, JSON.stringify(invites, null, 2), { mode: 0o600 });
 }
 
 export async function createInvite(adminId) {

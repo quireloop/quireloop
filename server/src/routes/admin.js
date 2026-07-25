@@ -21,11 +21,15 @@ export default async function adminRoutes(app) {
       // When the key comes from the environment, the UI field is informational
       // only — env always wins so ops-managed deployments stay deterministic.
       keyFromEnv: Boolean(envKey),
+      // Server-wide fallback only — each member's own key/Ollama pointer in
+      // their Account settings takes precedence over everything here.
+      ollamaBaseUrl: s.ollamaBaseUrl || '',
+      ollamaModel: s.ollamaModel || '',
     };
   });
 
   app.post('/api/admin/settings', { preHandler: requireAdmin }, async (req, reply) => {
-    const { anthropicApiKey, assistantModel } = req.body ?? {};
+    const { anthropicApiKey, assistantModel, ollamaBaseUrl, ollamaModel } = req.body ?? {};
     const patch = {};
     if (anthropicApiKey !== undefined) {
       if (anthropicApiKey !== '' && anthropicApiKey !== null && !/^sk-ant-/.test(anthropicApiKey)) {
@@ -38,6 +42,19 @@ export default async function adminRoutes(app) {
         return reply.code(400).send({ error: 'invalid model id' });
       }
       patch.assistantModel = assistantModel;
+    }
+    if (ollamaBaseUrl !== undefined) {
+      if (ollamaBaseUrl !== '' && ollamaBaseUrl !== null) {
+        try {
+          new URL(ollamaBaseUrl);
+        } catch {
+          return reply.code(400).send({ error: 'that does not look like a valid URL' });
+        }
+      }
+      patch.ollamaBaseUrl = ollamaBaseUrl;
+    }
+    if (ollamaModel !== undefined) {
+      patch.ollamaModel = ollamaModel;
     }
     await updateSettings(patch);
     return { ok: true };

@@ -109,8 +109,8 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [showAssistant, setShowAssistant] = useState(false);
   const [assistantEnabled, setAssistantEnabled] = useState(false);
 
-  // The AI assistant only exists when the server has an Anthropic API key —
-  // hide the button entirely on servers that haven't opted in.
+  // The AI assistant only exists when the current user (or the server's
+  // fallback) has a provider configured — hide the button entirely otherwise.
   useEffect(() => {
     fetch('/api/assistant/config')
       .then((r) => (r.ok ? r.json() : { enabled: false }))

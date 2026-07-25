@@ -1,30 +1,48 @@
 import fs from 'node:fs/promises';
-import Anthropic from '@anthropic-ai/sdk';
-import { requireProjectAccess } from '../lib/authMiddleware.js';
+import { requireAuth, requireProjectAccess } from '../lib/authMiddleware.js';
 import { resolveProjectPath } from '../lib/storage.js';
 import { getSettings } from '../lib/settings.js';
+import { findUserById } from '../lib/auth.js';
+import * as anthropicProvider from '../lib/assistantProviders/anthropic.js';
+import * as ollamaProvider from '../lib/assistantProviders/ollama.js';
 
-// The AI writing assistant is opt-in: it only exists when an Anthropic API
-// key is provided — either pasted by the admin in the Admin panel (stored
-// in data/settings.json) or via environment variable. Without one, the
-// endpoint 503s and the frontend hides the panel entirely — Quireloop
-// stays fully functional (and fully offline) without it.
-//
-// Resolved per-request, not at boot, so a key saved in the Admin panel
-// takes effect immediately with no restart. Env var wins over the stored
-// setting so ops-managed deployments stay deterministic.
+// The AI writing assistant is per-user and opt-in: each member brings their
+// own Anthropic API key or points at an Ollama server from their own
+// Account settings — never a single account shared/billed across the lab.
+// An admin can still set a server-wide default (env var or Admin panel) as
+// a fallback for members who haven't configured anything of their own —
+// resolveAssistantConfig() below tries the user's own config first.
 export const DEFAULT_ASSISTANT_MODEL = 'claude-opus-4-8';
 
-async function assistantConfig() {
+const PROVIDERS = { anthropic: anthropicProvider, ollama: ollamaProvider };
+
+async function resolveAssistantConfig(userId) {
+  const user = await findUserById(userId);
+  const ua = user?.assistant;
+  if (ua?.provider === 'anthropic' && ua.anthropicApiKey) {
+    return { provider: 'anthropic', anthropicApiKey: ua.anthropicApiKey, anthropicModel: ua.anthropicModel || DEFAULT_ASSISTANT_MODEL };
+  }
+  if (ua?.provider === 'ollama' && ua.ollamaBaseUrl && ua.ollamaModel) {
+    return { provider: 'ollama', ollamaBaseUrl: ua.ollamaBaseUrl, ollamaModel: ua.ollamaModel };
+  }
+
+  // Fall back to a server-wide default the admin configured, if any.
   const settings = await getSettings();
-  return {
-    apiKey:
-      process.env.QUIRELOOP_ANTHROPIC_API_KEY ||
-      process.env.ANTHROPIC_API_KEY ||
-      settings.anthropicApiKey ||
-      '',
-    model: process.env.QUIRELOOP_ASSISTANT_MODEL || settings.assistantModel || DEFAULT_ASSISTANT_MODEL,
-  };
+  const envKey = process.env.QUIRELOOP_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '';
+  const adminAnthropicKey = envKey || settings.anthropicApiKey || '';
+  if (adminAnthropicKey) {
+    return {
+      provider: 'anthropic',
+      anthropicApiKey: adminAnthropicKey,
+      anthropicModel: process.env.QUIRELOOP_ASSISTANT_MODEL || settings.assistantModel || DEFAULT_ASSISTANT_MODEL,
+    };
+  }
+  const ollamaBaseUrl = process.env.QUIRELOOP_OLLAMA_BASE_URL || settings.ollamaBaseUrl || '';
+  const ollamaModel = process.env.QUIRELOOP_OLLAMA_MODEL || settings.ollamaModel || '';
+  if (ollamaBaseUrl && ollamaModel) {
+    return { provider: 'ollama', ollamaBaseUrl, ollamaModel };
+  }
+  return null;
 }
 
 // Deliberate cost cap for a chat panel — long enough for a rewritten
@@ -60,20 +78,26 @@ async function readFileContext(ownerId, projectId, filePath) {
 }
 
 export default async function assistantRoutes(app) {
-  // Lets the frontend decide whether to render the Assistant button at all.
-  app.get('/api/assistant/config', async () => {
-    const { apiKey, model } = await assistantConfig();
-    return { enabled: Boolean(apiKey), model: apiKey ? model : null };
+  // Lets the frontend decide whether to render the Assistant button at all,
+  // resolved per the *current logged-in user*, not server-wide.
+  app.get('/api/assistant/config', { preHandler: requireAuth }, async (req) => {
+    const config = await resolveAssistantConfig(req.userId);
+    return {
+      enabled: Boolean(config),
+      provider: config?.provider ?? null,
+      model: config ? (config.provider === 'ollama' ? config.ollamaModel : config.anthropicModel) : null,
+    };
   });
 
   // Viewers can use the assistant too — asking questions about a paper
   // doesn't touch the document (inserting the answer does, and the editor
   // is read-only for them anyway).
   app.post('/api/projects/:id/assistant', { preHandler: requireProjectAccess }, async (req, reply) => {
-    const { apiKey, model } = await assistantConfig();
-    if (!apiKey) {
-      return reply.code(503).send({ error: 'assistant not configured on this server' });
+    const config = await resolveAssistantConfig(req.userId);
+    if (!config) {
+      return reply.code(503).send({ error: 'no AI assistant configured — set one up in your account settings' });
     }
+    const provider = PROVIDERS[config.provider];
 
     const { messages, file, selection } = req.body ?? {};
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -88,8 +112,8 @@ export default async function assistantRoutes(app) {
 
     // Context (file list, open file, selection) is injected into the FIRST
     // user turn of this request, not the system prompt — the system prompt
-    // stays byte-stable so prompt caching holds across every request from
-    // every user on the server.
+    // stays byte-stable so prompt caching holds (Anthropic provider only)
+    // across every request from every user on the server.
     const fileList = (req.manifest.files ?? []).map((f) => f.path).join('\n');
     const fileContent = await readFileContext(req.ownerId, req.params.id, file);
     let context = `<project name=${JSON.stringify(req.manifest.name ?? '')}>\nFiles:\n${fileList}\n</project>`;
@@ -117,43 +141,32 @@ export default async function assistantRoutes(app) {
       reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
-    const client = new Anthropic({ apiKey });
-    try {
-      const stream = client.messages.stream({
-        model,
-        max_tokens: MAX_TOKENS,
-        system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-        messages: apiMessages,
-      });
-      // Abort the upstream request if the browser goes away mid-stream.
-      req.raw.on('close', () => stream.abort());
+    // Shared across providers: Anthropic's SDK stream and Ollama's fetch
+    // both honor this signal to abort the upstream request if the browser
+    // goes away mid-stream.
+    const controller = new AbortController();
+    req.raw.on('close', () => controller.abort());
 
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          send('text', { text: event.delta.text });
-        }
-      }
-      const final = await stream.finalMessage();
-      send('done', {
-        stopReason: final.stop_reason,
-        usage: { input: final.usage.input_tokens, output: final.usage.output_tokens },
+    try {
+      const final = await provider.streamChat({
+        config,
+        system: SYSTEM_PROMPT,
+        messages: apiMessages,
+        maxTokens: MAX_TOKENS,
+        onDelta: (text) => send('text', { text }),
+        signal: controller.signal,
       });
+      send('done', final);
     } catch (err) {
-      // AbortError just means the client closed the panel — nothing to report.
-      if (err?.name !== 'AbortError' && !reply.raw.writableEnded) {
-        app.log.error({ err }, 'assistant request failed');
-        send('error', { message: friendlyAssistantError(err) });
+      if (!reply.raw.writableEnded) {
+        const message = provider.friendlyError(err, config);
+        if (message) {
+          app.log.error({ err }, 'assistant request failed');
+          send('error', { message });
+        }
       }
     } finally {
       reply.raw.end();
     }
   });
-}
-
-function friendlyAssistantError(err) {
-  const status = err?.status;
-  if (status === 401) return 'the server’s Anthropic API key was rejected — ask your admin to check it';
-  if (status === 429) return 'the assistant is rate-limited right now — try again in a moment';
-  if (status >= 500) return 'the Claude API is having trouble — try again shortly';
-  return 'assistant request failed — try again';
 }

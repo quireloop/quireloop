@@ -7,6 +7,7 @@ import {
   verifyPassword,
   hashPassword,
   publicUser,
+  maskedAssistantSettings,
   signTempToken,
   verifyTempToken,
   usersExist,
@@ -35,16 +36,28 @@ export default async function authRoutes(app) {
 
   app.post('/api/auth/signup', async (req, reply) => {
     const { email, password, inviteCode } = req.body ?? {};
+    const ipKey = `signup-ip:${req.ip}`;
+    const emailKey = `signup-email:${(email ?? '').toLowerCase()}`;
+    const ipBlocked = isBlocked(ipKey);
+    const emailBlocked = isBlocked(emailKey);
+    if (ipBlocked || emailBlocked) {
+      return tooManyAttempts(reply, Math.max(ipBlocked || 0, emailBlocked || 0));
+    }
+
     if (!email || typeof email !== 'string' || !email.includes('@')) {
+      registerFailure(ipKey);
       return reply.code(400).send({ error: 'a valid email is required' });
     }
     if (!password || password.length < 8) {
+      registerFailure(ipKey);
       return reply.code(400).send({ error: 'password must be at least 8 characters' });
     }
 
     const needsInvite = await inviteRequired();
     if (needsInvite) {
       if (!inviteCode || typeof inviteCode !== 'string' || !(await isInviteValid(inviteCode))) {
+        registerFailure(ipKey);
+        registerFailure(emailKey);
         return reply.code(403).send({ error: 'invalid or already-used invite code' });
       }
     }
@@ -53,8 +66,12 @@ export default async function authRoutes(app) {
     try {
       user = await createUser(email, password);
     } catch (err) {
+      registerFailure(ipKey);
+      registerFailure(emailKey);
       return reply.code(400).send({ error: err.message });
     }
+    clear(ipKey);
+    clear(emailKey);
     if (needsInvite) {
       // Atomic check-and-mark now that we know the new user's id — closes
       // the race where two signups redeem the same code between the peek
@@ -186,5 +203,55 @@ export default async function authRoutes(app) {
     }
     await updateUser(req.userId, { twoFactorEnabled: false, twoFactorSecret: null, pendingTwoFactorSecret: null });
     return { ok: true };
+  });
+
+  // Each member's own AI assistant provider — an Anthropic key they pay for
+  // themselves, or a pointer at an Ollama server. Never shared/billed to
+  // one account; see server/src/routes/assistant.js for how this is used.
+  app.get('/api/auth/assistant-settings', { preHandler: requireAuth }, async (req) => {
+    const user = await findUserById(req.userId);
+    return maskedAssistantSettings(user);
+  });
+
+  app.post('/api/auth/assistant-settings', { preHandler: requireAuth }, async (req, reply) => {
+    const { provider, anthropicApiKey, anthropicModel, ollamaBaseUrl, ollamaModel } = req.body ?? {};
+    const user = await findUserById(req.userId);
+    const current = user.assistant || { provider: null };
+    const next = { ...current };
+
+    if (provider !== undefined) {
+      if (provider !== null && provider !== 'anthropic' && provider !== 'ollama') {
+        return reply.code(400).send({ error: 'provider must be "anthropic", "ollama", or null' });
+      }
+      next.provider = provider;
+    }
+    if (anthropicApiKey !== undefined) {
+      if (anthropicApiKey !== '' && anthropicApiKey !== null && !/^sk-ant-/.test(anthropicApiKey)) {
+        return reply.code(400).send({ error: 'that does not look like an Anthropic API key (they start with sk-ant-)' });
+      }
+      next.anthropicApiKey = anthropicApiKey || undefined;
+    }
+    if (anthropicModel !== undefined) {
+      if (anthropicModel && !/^[a-z0-9.-]+$/.test(anthropicModel)) {
+        return reply.code(400).send({ error: 'invalid model id' });
+      }
+      next.anthropicModel = anthropicModel || undefined;
+    }
+    if (ollamaBaseUrl !== undefined) {
+      if (ollamaBaseUrl) {
+        try {
+          new URL(ollamaBaseUrl);
+        } catch {
+          return reply.code(400).send({ error: 'that does not look like a valid URL' });
+        }
+      }
+      next.ollamaBaseUrl = ollamaBaseUrl || undefined;
+    }
+    if (ollamaModel !== undefined) {
+      next.ollamaModel = ollamaModel || undefined;
+    }
+
+    await updateUser(req.userId, { assistant: next });
+    return maskedAssistantSettings(await findUserById(req.userId));
   });
 }

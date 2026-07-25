@@ -12,6 +12,24 @@ const UNZIP_TIMEOUT_MS = 60_000;
 // inside one top-level folder. If that's all we find at the root, treat
 // that folder's contents as the project root instead of nesting the whole
 // project one level deeper than expected.
+// Belt-and-suspenders on top of the system `unzip` binary's own zip-slip
+// protection: walk the extracted tree and confirm nothing symlinks or
+// resolves outside the project directory before we treat it as real content.
+async function assertExtractionContained(dir) {
+  const base = await fs.realpath(dir);
+  async function walk(current) {
+    for (const entry of await fs.readdir(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      const real = await fs.realpath(full).catch(() => full);
+      if (real !== base && !real.startsWith(base + path.sep)) {
+        throw new Error('zip contains an entry that escapes the project folder');
+      }
+      if (entry.isDirectory() && !entry.isSymbolicLink()) await walk(full);
+    }
+  }
+  await walk(base);
+}
+
 async function flattenSingleWrapperFolder(dir) {
   const entries = (await fs.readdir(dir, { withFileTypes: true })).filter((e) => !e.name.startsWith('.'));
   if (entries.length !== 1 || !entries[0].isDirectory()) return;
@@ -32,9 +50,10 @@ export async function importFromZip(ownerId, name, buffer) {
 
   try {
     await execa('unzip', ['-q', '-o', tmpZip, '-d', dir], { timeout: UNZIP_TIMEOUT_MS });
-  } catch {
+    await assertExtractionContained(dir);
+  } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });
-    throw new Error("couldn't extract that file — is it a valid .zip?");
+    throw err.message?.startsWith('zip contains') ? err : new Error("couldn't extract that file — is it a valid .zip?");
   } finally {
     await fs.rm(tmpZip, { force: true });
   }

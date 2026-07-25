@@ -4,6 +4,8 @@
 
 <h1 align="center">Quireloop</h1>
 
+<p align="center">Created by <a href="https://github.com/arjunpogaku">Arjun Pogaku</a> · Apache 2.0</p>
+
 A self-hosted, multi-user web IDE for writing LaTeX: a project/file
 manager, a real-time collaborative code editor with LaTeX syntax
 highlighting and autocomplete, a live PDF preview, comments and chat, and
@@ -97,12 +99,14 @@ becomes a Server Edition by putting it on a shared machine per
 
 ## Prerequisites (both editions)
 
-- **Node.js 20+**
+- **Node.js 22+**
 - **A LaTeX distribution** with `latexmk` and `synctex` on your `PATH` —
   e.g. [TeX Live](https://tug.org/texlive/) or [MacTeX](https://tug.org/mactex/)
   on macOS, TeX Live on Linux, or [MiKTeX](https://miktex.org/) on Windows.
   Nothing LaTeX-related is bundled — this app shells out to your existing
-  install. Verify it's on your PATH:
+  install. On Debian/Ubuntu you can install everything needed with
+  `npm run setup:texlive` after cloning (below), instead of hunting down
+  the right TeX Live package names yourself. Verify it's on your PATH:
 
   ```
   latexmk --version

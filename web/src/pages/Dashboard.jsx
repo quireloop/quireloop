@@ -263,6 +263,12 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
         ))}
         {projects.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No projects yet.</p>}
       </div>
+      <div style={{ textAlign: 'center', marginTop: 32, fontSize: 12, color: 'var(--text-muted)' }}>
+        Quireloop, built by{' '}
+        <a href="https://github.com/arjunpogaku" target="_blank" rel="noreferrer">
+          Arjun Pogaku
+        </a>
+      </div>
       </div>
     </div>
   );

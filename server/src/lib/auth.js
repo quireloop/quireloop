@@ -27,7 +27,7 @@ async function readUsers() {
 
 async function writeUsers(users) {
   await fs.mkdir(USERS_FILE.replace(/\/[^/]+$/, ''), { recursive: true });
-  await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+  await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), { mode: 0o600 });
 }
 
 export async function usersExist() {
@@ -65,6 +65,8 @@ export async function createUser(email, password) {
     role: users.length === 0 ? 'admin' : 'member',
     disabled: false,
     createdAt: new Date().toISOString(),
+    // Each member's own AI assistant provider — never a shared account.
+    assistant: { provider: null },
   };
   users.push(user);
   await writeUsers(users);
@@ -106,6 +108,25 @@ export function publicUser(user) {
   return { id: user.id, email: user.email, twoFactorEnabled: user.twoFactorEnabled, role: user.role };
 }
 
+function maskKey(key) {
+  if (!key || key.length < 12) return key ? '***' : '';
+  return `${key.slice(0, 7)}…${key.slice(-4)}`;
+}
+
+// Masked view of a user's own assistant provider config — never returns
+// the raw Anthropic key, mirrors admin.js's maskKey() convention.
+export function maskedAssistantSettings(user) {
+  const a = user.assistant || { provider: null };
+  return {
+    provider: a.provider || null,
+    anthropicKeySet: Boolean(a.anthropicApiKey),
+    anthropicKeyMasked: maskKey(a.anthropicApiKey),
+    anthropicModel: a.anthropicModel || 'claude-opus-4-8',
+    ollamaBaseUrl: a.ollamaBaseUrl || '',
+    ollamaModel: a.ollamaModel || '',
+  };
+}
+
 // Bridges "password verified" to "2FA code verified" during login without
 // a server-side session store — a short-lived HMAC-signed token carrying
 // just the user id, good enough for the few seconds between the two steps.
@@ -138,7 +159,7 @@ export async function loadOrCreateSessionKey() {
   } catch {
     const key = crypto.randomBytes(32);
     await fs.mkdir(SESSION_KEY_FILE.replace(/\/[^/]+$/, ''), { recursive: true });
-    await fs.writeFile(SESSION_KEY_FILE, key);
+    await fs.writeFile(SESSION_KEY_FILE, key, { mode: 0o600 });
     return key;
   }
 }

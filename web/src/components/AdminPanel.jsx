@@ -201,6 +201,8 @@ function AssistantSection() {
   const [settings, setSettings] = useState(null);
   const [key, setKey] = useState('');
   const [model, setModel] = useState('');
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState('');
+  const [ollamaModel, setOllamaModel] = useState('');
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -210,6 +212,8 @@ function AssistantSection() {
       const s = await adminApi.getSettings();
       setSettings(s);
       setModel(s.assistantModel || '');
+      setOllamaBaseUrl(s.ollamaBaseUrl || '');
+      setOllamaModel(s.ollamaModel || '');
     } catch (err) {
       setError(err.message);
     }
@@ -240,12 +244,15 @@ function AssistantSection() {
   return (
     <div style={{ display: 'grid', gap: 10, fontSize: 13 }}>
       <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-        The ✨ Assistant panel is powered by the Anthropic API. Paste an API key from{' '}
+        Each member sets their own AI assistant provider in their own Account settings — this is only a{' '}
+        <strong>server-wide fallback</strong> used for anyone who hasn&apos;t configured their own. Paste an API
+        key from{' '}
         <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
           console.anthropic.com
         </a>{' '}
-        to enable it for everyone on this server. Usage is billed to this key. Claude Pro/Max subscriptions
-        don&apos;t include API access — an API key is a separate pay-as-you-go account.
+        and/or point at a shared Ollama server. If you set a key here, usage is billed to this key for every
+        member who relies on the fallback. Claude Pro/Max subscriptions don&apos;t include API access — an API
+        key is a separate pay-as-you-go account.
       </p>
       {settings.keyFromEnv ? (
         <p style={{ margin: 0, fontSize: 12 }}>
@@ -301,6 +308,36 @@ function AssistantSection() {
           <option value="claude-haiku-4-5">Claude Haiku 4.5 (cheapest)</option>
         </select>
       </label>
+
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+        Shared Ollama fallback (e.g. an instance running on this server) — optional, independent of the key
+        above.
+      </p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          save({ ollamaBaseUrl: ollamaBaseUrl.trim(), ollamaModel: ollamaModel.trim() });
+        }}
+        style={{ display: 'grid', gap: 6 }}
+      >
+        <input
+          value={ollamaBaseUrl}
+          onChange={(e) => setOllamaBaseUrl(e.target.value)}
+          placeholder="http://localhost:11434"
+          style={{ padding: 6, fontSize: 12 }}
+        />
+        <input
+          value={ollamaModel}
+          onChange={(e) => setOllamaModel(e.target.value)}
+          placeholder="llama3.1"
+          style={{ padding: 6, fontSize: 12 }}
+        />
+        <button type="submit" disabled={busy} style={{ fontSize: 12 }}>
+          Save Ollama fallback
+        </button>
+      </form>
+
       {status && <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>{status}</p>}
       {error && <p style={{ margin: 0, fontSize: 12, color: 'crimson' }}>{error}</p>}
     </div>

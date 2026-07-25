@@ -75,19 +75,27 @@ exposing it directly.
 **Prerequisites:**
 - **Node.js 22+**
 - **A full TeX Live install** with `latexmk`, `pdflatex`, `xelatex`,
-  `lualatex`, `biber`, and `synctex` on the deploying user's `PATH` — see
-  the package list in the `Dockerfile`'s runtime stage for what "full
-  enough" means, or just install `texlive-full` if disk space isn't a
-  concern.
+  `lualatex`, `biber`, and `synctex` on the deploying user's `PATH`.
 - **`git` and `unzip`** on `PATH`.
 
 **Build and install:**
 ```
 git clone <this-repo-url> quireloop
 cd quireloop
+npm run setup:texlive   # Debian/Ubuntu: apt-get installs latexmk, biber, git, unzip — see below if you're on something else
 npm ci
 npm run build --workspace=web
 ```
+
+`npm run setup:texlive` (`scripts/install-texlive.sh`) installs the exact
+TeX Live package set the Docker image also uses — enough for
+pdflatex/xelatex/lualatex + modern biblatex/biber, without the ~6-7GB of
+`texlive-full`. It's Debian/Ubuntu-only (`apt-get`); on another distro,
+install the equivalent of `texlive-latex-base`, `texlive-latex-recommended`,
+`texlive-latex-extra`, `texlive-fonts-recommended`, `texlive-xetex`,
+`texlive-luatex`, `texlive-bibtex-extra`, `biber`, `latexmk`, `git`,
+`unzip` yourself, or just run `texlive-full` if disk space isn't a
+concern.
 
 **Run it** directly to sanity-check before wiring up systemd:
 ```
@@ -147,8 +155,24 @@ unit, or just prefix the `node` command when running manually.
 | `QUIRELOOP_DATA_DIR` | `<repo>/data` | Where all persistent state lives — accounts, invites, the session-signing key, and every project (with its git history and version snapshots). Docker's image sets this to `/data` and expects a volume mounted there; leave it as the image default rather than overriding it unless you know why you're changing it. |
 | `QUIRELOOP_OPEN_SIGNUP` | unset (`false`) | When `true`, signup stays open to anyone who can reach the server, even after the first account exists. Default behavior (unset) is: the very first account can always sign up freely (bootstrapping), and every account after that requires an admin-issued invite code/link. |
 | `QUIRELOOP_SECURE_COOKIES` | unset (`false`) | When `true`, the session cookie is set with the `secure` flag, so browsers will only send it over HTTPS. Set this once TLS (e.g. the nginx config above) is actually in front of the server — turning it on without TLS in place will lock everyone out, since the cookie won't be sent back over plain HTTP. |
-| `QUIRELOOP_ANTHROPIC_API_KEY` | unset | Enables the built-in AI writing assistant (the ✨ Assistant panel in the editor) with an ops-managed key. **Most installs don't need this** — an admin can paste the key in the UI instead (Admin panel → ✨ Assistant tab; stored in `data/settings.json`, mode 600). When both exist, the env var wins. Get a key at console.anthropic.com; usage is billed to that key, server-wide. With neither set, the assistant is completely off — no button in the UI, no outbound requests. Falls back to `ANTHROPIC_API_KEY` if set. |
-| `QUIRELOOP_ASSISTANT_MODEL` | `claude-opus-4-8` | Which Claude model the assistant uses; also settable in the Admin panel (env wins). E.g. `claude-sonnet-5` to trade some quality for lower cost. |
+| `QUIRELOOP_ANTHROPIC_API_KEY` | unset | Server-wide **fallback** Anthropic key, only used for members who haven't set their own key in Account settings → ✨ AI Assistant. Most installs don't need this — each lab member brings their own pay-as-you-go key (console.anthropic.com), billed to them individually, not to the server. When both this and a stored admin-panel key exist, the env var wins. Falls back to `ANTHROPIC_API_KEY` if set. |
+| `QUIRELOOP_ASSISTANT_MODEL` | `claude-opus-4-8` | Model used by the fallback key above; also settable in the Admin panel (env wins). Has no effect on members using their own key — they pick their own model in Account settings. |
+| `QUIRELOOP_OLLAMA_BASE_URL` / `QUIRELOOP_OLLAMA_MODEL` | unset | Server-wide fallback pointing at an Ollama instance (e.g. one running on this same box on port 11434) instead of Anthropic — same fallback-only semantics as above. Each member can instead point at their own Ollama server from Account settings. |
+
+**Per-user AI assistant, not a shared account:** the ✨ Assistant panel reads
+its provider from the logged-in member's own Account settings first
+(their own Anthropic key, or their own Ollama server) — the env vars and
+Admin panel settings above are only a fallback for members who haven't
+configured anything themselves. Nobody's usage gets billed to someone
+else's key. **What's not supported:** a personal Claude Pro/Max
+subscription (the kind used by the Claude Code CLI or the VS Code
+extension) cannot be linked here — that login is restricted by Anthropic
+to their own first-party apps. Use a pay-as-you-go API key or Ollama
+instead.
+
+**Security checklist before going live:**
+- Set `QUIRELOOP_SECURE_COOKIES=true` once nginx TLS is actually in front (see above) — it's opt-in, easy to forget, and without it the session cookie isn't marked HTTPS-only.
+- If this deployment has existing `data/` state from earlier testing, run `chmod 600 data/users.json data/session-key data/invites.json data/share-links.json 2>/dev/null` once — new installs get correct permissions automatically, but files created before this fix don't retroactively tighten.
 
 There's no `QUIRELOOP_` variable for the login rate limiter or the compile
 engine choice — the rate limiter's thresholds are fixed in

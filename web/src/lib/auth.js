@@ -29,6 +29,8 @@ export const authApi = {
   setup2fa: () => post('/2fa/setup', {}),
   verify2fa: (code) => post('/2fa/verify', { code }),
   disable2fa: (password) => post('/2fa/disable', { password }),
+  getAssistantSettings: () => request('/assistant-settings'),
+  saveAssistantSettings: (patch) => post('/assistant-settings', patch),
 };
 
 const ADMIN_BASE = '/api/admin';

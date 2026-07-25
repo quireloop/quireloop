@@ -3,6 +3,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyCookie from '@fastify/cookie';
 import fastifySecureSession from '@fastify/secure-session';
 import fastifyWebsocket from '@fastify/websocket';
+import fastifyHelmet from '@fastify/helmet';
 import fs from 'node:fs';
 import { PORT, HOST, PUBLIC_DIR } from './config.js';
 import { loadOrCreateSessionKey, migrateUserRoles } from './lib/auth.js';
@@ -32,6 +33,21 @@ app.addContentTypeParser('text/plain', { parseAs: 'string' }, (req, body, done) 
 
 await migrateUserRoles();
 
+await app.register(fastifyHelmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'", 'ws:', 'wss:'],
+      workerSrc: ["'self'", 'blob:'],
+      objectSrc: ["'self'", 'blob:'], // PDF preview is served same-origin as a blob
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+});
 await app.register(fastifyCookie);
 await app.register(fastifySecureSession, {
   key: await loadOrCreateSessionKey(),

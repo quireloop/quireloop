@@ -16,7 +16,7 @@ async function readLinks() {
 
 async function writeLinks(links) {
   await fs.mkdir(path.dirname(SHARE_LINKS_FILE), { recursive: true });
-  await fs.writeFile(SHARE_LINKS_FILE, JSON.stringify(links, null, 2));
+  await fs.writeFile(SHARE_LINKS_FILE, JSON.stringify(links, null, 2), { mode: 0o600 });
 }
 
 export async function createShareLink(projectId, ownerId, role) {
