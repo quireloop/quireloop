@@ -652,7 +652,17 @@ export default function ProjectView({ projectId, onBack, user }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 8, borderBottom: '1px solid var(--border)' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          columnGap: 12,
+          rowGap: 6,
+          padding: 8,
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
         <button
           onClick={() => setSidebarOpen((v) => !v)}
           title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
@@ -686,7 +696,18 @@ export default function ProjectView({ projectId, onBack, user }) {
             👥 {recentEditors.map((e) => e.email.split('@')[0]).join(', ')}
           </span>
         )}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+        <div
+          style={{
+            marginLeft: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            justifyContent: 'flex-end',
+            columnGap: 8,
+            rowGap: 6,
+            position: 'relative',
+          }}
+        >
           <button
             onClick={() => setDark(!dark)}
             title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
