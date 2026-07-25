@@ -216,6 +216,12 @@ function friendlyGitError(err) {
   if (/conflict/i.test(stderr)) {
     return 'pull created a merge conflict — open the hosted editor and this project side by side and resolve it there, or in the .tex file directly, then commit and push again';
   }
+  if (/couldn't find remote ref/i.test(stderr)) {
+    return "the remote has no content to pull yet — for the hosted editor, make sure you've opened that project's own Menu → Git panel at least once (that's what provisions its git bridge) and that the URL is exactly https://git.hosted-editor.com/<project id> from that panel, not the regular hosted-editor.com project link";
+  }
+  if (/repository not found|not found/i.test(stderr)) {
+    return "remote repository not found — double check the URL (for the hosted editor: https://git.hosted-editor.com/<project id>, not the regular hosted-editor.com project link)";
+  }
   if (err.timedOut) return 'timed out — check the remote URL and your connection';
   return stderr.split('\n').find(Boolean) || 'git command failed';
 }
