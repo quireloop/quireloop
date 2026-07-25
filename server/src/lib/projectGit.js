@@ -252,10 +252,27 @@ export async function pushProject(ownerId, projectId) {
   const creds = await readCredentials(ownerId, projectId);
   if (!creds) throw new Error('no remote configured yet — set one first');
 
-  const branch = await currentBranch(dir);
+  const localBranch = await currentBranch(dir);
   const authedUrl = withToken(creds.url, creds.token);
+
+  // Push to whatever branch name the remote actually uses, not whatever
+  // the local repo happens to be on — some the hosted editor projects' git bridges
+  // are provisioned on "main" rather than "master" (this is what the
+  // "wrong branch ... Please use the main branch" rejection means), and
+  // pull already resolves the same way. Falls back to the local branch
+  // name only when the remote has nothing yet (a genuinely first push),
+  // where there's no remote name to defer to.
+  let remoteBranch = localBranch;
   try {
-    await git(dir, ['push', '-u', authedUrl, `${branch}:${branch}`], { timeout: PUSH_PULL_TIMEOUT_MS });
+    const resolved = await resolveRemoteBranch(authedUrl, localBranch);
+    if (resolved.branch) remoteBranch = resolved.branch;
+  } catch {
+    // Remote unreachable for discovery — fall through and let the push
+    // itself surface a clear error instead of failing early here.
+  }
+
+  try {
+    await git(dir, ['push', '-u', authedUrl, `${localBranch}:${remoteBranch}`], { timeout: PUSH_PULL_TIMEOUT_MS });
   } catch (err) {
     throw new Error(friendlyGitError(err));
   }
