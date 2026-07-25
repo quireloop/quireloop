@@ -70,6 +70,14 @@ const PdfViewer = forwardRef(function PdfViewer({ url, projectId, onJumpToSource
     // finishes) — a stale render must not touch the DOM once superseded.
     const token = ++renderTokenRef.current;
     const container = containerRef.current;
+    // Recompiles produce a brand-new PDF URL every time (cache-busting), so
+    // this effect re-fires on every compile even when the reader hasn't
+    // moved — capture how far down they'd scrolled as a ratio (not an
+    // absolute pixel offset, since page count/height can shift slightly)
+    // so we can put them back roughly where they were instead of snapping
+    // to page 1 on every single compile.
+    const scrollableHeight = container.scrollHeight - container.clientHeight;
+    const scrollRatio = scrollableHeight > 0 ? container.scrollTop / scrollableHeight : 0;
     container.innerHTML = '';
     pagesRef.current = [];
 
@@ -98,6 +106,11 @@ const PdfViewer = forwardRef(function PdfViewer({ url, projectId, onJumpToSource
       await page.render({ canvasContext: canvas.getContext('2d'), viewport, transform }).promise;
       if (renderTokenRef.current !== token) return;
       pagesRef.current.push({ canvas, pageNum, scale: useScale, heightPts: viewport.height / useScale });
+    }
+
+    const newScrollableHeight = container.scrollHeight - container.clientHeight;
+    if (newScrollableHeight > 0) {
+      container.scrollTop = scrollRatio * newScrollableHeight;
     }
   }
 

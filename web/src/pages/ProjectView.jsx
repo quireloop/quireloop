@@ -17,6 +17,7 @@ import SuggestionsPanel from '../components/SuggestionsPanel.jsx';
 import ChatPanel from '../components/ChatPanel.jsx';
 import AssistantPanel from '../components/AssistantPanel.jsx';
 import Logo from '../components/Logo.jsx';
+import ToolbarMenu, { MenuItem } from '../components/ToolbarMenu.jsx';
 import { buildOutline, countWords } from '../lib/outline.js';
 import { useDarkMode, useSidebarOpen } from '../lib/theme.js';
 import { parseBibEntries } from '../lib/bibtex.js';
@@ -50,6 +51,7 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [initialLine, setInitialLine] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [compileResult, setCompileResult] = useState(null);
+  const [logExpanded, setLogExpanded] = useState(false);
   const [compiling, setCompiling] = useState(false);
   const [sidebarTab, setSidebarTab] = useState('files');
   const [showSymbols, setShowSymbols] = useState(false);
@@ -456,6 +458,10 @@ export default function ProjectView({ projectId, onBack, user }) {
     try {
       const result = await api.compile(projectId);
       setCompileResult(result);
+      // Only pop the log open when there's actually something to look at —
+      // a clean compile just updates the one-line status strip instead of
+      // shoving the editor content out of the way on every single click.
+      setLogExpanded(!result.success || (result.problems ?? []).length > 0);
       applyDiagnosticsToEditor(result.problems);
       if (result.success) {
         setPdfUrl(api.pdfUrl(projectId));
@@ -708,6 +714,104 @@ export default function ProjectView({ projectId, onBack, user }) {
             position: 'relative',
           }}
         >
+          <ToolbarMenu label="Menu">
+            {manifest && (
+              <MenuItem onClick={() => setShowShare((v) => !v)} active={showShare}>
+                Share
+              </MenuItem>
+            )}
+            <MenuItem onClick={() => setAutoCompile((v) => !v)} active={autoCompile} title="Compiles automatically after edits settle">
+              Auto-compile
+            </MenuItem>
+            {manifest && (
+              <div style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <span style={{ color: 'var(--text-muted)' }}>Compiler</span>
+                <select
+                  value={manifest.compiler ?? 'pdflatex'}
+                  onChange={(e) => handleCompilerChange(e.target.value)}
+                  disabled={isViewer}
+                  style={{ fontSize: 13, flex: 1 }}
+                >
+                  <option value="pdflatex">pdfLaTeX</option>
+                  <option value="xelatex">XeLaTeX</option>
+                  <option value="lualatex">LuaLaTeX</option>
+                </select>
+              </div>
+            )}
+            <MenuItem onClick={handleClean}>Clean aux files</MenuItem>
+            <a
+              href={api.downloadUrl(projectId)}
+              download
+              style={{ fontSize: 13, padding: '7px 10px', borderRadius: 'var(--radius-sm)' }}
+            >
+              Download .zip
+            </a>
+          </ToolbarMenu>
+          {showShare && manifest && (
+            <ShareModal
+              manifest={manifest}
+              isOwner={manifest.ownerId === user?.id}
+              onClose={() => setShowShare(false)}
+              onUpdated={setManifest}
+            />
+          )}
+
+          <ToolbarMenu
+            label="Edit"
+            badge={
+              (commentThreads.filter((t) => !t.resolved).length > 0 ? 1 : 0) +
+              (suggestions.length > 0 ? 1 : 0) +
+              (unreadChat > 0 ? 1 : 0)
+            }
+          >
+            <MenuItem
+              onClick={() => setSpellcheck((v) => !v)}
+              active={spellcheck}
+              title="Uses your OS/browser dictionary, so it will flag LaTeX commands too"
+            >
+              Spell check
+            </MenuItem>
+            <MenuItem onClick={() => setVimMode((v) => !v)} active={vimMode}>
+              Vim keybindings
+            </MenuItem>
+            <MenuItem onClick={() => setShowSymbols((v) => !v)} active={showSymbols}>
+              Insert symbol
+            </MenuItem>
+            {pdfUrl && <MenuItem onClick={handleShowInPdf}>Show in PDF</MenuItem>}
+            <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+            {!isViewer && (
+              <MenuItem
+                onClick={() => setSuggestMode((v) => !v)}
+                active={suggestMode}
+                title="Your edits become pending suggestions others can accept or reject"
+              >
+                Suggest mode
+              </MenuItem>
+            )}
+            <MenuItem onClick={() => setShowSuggestions((v) => !v)} active={showSuggestions}>
+              Suggestions{suggestions.length > 0 ? ` (${suggestions.length})` : ''}
+            </MenuItem>
+            <MenuItem
+              onClick={handleCreateComment}
+              disabled={!selectionNonEmpty}
+              title={selectionNonEmpty ? 'Comment on the selected text' : 'Select some text to comment on it'}
+            >
+              Comment on selection
+            </MenuItem>
+            <MenuItem onClick={() => setShowComments((v) => !v)} active={showComments}>
+              Comments{commentThreads.filter((t) => !t.resolved).length > 0 ? ` (${commentThreads.filter((t) => !t.resolved).length})` : ''}
+            </MenuItem>
+            <MenuItem onClick={() => setShowChat((v) => !v)} active={showChat}>
+              Chat{unreadChat > 0 ? ` (${unreadChat})` : ''}
+            </MenuItem>
+            {assistantEnabled && (
+              <MenuItem onClick={() => setShowAssistant((v) => !v)} active={showAssistant} title="Ask about your paper, fix LaTeX, draft passages">
+                ✨ Assistant
+              </MenuItem>
+            )}
+          </ToolbarMenu>
+          {showSymbols && <SymbolPalette onInsert={handleInsertSnippet} onClose={() => setShowSymbols(false)} />}
+
           <button
             onClick={() => setDark(!dark)}
             title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -715,28 +819,7 @@ export default function ProjectView({ projectId, onBack, user }) {
           >
             {dark ? '☀ Light' : '🌙 Dark'}
           </button>
-          <button
-            onClick={() => setSpellcheck((v) => !v)}
-            title={
-              spellcheck
-                ? 'Browser spell check is on — uses your OS/browser dictionary, so it will flag LaTeX commands too'
-                : 'Browser spell check is off'
-            }
-            style={{ fontSize: 13, background: spellcheck ? 'var(--accent-bg)' : undefined }}
-          >
-            Aa
-          </button>
-          <button
-            onClick={() => setVimMode((v) => !v)}
-            title={vimMode ? 'Vim keybindings are on' : 'Vim keybindings are off'}
-            style={{ fontSize: 13, background: vimMode ? 'var(--accent-bg)' : undefined }}
-          >
-            Vim
-          </button>
-          <button onClick={() => setShowSymbols((v) => !v)} style={{ fontSize: 13 }}>
-            Insert
-          </button>
-          {showSymbols && <SymbolPalette onInsert={handleInsertSnippet} onClose={() => setShowSymbols(false)} />}
+
           <button onClick={handleToggleHistory} style={{ fontSize: 13 }}>
             History
           </button>
@@ -751,120 +834,9 @@ export default function ProjectView({ projectId, onBack, user }) {
               onClose={() => setShowHistory(false)}
             />
           )}
-          {!isViewer && (
-            <button
-              onClick={() => setSuggestMode((v) => !v)}
-              title={
-                suggestMode
-                  ? 'Suggest mode is on — your edits become pending suggestions others can accept or reject'
-                  : 'Suggest mode is off — edits apply directly'
-              }
-              style={{ fontSize: 13, background: suggestMode ? 'var(--accent-bg)' : undefined }}
-            >
-              ✏ Suggest
-            </button>
-          )}
-          <button
-            onClick={() => setShowSuggestions((v) => !v)}
-            style={{ fontSize: 13, background: showSuggestions ? 'var(--accent-bg)' : undefined }}
-          >
-            Suggestions{suggestions.length > 0 ? ` (${suggestions.length})` : ''}
-          </button>
-          <button
-            onClick={handleCreateComment}
-            disabled={!selectionNonEmpty}
-            title={selectionNonEmpty ? 'Comment on the selected text' : 'Select some text to comment on it'}
-            style={{ fontSize: 13 }}
-          >
-            💬 Comment
-          </button>
-          <button
-            onClick={() => setShowComments((v) => !v)}
-            style={{ fontSize: 13, background: showComments ? 'var(--accent-bg)' : undefined }}
-          >
-            Comments{commentThreads.filter((t) => !t.resolved).length > 0 ? ` (${commentThreads.filter((t) => !t.resolved).length})` : ''}
-          </button>
-          <button
-            onClick={() => setShowChat((v) => !v)}
-            style={{ fontSize: 13, background: showChat ? 'var(--accent-bg)' : undefined, position: 'relative' }}
-          >
-            Chat
-            {unreadChat > 0 && (
-              <span
-                style={{
-                  position: 'absolute',
-                  top: -6,
-                  right: -6,
-                  background: '#d64545',
-                  color: 'white',
-                  borderRadius: 8,
-                  fontSize: 10,
-                  padding: '1px 5px',
-                  lineHeight: 1.4,
-                }}
-              >
-                {unreadChat}
-              </span>
-            )}
-          </button>
-          {assistantEnabled && (
-            <button
-              onClick={() => setShowAssistant((v) => !v)}
-              title="AI writing assistant — ask about your paper, fix LaTeX, draft passages"
-              style={{ fontSize: 13, background: showAssistant ? 'var(--accent-bg)' : undefined }}
-            >
-              ✨ Assistant
-            </button>
-          )}
-          {manifest && (
-            <button onClick={() => setShowShare((v) => !v)} style={{ fontSize: 13 }}>
-              Share
-            </button>
-          )}
-          {showShare && manifest && (
-            <ShareModal
-              manifest={manifest}
-              isOwner={manifest.ownerId === user?.id}
-              onClose={() => setShowShare(false)}
-              onUpdated={setManifest}
-            />
-          )}
-          {manifest && (
-            <select
-              value={manifest.compiler ?? 'pdflatex'}
-              onChange={(e) => handleCompilerChange(e.target.value)}
-              disabled={isViewer}
-              style={{ fontSize: 13 }}
-            >
-              <option value="pdflatex">pdfLaTeX</option>
-              <option value="xelatex">XeLaTeX</option>
-              <option value="lualatex">LuaLaTeX</option>
-            </select>
-          )}
-          <button onClick={handleClean} style={{ fontSize: 13 }}>
-            Clean Aux Files
-          </button>
-          <a href={api.downloadUrl(projectId)} download style={{ fontSize: 13 }}>
-            Download .zip
-          </a>
-          {pdfUrl && (
-            <button onClick={handleShowInPdf} style={{ fontSize: 13 }}>
-              Show in PDF
-            </button>
-          )}
-          <button onClick={handleCompile} disabled={compiling} style={{ padding: '6px 16px' }}>
+
+          <button onClick={handleCompile} disabled={compiling} className="compile-button" style={{ padding: '6px 16px' }}>
             {compiling ? 'Compiling…' : 'Compile'}
-          </button>
-          <button
-            onClick={() => setAutoCompile((v) => !v)}
-            title={
-              autoCompile
-                ? 'Auto-compile is on — compiles automatically after edits settle'
-                : 'Auto-compile is off — click Compile manually'
-            }
-            style={{ fontSize: 13, background: autoCompile ? 'var(--accent-bg)' : undefined }}
-          >
-            Auto
           </button>
         </div>
       </div>
@@ -985,6 +957,8 @@ export default function ProjectView({ projectId, onBack, user }) {
                   log={compileResult.log}
                   success={compileResult.success}
                   problems={compileResult.problems}
+                  expanded={logExpanded}
+                  onToggleExpanded={() => setLogExpanded((v) => !v)}
                   onClose={() => setCompileResult(null)}
                   onJump={jumpToSource}
                 />

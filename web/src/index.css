@@ -3,34 +3,39 @@
 }
 
 :root {
-  --bg: #f4f4f4;
+  --bg: #f7f8fa;
   --panel-bg: #ffffff;
-  --text: #1a1a1a;
-  --text-muted: #666666;
-  --border: #dddddd;
-  --accent-bg: #e0e7ff;
-  --accent: #4f46e5;
-  --pdf-bg: #e5e5e5;
+  --text: #1f2328;
+  --text-muted: #5b6572;
+  --border: #e1e4e8;
+  --accent-bg: #eaf1ff;
+  --accent: #2f6fed;
+  --pdf-bg: #ececee;
+  --primary: #1a7f37;
+  --primary-hover: #146c2e;
   --radius: 8px;
   --radius-sm: 6px;
 }
 
 :root[data-theme='dark'] {
-  --bg: #1e1e1e;
-  --panel-bg: #2a2a2a;
-  --text: #e8e8e8;
-  --text-muted: #999999;
-  --border: #444444;
-  --accent-bg: #3a3f66;
-  --accent: #818cf8;
-  --pdf-bg: #161616;
+  --bg: #181a1f;
+  --panel-bg: #22252b;
+  --text: #e8eaed;
+  --text-muted: #97a0ad;
+  --border: #383c44;
+  --accent-bg: #253355;
+  --accent: #6d97ff;
+  --pdf-bg: #101114;
+  --primary: #2ea043;
+  --primary-hover: #3fb954;
 }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
 button {
@@ -94,4 +99,18 @@ a {
 
 .pop-in {
   animation: popIn 0.12s ease-out;
+}
+
+/* Primary action — Compile is the one button on the toolbar that should
+   read as "the button to press", same idea as the hosted editor's green Recompile. */
+.compile-button {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+.compile-button:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
