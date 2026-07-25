@@ -210,20 +210,40 @@ async function currentBranch(dir) {
 }
 
 function friendlyGitError(err) {
-  const stderr = err.stderr ?? '';
-  if (/authentication|403/i.test(stderr)) return 'authentication failed — check the remote token and try again';
-  if (/rejected|non-fast-forward/i.test(stderr)) return 'rejected — pull first to bring in remote changes';
-  if (/conflict/i.test(stderr)) {
-    return 'pull created a merge conflict — open the hosted editor and this project side by side and resolve it there, or in the .tex file directly, then commit and push again';
+  // A merge conflict's "CONFLICT (...)" line is on stdout (it's the merge
+  // command's own informational output), not stderr — matching only
+  // stderr meant conflicts were falling through to the generic fallback
+  // message instead of the dedicated one below.
+  const combined = `${err.stdout ?? ''}\n${err.stderr ?? ''}`;
+  // Raw git output appended to every message (not just the fallback) so
+  // whatever pattern this doesn't anticipate is still visible directly in
+  // the Source Control panel's error banner — no server access needed to
+  // diagnose an unfamiliar failure.
+  const detail = combined
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(' | ');
+  const withDetail = (msg) => (detail ? `${msg} [git: ${detail}]` : msg);
+
+  if (/authentication|403/i.test(combined)) return withDetail('authentication failed — check the remote token and try again');
+  if (/conflict/i.test(combined)) {
+    return withDetail(
+      'pull created a merge conflict — open the hosted editor and this project side by side and resolve it there, or in the .tex file directly, then commit and push again'
+    );
   }
-  if (/couldn't find remote ref/i.test(stderr)) {
-    return "the remote has no content to pull yet — for the hosted editor, make sure you've opened that project's own Menu → Git panel at least once (that's what provisions its git bridge) and that the URL is exactly https://git.hosted-editor.com/<project id> from that panel, not the regular hosted-editor.com project link";
+  if (/rejected|non-fast-forward/i.test(combined)) return withDetail('rejected — pull first to bring in remote changes');
+  if (/couldn't find remote ref/i.test(combined)) {
+    return withDetail(
+      "the remote has no content to pull yet — for the hosted editor, make sure you've opened that project's own Menu → Git panel at least once (that's what provisions its git bridge) and that the URL is exactly https://git.hosted-editor.com/<project id> from that panel, not the regular hosted-editor.com project link"
+    );
   }
-  if (/repository not found|not found/i.test(stderr)) {
-    return "remote repository not found — double check the URL (for the hosted editor: https://git.hosted-editor.com/<project id>, not the regular hosted-editor.com project link)";
+  if (/repository not found|not found/i.test(combined)) {
+    return withDetail("remote repository not found — double check the URL (for the hosted editor: https://git.hosted-editor.com/<project id>, not the regular hosted-editor.com project link)");
   }
   if (err.timedOut) return 'timed out — check the remote URL and your connection';
-  return stderr.split('\n').find(Boolean) || 'git command failed';
+  return detail || 'git command failed';
 }
 
 export async function pushProject(ownerId, projectId) {
@@ -242,14 +262,50 @@ export async function pushProject(ownerId, projectId) {
   return { ok: true };
 }
 
+// Asks the remote what branches it actually has, instead of assuming the
+// local branch name applies there too. `pushProject` blindly pushing
+// `master:master` still works even if this is wrong (git creates the ref),
+// but a wrong assumption here is exactly "couldn't find remote ref X" —
+// so pull is worth the extra round trip to get right, and it also means a
+// remote that isn't the hosted editor (doesn't use `master`) just works.
+async function resolveRemoteBranch(authedUrl, localBranch) {
+  const { stdout } = await execa('git', ['ls-remote', '--heads', authedUrl], {
+    timeout: PUSH_PULL_TIMEOUT_MS,
+  });
+  const heads = stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.split('\t')[1]?.replace('refs/heads/', ''))
+    .filter(Boolean);
+  if (heads.length === 0) return { branch: null, heads };
+  if (heads.includes(localBranch)) return { branch: localBranch, heads };
+  if (heads.includes('master')) return { branch: 'master', heads };
+  return { branch: heads[0], heads };
+}
+
 export async function pullProject(ownerId, projectId) {
   const dir = projectDir(ownerId, projectId);
   await ensureGitRepo(ownerId, projectId);
   const creds = await readCredentials(ownerId, projectId);
   if (!creds) throw new Error('no remote configured yet — set one first');
 
-  const branch = await currentBranch(dir);
+  const localBranch = await currentBranch(dir);
   const authedUrl = withToken(creds.url, creds.token);
+
+  let branch;
+  try {
+    const resolved = await resolveRemoteBranch(authedUrl, localBranch);
+    if (!resolved.branch) {
+      throw new Error(
+        "the remote reports no branches at all — for the hosted editor, open that project's own Menu → Git panel on the hosted editor's site at least once first (that's what provisions its git bridge), and double check the URL is exactly https://git.hosted-editor.com/<project id>"
+      );
+    }
+    branch = resolved.branch;
+  } catch (err) {
+    if (err.stderr !== undefined) throw new Error(friendlyGitError(err));
+    throw err;
+  }
+
   try {
     // --allow-unrelated-histories: a project connected to an existing
     // the hosted editor project after already having local commits (the normal
