@@ -17,7 +17,7 @@ lives on your own server.
 
 This is a **self-hosted team LaTeX editor**, built for a lab or research
 group to run on a machine they control (their own server, a lab box, a
-small VPS) instead of renting an the hosted editor subscription per collaborator.
+small VPS) instead of renting an subscription per collaborator.
 It has accounts, invite-only signup, an admin panel, roles (editor/viewer),
 share links, and real-time collaborative editing (Yjs CRDT) with
 attribution, comments, and chat — the collaboration features the hosted editor
