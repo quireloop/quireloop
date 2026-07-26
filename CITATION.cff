@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: >-
+  If you use Quireloop in noncommercial academic or research work
+  (including at an educational, public-research, or government
+  institution), please cite it as below. This is requested under the
+  Attribution Addendum of the project's license (see LICENSE).
+title: Quireloop
+authors:
+  - family-names: Pogaku
+    given-names: Arjun
+repository-code: "https://github.com/arjunpogaku/quireloop"
+license: "PolyForm-Noncommercial-1.0.0 with Attribution Addendum"

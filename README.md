@@ -244,4 +244,15 @@ credentials and project content aren't sent in the clear.
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+PolyForm Noncommercial License 1.0.0, with Attribution Addendum — see
+[LICENSE](LICENSE).
+
+**In short:** free for any noncommercial use — individuals, students,
+researchers, universities, government and public-research institutions,
+nonprofits — no need to ask, as long as you credit Quireloop / Arjun Pogaku
+in any resulting publication or public description of the work (see
+[CITATION.cff](CITATION.cff) for a ready-made citation). Commercial use
+(for-profit companies) isn't covered by this license — email
+pchakri.rj@gmail.com to arrange a separate commercial license. This is a
+source-available license, not an OSI-approved open-source license — see the
+LICENSE file for the full terms.
