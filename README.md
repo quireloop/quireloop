@@ -4,7 +4,7 @@
 
 <h1 align="center">Quireloop</h1>
 
-<p align="center">Created by <a href="https://github.com/arjunpogaku">Arjun Pogaku</a> · Apache 2.0</p>
+<p align="center">Created by <a href="https://github.com/arjunpogaku">Arjun Pogaku</a> · PolyForm Noncommercial 1.0.0</p>
 
 A self-hosted, multi-user web IDE for writing LaTeX: a project/file
 manager, a real-time collaborative code editor with LaTeX syntax
