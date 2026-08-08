@@ -160,6 +160,7 @@ unit, or just prefix the `node` command when running manually.
 | `QUIRELOOP_DATA_DIR` | `<repo>/data` | Where all persistent state lives — accounts, invites, the session-signing key, and every project (with its git history and version snapshots). Docker's image sets this to `/data` and expects a volume mounted there; leave it as the image default rather than overriding it unless you know why you're changing it. |
 | `QUIRELOOP_OPEN_SIGNUP` | unset (`false`) | When `true`, signup stays open to anyone who can reach the server, even after the first account exists. Default behavior (unset) is: the very first account can always sign up freely (bootstrapping), and every account after that requires an admin-issued invite code/link. |
 | `QUIRELOOP_SECURE_COOKIES` | unset (`false`) | When `true`, the session cookie is set with the `secure` flag, so browsers will only send it over HTTPS. Set this once TLS (e.g. the nginx config above) is actually in front of the server — turning it on without TLS in place will lock everyone out, since the cookie won't be sent back over plain HTTP. |
+| `QUIRELOOP_LIBRARY_DIRS` | unset (feature off) | Colon-separated host directories members may browse and open as projects **in place**, via "Open a Folder…" on the dashboard — for editing papers that already live on the server (or on your own machine, running locally) without importing or copying them. Write a root as `/srv/papers` or `Label=/srv/papers`. Leave unset and the feature, its API, and its button do not exist. See [Opening folders already on the server](#opening-folders-already-on-the-server) below before setting it — a root is readable and writable by **every** member unless you use the `{userId}` / `{user}` / `{email}` placeholders to give each one their own. |
 | `QUIRELOOP_ANTHROPIC_API_KEY` | unset | Server-wide **fallback** Anthropic key, only used for members who haven't set their own key in Account settings → ✨ AI Assistant. Most installs don't need this — each lab member brings their own pay-as-you-go key (console.anthropic.com), billed to them individually, not to the server. When both this and a stored admin-panel key exist, the env var wins. Falls back to `ANTHROPIC_API_KEY` if set. |
 | `QUIRELOOP_ASSISTANT_MODEL` | `claude-opus-4-8` | Model used by the fallback key above; also settable in the Admin panel (env wins). Has no effect on members using their own key — they pick their own model in Account settings. |
 | `QUIRELOOP_OLLAMA_BASE_URL` / `QUIRELOOP_OLLAMA_MODEL` | unset | Server-wide fallback pointing at an Ollama instance (e.g. one running on this same box on port 11434) instead of Anthropic — same fallback-only semantics as above. Each member can instead point at their own Ollama server from Account settings. |
@@ -176,6 +177,48 @@ subscription (the kind used by the Claude Code CLI or the VS Code
 extension) cannot be linked here — that login is restricted by Anthropic
 to their own first-party apps. Use a pay-as-you-go API key or Ollama
 instead.
+
+## Opening folders already on the server
+
+By default a project is something Quireloop creates and stores inside
+`QUIRELOOP_DATA_DIR`. `QUIRELOOP_LIBRARY_DIRS` adds the other direction: point
+it at directories that already exist on the host, and members get an "Open a
+Folder…" button that browses them and opens one as a project **in place** —
+useful when your papers already live in `~/papers` or on a mounted NVMe and you
+don't want a second copy inside `data/`.
+
+```
+QUIRELOOP_LIBRARY_DIRS=Papers=/srv/papers:Shared=/mnt/nvme/latex
+```
+
+What "in place" means concretely:
+
+- The project slot under `data/projects/` is a **symlink** to your folder.
+  Nothing is copied, and edits, uploads and renames in the UI change the real
+  files immediately.
+- Quireloop writes its own bookkeeping into that folder: `manifest.json`,
+  `build/` (so the compiled PDF lands next to your sources), `versions/`, and
+  the dotfiles backing comments/chat/collaborative editing. That's deliberate —
+  the folder stays self-describing, so you can move it and reopen it later with
+  its name and main-file setting intact.
+- **Removing** such a project from the dashboard only removes the link. Your
+  folder and everything in it is left exactly where it is. This is the one
+  place the UI says "Remove" rather than "Delete".
+- Quireloop will **not** run `git init` in a folder you already had. If the
+  folder is already a git repo, the Source Control panel works normally against
+  your existing history.
+
+Two things to get right before enabling it on a shared server:
+
+1. **A plain root is visible to every member**, not just you — anyone with an
+   account can browse it and open anything in it. For per-member libraries, put
+   `{userId}`, `{user}` (the email's local part) or `{email}` in the path:
+   `QUIRELOOP_LIBRARY_DIRS=My papers=/srv/home/{user}/papers`. Roots that don't
+   exist for a given member are simply not shown to them.
+2. **Nothing outside the roots is reachable.** Paths are checked after
+   resolving symlinks on both sides, so a link planted inside a root pointing
+   at `/etc` is rejected rather than followed. Keep the roots as narrow as the
+   work actually needs — this is the only boundary.
 
 **Security checklist before going live:**
 - Set `QUIRELOOP_SECURE_COOKIES=true` once nginx TLS is actually in front (see above) — it's opt-in, easy to forget, and without it the session cookie isn't marked HTTPS-only.

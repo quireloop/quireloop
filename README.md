@@ -48,6 +48,11 @@ once it's running.
   alongside the editor.
 - **Projects & files** — multiple projects, nested folders, image/`.bib`
   uploads, drag-and-drop, rename/delete.
+- **Open folders already on disk** — point `QUIRELOOP_LIBRARY_DIRS` at
+  directories on the server (or on your own machine, running locally) and
+  members can open a folder of `.tex` files as a project *in place*: no
+  import, no copy, edits go straight to the real files and the PDF is
+  built next to them. Removing the project leaves the folder untouched.
 - **Templates** — start a new project from Blank, Article, Report, Beamer,
   or CV/Resume.
 - **Editor** — CodeMirror 6 with LaTeX syntax highlighting, autocomplete,

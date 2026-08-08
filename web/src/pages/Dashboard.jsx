@@ -6,6 +6,7 @@ import Logo from '../components/Logo.jsx';
 import AccountSettings from '../components/AccountSettings.jsx';
 import AdminPanel from '../components/AdminPanel.jsx';
 import ReactiveBackground from '../components/ReactiveBackground.jsx';
+import FolderBrowser from '../components/FolderBrowser.jsx';
 
 function ImportFromthe hosted editor({ onClose, onImported }) {
   const [name, setName] = useState('');
@@ -87,6 +88,8 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
   const [templateId, setTemplateId] = useState('blank');
   const [error, setError] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [showFolders, setShowFolders] = useState(false);
+  const [libraryRoots, setLibraryRoots] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [showSettings, setShowSettings] = useState(false);
@@ -110,6 +113,12 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
   useEffect(() => {
     refresh();
     api.listTemplates().then(setTemplates);
+    // Opening server folders is off unless the operator allowlisted some, so
+    // the button only appears when there's actually something to browse.
+    api
+      .libraryRoots()
+      .then((res) => setLibraryRoots(res.enabled ? res.roots : []))
+      .catch(() => setLibraryRoots([]));
   }, []);
 
   async function handleCreate(e) {
@@ -124,9 +133,15 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
     }
   }
 
-  async function handleDelete(id) {
-    if (!confirm('Delete this project? This cannot be undone.')) return;
-    await api.deleteProject(id);
+  // A linked project is a folder the user already had — removing it only stops
+  // Quireloop showing it, so the wording must not imply their files are going
+  // anywhere.
+  async function handleDelete(project) {
+    const message = project.linkedPath
+      ? `Remove "${project.name}" from Quireloop?\n\nYour folder at ${project.linkedPath} stays exactly where it is — only the link to it is removed.`
+      : 'Delete this project? This cannot be undone.';
+    if (!confirm(message)) return;
+    await api.deleteProject(project.id);
     await refresh();
   }
 
@@ -203,8 +218,13 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
         </button>
       </form>
 
-      {!showImport && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+      {!showImport && !showFolders && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+          {libraryRoots.length > 0 && (
+            <button onClick={() => setShowFolders(true)} style={{ fontSize: 13 }}>
+              Open a Folder…
+            </button>
+          )}
           <button onClick={() => setShowImport(true)} style={{ fontSize: 13 }}>
             Import from the hosted editor…
           </button>
@@ -216,6 +236,16 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
         </div>
       )}
       {showImport && <ImportFromthe hosted editor onClose={() => setShowImport(false)} onImported={handleImported} />}
+      {showFolders && (
+        <FolderBrowser
+          roots={libraryRoots}
+          onClose={() => setShowFolders(false)}
+          onOpened={(project) => {
+            setShowFolders(false);
+            onOpen(project.id);
+          }}
+        />
+      )}
 
       <div style={{ display: 'grid', gap: 12 }}>
         {projects.map((p) => (
@@ -247,16 +277,32 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
                   Shared{p.yourRole ? ` · ${p.yourRole}` : ''}
                 </span>
               )}
+              {p.linkedPath && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: 11,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: 'var(--accent-bg)',
+                    color: 'var(--text-muted)',
+                  }}
+                  title={p.linkedPath}
+                >
+                  Folder
+                </span>
+              )}
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Updated {new Date(p.updatedAt).toLocaleString()}
+                {p.linkedPath && ` · ${p.linkedPath}`}
               </div>
             </div>
             <a href={api.downloadUrl(p.id)} download style={{ marginRight: 12, fontSize: 13 }}>
               Download .zip
             </a>
             {p.ownerId === user?.id && (
-              <button onClick={() => handleDelete(p.id)} style={{ color: 'crimson' }}>
-                Delete
+              <button onClick={() => handleDelete(p)} style={{ color: 'crimson' }}>
+                {p.linkedPath ? 'Remove' : 'Delete'}
               </button>
             )}
           </div>

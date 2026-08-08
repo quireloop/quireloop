@@ -27,24 +27,33 @@ const GITIGNORE_CONTENT = `# Quireloop bookkeeping — not part of your project
 .DS_Store
 `;
 
-// Every project directory lives under PROJECTS_DIR (<ownerId>/<projectId>),
-// which itself lives inside this app's own repo (as gitignored data), so
-// naive repo discovery (git walking upward from -C dir looking for the
-// nearest .git) finds *this app's* repo, not a project-local one — and any
-// add/commit then silently lands there instead. GIT_CEILING_DIRECTORIES
-// stops that walk at PROJECTS_DIR, so git can never see anything above a
-// given project folder, no matter what.
-function git(dir, args, opts = {}) {
+// Naive repo discovery — git walking upward from -C dir looking for the
+// nearest .git — finds whatever repo the project folder happens to sit inside,
+// and any add/commit then silently lands there instead. For a normal project
+// that parent is *this app's own repo* (data/ is gitignored inside it); for a
+// linked project (see manifest.linkProject) it could be any repo the user
+// keeps above their papers folder. GIT_CEILING_DIRECTORIES stops the walk at
+// the project's own parent so git can never see above it in either case.
+//
+// The ceiling has to be the parent of the *real* path: a linked project's
+// directory is a symlink, and git resolves it before comparing ancestry, so a
+// ceiling naming the symlink's parent would never match. PROJECTS_DIR is kept
+// as the fallback for the case where realpath fails.
+async function git(dir, args, opts = {}) {
+  const ceiling = await fs
+    .realpath(dir)
+    .then((real) => path.dirname(real))
+    .catch(() => PROJECTS_DIR);
   return execa('git', ['-C', dir, ...args], {
     ...opts,
-    env: { ...process.env, GIT_CEILING_DIRECTORIES: PROJECTS_DIR, ...opts.env },
+    env: { ...process.env, GIT_CEILING_DIRECTORIES: ceiling, ...opts.env },
   });
 }
 
 // Checked directly on disk, never via `git rev-parse` — with ceiling
 // directories unset (e.g. before this function's own safety net applies)
 // that call would happily report the parent app repo as "the" repo.
-async function hasGitRepo(dir) {
+export async function hasGitRepo(dir) {
   try {
     const stat = await fs.stat(path.join(dir, '.git'));
     return stat.isDirectory();

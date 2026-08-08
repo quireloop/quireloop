@@ -22,6 +22,27 @@ export const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 export const PORT = process.env.PORT ? Number(process.env.PORT) : 4173;
 export const HOST = '0.0.0.0';
 
+// Host directories that members may browse and open as projects in place
+// ("Open a folder on the server"), colon-separated. Empty — the default —
+// disables the feature entirely: without an explicit allowlist, a browse API
+// is a filesystem read primitive for anyone with an account.
+//
+// A root may be written as "Label=/path". It may also contain the placeholders
+// {userId} or {email}, which expand per request — that is the only way to give
+// each member a private library, since a plain path is visible to every
+// member who is logged in.
+export const LIBRARY_DIRS = (process.env.QUIRELOOP_LIBRARY_DIRS || '')
+  .split(':')
+  .map((spec) => spec.trim())
+  .filter(Boolean)
+  .map((spec) => {
+    const eq = spec.indexOf('=');
+    const label = eq === -1 ? '' : spec.slice(0, eq).trim();
+    const dir = eq === -1 ? spec : spec.slice(eq + 1).trim();
+    return { label: label || path.basename(dir) || dir, dir };
+  })
+  .filter((root) => root.dir);
+
 // Mount everything (API, WebSocket, static assets) under this prefix when
 // deployed behind a reverse proxy at a subpath instead of the domain root,
 // e.g. "/quireloop". Empty string mounts at root, the default.

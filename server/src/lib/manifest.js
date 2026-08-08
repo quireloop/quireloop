@@ -3,7 +3,7 @@ import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { userDir, projectDir } from './storage.js';
 import { templateContent } from './templates.js';
-import { ensureGitRepo } from './projectGit.js';
+import { ensureGitRepo, hasGitRepo } from './projectGit.js';
 import * as projectIndex from './projectIndex.js';
 import * as sharedIndex from './sharedIndex.js';
 import { withLock, writeJsonAtomic } from './jsonStore.js';
@@ -47,7 +47,10 @@ export async function listProjects(ownerId) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const projects = [];
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    // A linked project (see linkProject) is a symlink to a folder elsewhere on
+    // the host, and readdir reports it as a link, not a directory — checking
+    // only isDirectory() would hide every linked project from the dashboard.
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     try {
       projects.push(await readManifest(ownerId, entry.name));
     } catch {
@@ -103,8 +106,68 @@ export async function createProject(ownerId, name, templateId = 'blank') {
   return manifest;
 }
 
+// True when this project is a link to a folder the user already had on the
+// host, rather than a directory Quireloop created and owns.
+export async function isLinkedProject(ownerId, projectId) {
+  try {
+    return (await fs.lstat(projectDir(ownerId, projectId))).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+// Opens a folder that already exists on the host as a project, in place — no
+// copy. The project slot under data/projects/ is a symlink to it, which means
+// every other part of the app (compile, git, collab, versions, search) keeps
+// working through projectDir() with no idea anything is different.
+//
+// Quireloop's bookkeeping (manifest.json, build/, versions/) is written into
+// that folder, deliberately: the project stays self-describing and portable,
+// and the compiled PDF lands next to the sources where the user expects it.
+export async function linkProject(ownerId, sourcePath, name, { initGit = false } = {}) {
+  const existing = await listProjects(ownerId);
+  const already = existing.find((p) => p.linkedPath === sourcePath);
+  if (already) {
+    throw new Error(`that folder is already open as "${already.name}"`);
+  }
+
+  const id = nanoid(10);
+  const slot = projectDir(ownerId, id);
+  await fs.mkdir(userDir(ownerId), { recursive: true });
+  await fs.symlink(sourcePath, slot, 'dir');
+
+  try {
+    // A folder opened before, then removed from the dashboard, still has its
+    // manifest.json — reuse the name/main file/compiler chosen last time
+    // rather than re-deriving them and losing the user's settings.
+    const previous = await readManifest(ownerId, id).catch(() => null);
+    return await buildManifestFromDirectory(ownerId, id, name || previous?.name, slot, path.basename(sourcePath), {
+      initGit,
+      extra: {
+        linkedPath: sourcePath,
+        ...(previous?.mainFile ? { mainFile: previous.mainFile } : {}),
+        ...(previous?.compiler ? { compiler: previous.compiler } : {}),
+      },
+    });
+  } catch (err) {
+    // Never leave a dangling slot pointing at the user's folder if the
+    // manifest couldn't be built (e.g. the folder turned out to be empty).
+    await fs.rm(slot, { force: true }).catch(() => {});
+    throw err;
+  }
+}
+
 export async function deleteProject(ownerId, projectId) {
-  await fs.rm(projectDir(ownerId, projectId), { recursive: true, force: true });
+  const dir = projectDir(ownerId, projectId);
+  // fs.rm unlinks a symlink rather than descending into its target, so a
+  // linked project's real folder is never touched — but this is the one call
+  // in the app that would destroy a user's own files if that ever changed, so
+  // the two cases are spelled out separately instead of relying on it.
+  if (await isLinkedProject(ownerId, projectId)) {
+    await fs.unlink(dir);
+  } else {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
   await projectIndex.removeOwner(projectId);
 }
 
@@ -146,7 +209,18 @@ async function walkFiles(root, base = '') {
 // Builds and writes a manifest for a project whose files already exist on
 // disk at `dir` (used by git-import and zip-upload, which both drop a whole
 // tree in place first and need a manifest built from what's actually there).
-export async function buildManifestFromDirectory(ownerId, id, name, dir, fallbackName) {
+// `initGit` is off for linked projects: running `git init` inside a folder the
+// user already had is a visible, unasked-for change to their own directory.
+// An already-initialised repo there still gets the full Source Control panel,
+// since ensureGitRepo is a no-op on a folder that has a .git.
+export async function buildManifestFromDirectory(
+  ownerId,
+  id,
+  name,
+  dir,
+  fallbackName,
+  { initGit = true, extra = {} } = {}
+) {
   const relPaths = await walkFiles(dir);
   if (relPaths.length === 0) {
     throw new Error('no files found');
@@ -168,10 +242,15 @@ export async function buildManifestFromDirectory(ownerId, id, name, dir, fallbac
     compiler: 'pdflatex',
     createdAt: now,
     files,
+    ...extra,
   };
+  // `extra` may carry a mainFile remembered from a previous session; drop it
+  // if that file isn't on disk any more, or compile would fail on a name the
+  // user can't see in the file tree.
+  if (!files.some((f) => f.path === manifest.mainFile)) manifest.mainFile = mainFile;
   const written = await writeManifest(ownerId, id, manifest);
   await projectIndex.setOwner(id, ownerId);
-  await ensureGitRepo(ownerId, id);
+  if (initGit || (await hasGitRepo(dir))) await ensureGitRepo(ownerId, id);
   return written;
 }
 

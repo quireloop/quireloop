@@ -11,6 +11,7 @@ import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import projectsRoutes from './routes/projects.js';
+import libraryRoutes from './routes/library.js';
 import filesRoutes from './routes/files.js';
 import compileRoutes from './routes/compile.js';
 import searchRoutes from './routes/search.js';
@@ -80,6 +81,7 @@ export async function buildApp({ logger = true } = {}) {
     authRoutes,
     adminRoutes,
     projectsRoutes,
+    libraryRoutes,
     filesRoutes,
     compileRoutes,
     searchRoutes,

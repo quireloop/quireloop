@@ -35,6 +35,14 @@ export const api = {
     const qs = name ? `?name=${encodeURIComponent(name)}` : '';
     return request(`/projects/upload-zip${qs}`, { method: 'POST', body: form });
   },
+  libraryRoots: () => request('/library/roots'),
+  browseLibrary: (path) => request(`/library/browse?path=${encodeURIComponent(path)}`),
+  openFolder: (path, name) =>
+    request('/projects/open-folder', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path, name }),
+    }),
   getProject: (id) => request(`/projects/${id}`),
   renameProject: (id, name) =>
     request(`/projects/${id}`, {
