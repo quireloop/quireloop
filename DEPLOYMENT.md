@@ -105,7 +105,7 @@ concern.
 **Run it** directly to sanity-check before wiring up systemd:
 ```
 cd server
-QUIRELOOP_DATA_DIR=/var/lib/quireloop/data PORT=4173 node src/index.js
+QUIRELOOP_DATA_DIR=/var/lib/quireloop/data PORT=4173 node src/start.js
 ```
 
 **Run it as a service:** copy

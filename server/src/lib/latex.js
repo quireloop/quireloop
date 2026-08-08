@@ -1,7 +1,9 @@
 import { execa } from 'execa';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { projectDir } from './storage.js';
+import { withLock } from './jsonStore.js';
 
 const ENGINE_FLAGS = {
   pdflatex: '-pdf',
@@ -9,11 +11,55 @@ const ENGINE_FLAGS = {
   lualatex: '-lualatex',
 };
 
+// A latexmk run is CPU-bound and can burn its full 60s budget. Nothing
+// previously limited how many could run at once, so a handful of people
+// hitting Compile — or one project with auto-compile-on-idle enabled and
+// several collaborators typing — could spawn enough concurrent LaTeX
+// processes to saturate the box and stall the server for everyone.
+//
+// Cap it at roughly half the cores (min 2), leaving headroom for the event
+// loop and everything else the server is doing.
+const MAX_CONCURRENT_COMPILES = Math.max(2, Math.floor(os.cpus().length / 2));
+
+let active = 0;
+const waiting = [];
+
+async function acquireCompileSlot() {
+  if (active < MAX_CONCURRENT_COMPILES) {
+    active += 1;
+    return;
+  }
+  await new Promise((resolve) => waiting.push(resolve));
+  active += 1;
+}
+
+function releaseCompileSlot() {
+  active -= 1;
+  waiting.shift()?.();
+}
+
+async function withCompileSlot(fn) {
+  await acquireCompileSlot();
+  try {
+    return await fn();
+  } finally {
+    releaseCompileSlot();
+  }
+}
+
 // Compiles a project's main file with latexmk. Never throws for LaTeX
 // compile failures (non-zero latexmk exit) — only for infra problems
 // (e.g. latexmk not found), which callers should treat as a 500.
 export async function compileProject(ownerId, projectId, mainFile, compiler = 'pdflatex') {
   const cwd = projectDir(ownerId, projectId);
+  // Two compiles of the *same* project share one build/ directory, so they'd
+  // interleave writes to the same .aux/.fls/.synctex files and corrupt each
+  // other's intermediate state. The per-project lock serializes those; the
+  // global slot below bounds how many different projects compile at once.
+  return withLock(`compile:${cwd}`, () => withCompileSlot(() => runLatexmk(cwd, mainFile, compiler)));
+}
+
+async function runLatexmk(cwd, mainFile, compiler) {
   const outdir = 'build';
   const engineFlag = ENGINE_FLAGS[compiler] ?? ENGINE_FLAGS.pdflatex;
   const pdfName = mainFile.replace(/\.tex$/, '.pdf');
@@ -74,11 +120,14 @@ export async function compileProject(ownerId, projectId, mainFile, compiler = 'p
 
 export async function cleanProject(ownerId, projectId, mainFile) {
   const cwd = projectDir(ownerId, projectId);
-  const outdir = 'build';
-  try {
-    await execa('latexmk', ['-C', `-outdir=${outdir}`, mainFile], { cwd, timeout: 30_000, reject: false });
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
+  // Shares build/ with compileProject — taking the same lock keeps a clean
+  // from deleting intermediates out from under an in-flight compile.
+  return withLock(`compile:${cwd}`, async () => {
+    try {
+      await execa('latexmk', ['-C', '-outdir=build', mainFile], { cwd, timeout: 30_000, reject: false });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
 }

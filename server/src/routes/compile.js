@@ -3,7 +3,7 @@ import { compileProject, cleanProject } from '../lib/latex.js';
 import { parseLatexLog } from '../lib/latexLog.js';
 import { resolveProjectPath } from '../lib/storage.js';
 import { createSnapshot } from '../lib/versions.js';
-import { requireProjectAccess } from '../lib/authMiddleware.js';
+import { requireProjectAccess, requireProjectWrite } from '../lib/authMiddleware.js';
 import * as collab from '../lib/collab.js';
 
 export default async function compileRoutes(app) {
@@ -18,7 +18,9 @@ export default async function compileRoutes(app) {
     return { ...result, problems };
   });
 
-  app.post('/api/projects/:id/clean', { preHandler: requireProjectAccess }, async (req) => {
+  // Deleting the build directory changes project state, so it needs write
+  // access — a viewer is read-only and must not be able to wipe it.
+  app.post('/api/projects/:id/clean', { preHandler: requireProjectWrite }, async (req) => {
     return cleanProject(req.ownerId, req.params.id, req.manifest.mainFile);
   });
 

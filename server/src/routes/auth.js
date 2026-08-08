@@ -100,7 +100,7 @@ export default async function authRoutes(app) {
     }
 
     const user = await findUserByEmail(email ?? '');
-    if (!user || !verifyPassword(password ?? '', user.passwordHash)) {
+    if (!user || !(await verifyPassword(password ?? '', user.passwordHash))) {
       registerFailure(ipKey);
       registerFailure(emailKey);
       return reply.code(401).send({ error: 'invalid email or password' });
@@ -160,13 +160,13 @@ export default async function authRoutes(app) {
   app.post('/api/auth/change-password', { preHandler: requireAuth }, async (req, reply) => {
     const { currentPassword, newPassword } = req.body ?? {};
     const user = await findUserById(req.userId);
-    if (!verifyPassword(currentPassword ?? '', user.passwordHash)) {
+    if (!(await verifyPassword(currentPassword ?? '', user.passwordHash))) {
       return reply.code(401).send({ error: 'current password is incorrect' });
     }
     if (!newPassword || newPassword.length < 8) {
       return reply.code(400).send({ error: 'new password must be at least 8 characters' });
     }
-    await updateUser(req.userId, { passwordHash: hashPassword(newPassword) });
+    await updateUser(req.userId, { passwordHash: await hashPassword(newPassword) });
     return { ok: true };
   });
 
@@ -198,7 +198,7 @@ export default async function authRoutes(app) {
   app.post('/api/auth/2fa/disable', { preHandler: requireAuth }, async (req, reply) => {
     const { password } = req.body ?? {};
     const user = await findUserById(req.userId);
-    if (!verifyPassword(password ?? '', user.passwordHash)) {
+    if (!(await verifyPassword(password ?? '', user.passwordHash))) {
       return reply.code(401).send({ error: 'incorrect password' });
     }
     await updateUser(req.userId, { twoFactorEnabled: false, twoFactorSecret: null, pendingTwoFactorSecret: null });

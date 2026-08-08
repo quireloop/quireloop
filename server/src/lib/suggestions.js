@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { projectDir } from './storage.js';
+import { withLock, writeJsonAtomic } from './jsonStore.js';
 
 const VALID_TYPES = new Set(['insert', 'delete']);
 
@@ -18,7 +19,7 @@ async function readSuggestions(ownerId, projectId) {
 }
 
 async function writeSuggestions(ownerId, projectId, records) {
-  await fs.writeFile(suggestionsPath(ownerId, projectId), JSON.stringify(records, null, 2));
+  await writeJsonAtomic(suggestionsPath(ownerId, projectId), records);
 }
 
 export function validateSuggestionType(type) {
@@ -33,19 +34,24 @@ export async function listSuggestions(ownerId, projectId, filePath) {
 }
 
 export async function createSuggestion(ownerId, projectId, { filePath, type, anchor, userId, email }) {
-  const records = await readSuggestions(ownerId, projectId);
-  const record = {
-    id: nanoid(10),
-    filePath,
-    type,
-    anchor,
-    createdBy: userId,
-    createdByEmail: email,
-    createdAt: new Date().toISOString(),
-  };
-  records.push(record);
-  await writeSuggestions(ownerId, projectId, records);
-  return record;
+  // Read-modify-write of one shared JSON file: collaborators hitting this
+  // at the same moment would otherwise each write a list built from the
+  // same stale read, silently dropping all but the last change.
+  return withLock(suggestionsPath(ownerId, projectId), async () => {
+    const records = await readSuggestions(ownerId, projectId);
+    const record = {
+      id: nanoid(10),
+      filePath,
+      type,
+      anchor,
+      createdBy: userId,
+      createdByEmail: email,
+      createdAt: new Date().toISOString(),
+    };
+    records.push(record);
+    await writeSuggestions(ownerId, projectId, records);
+    return record;
+  });
 }
 
 export async function getSuggestion(ownerId, projectId, suggestionId) {
@@ -57,9 +63,14 @@ export async function getSuggestion(ownerId, projectId, suggestionId) {
 // (or lack of one) happens client-side through the normal collab path, so
 // this is just record CRUD, same split of responsibility as comments.
 export async function removeSuggestion(ownerId, projectId, suggestionId) {
-  const records = await readSuggestions(ownerId, projectId);
-  const next = records.filter((r) => r.id !== suggestionId);
-  if (next.length === records.length) return false;
-  await writeSuggestions(ownerId, projectId, next);
-  return true;
+  // Read-modify-write of one shared JSON file: collaborators hitting this
+  // at the same moment would otherwise each write a list built from the
+  // same stale read, silently dropping all but the last change.
+  return withLock(suggestionsPath(ownerId, projectId), async () => {
+    const records = await readSuggestions(ownerId, projectId);
+    const next = records.filter((r) => r.id !== suggestionId);
+    if (next.length === records.length) return false;
+    await writeSuggestions(ownerId, projectId, next);
+    return true;
+  });
 }

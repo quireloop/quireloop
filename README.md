@@ -152,7 +152,7 @@ nothing to remember to start first. Logs land in
 `npm run service:uninstall`.
 
 On Linux, the equivalent is a `systemd --user` unit running
-`node server/src/index.js` with `WantedBy=default.target`; there's no
+`node server/src/start.js` with `WantedBy=default.target`; there's no
 installer script for that here yet.
 
 The port can be changed with the `PORT` environment variable, e.g.

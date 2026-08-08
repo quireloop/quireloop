@@ -1,22 +1,10 @@
-import fs from 'node:fs/promises';
 import { nanoid } from 'nanoid';
 import { INVITES_FILE } from '../config.js';
+import { readJson, updateJson, updateJsonWithResult } from './jsonStore.js';
 
-async function readInvites() {
-  try {
-    return JSON.parse(await fs.readFile(INVITES_FILE, 'utf8'));
-  } catch {
-    return [];
-  }
-}
-
-async function writeInvites(invites) {
-  await fs.mkdir(INVITES_FILE.replace(/\/[^/]+$/, ''), { recursive: true });
-  await fs.writeFile(INVITES_FILE, JSON.stringify(invites, null, 2), { mode: 0o600 });
-}
+const MODE = { mode: 0o600 };
 
 export async function createInvite(adminId) {
-  const invites = await readInvites();
   const invite = {
     code: nanoid(12),
     createdBy: adminId,
@@ -24,37 +12,52 @@ export async function createInvite(adminId) {
     usedBy: null,
     usedAt: null,
   };
-  invites.push(invite);
-  await writeInvites(invites);
+  await updateJson(INVITES_FILE, [], (invites) => [...invites, invite], MODE);
   return invite;
 }
 
 export async function listInvites() {
-  return readInvites();
+  return readJson(INVITES_FILE, []);
 }
 
 export async function isInviteValid(code) {
-  const invites = await readInvites();
+  const invites = await readJson(INVITES_FILE, []);
   const invite = invites.find((i) => i.code === code);
   return Boolean(invite && !invite.usedBy);
 }
 
-// Check-and-mark in one read/write cycle so two concurrent signups can't
-// both succeed off the same single-use code.
+// Check-and-mark under the file's lock, so two signups racing on the same
+// single-use code can't both observe it as unused and both succeed. Doing the
+// read and the write in one function is not enough on its own — the await
+// between them is a yield point where the other request runs — which is why
+// this goes through updateJsonWithResult rather than a plain read/write pair.
 export async function consumeInvite(code, userId) {
-  const invites = await readInvites();
-  const invite = invites.find((i) => i.code === code);
-  if (!invite || invite.usedBy) return false;
-  invite.usedBy = userId;
-  invite.usedAt = new Date().toISOString();
-  await writeInvites(invites);
-  return true;
+  return updateJsonWithResult(
+    INVITES_FILE,
+    [],
+    (invites) => {
+      const invite = invites.find((i) => i.code === code);
+      if (!invite || invite.usedBy) return { value: undefined, result: false };
+      return {
+        value: invites.map((i) =>
+          i.code === code ? { ...i, usedBy: userId, usedAt: new Date().toISOString() } : i
+        ),
+        result: true,
+      };
+    },
+    MODE
+  );
 }
 
 export async function revokeInvite(code) {
-  const invites = await readInvites();
-  const remaining = invites.filter((i) => i.code !== code || i.usedBy);
-  if (remaining.length === invites.length) return false;
-  await writeInvites(remaining);
-  return true;
+  return updateJsonWithResult(
+    INVITES_FILE,
+    [],
+    (invites) => {
+      const remaining = invites.filter((i) => i.code !== code || i.usedBy);
+      if (remaining.length === invites.length) return { value: undefined, result: false };
+      return { value: remaining, result: true };
+    },
+    MODE
+  );
 }

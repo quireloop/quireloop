@@ -2,7 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { projectDir } from './storage.js';
-import { readManifest, writeManifest } from './manifest.js';
+import { updateManifest } from './manifest.js';
+import { readJson, updateJson } from './jsonStore.js';
 
 const MAX_AUTO_SNAPSHOTS = 20;
 const SKIP_ENTRIES = new Set(['build', 'versions']);
@@ -92,16 +93,7 @@ function indexPath(ownerId, projectId) {
 }
 
 async function readIndex(ownerId, projectId) {
-  try {
-    return JSON.parse(await fs.readFile(indexPath(ownerId, projectId), 'utf8'));
-  } catch {
-    return [];
-  }
-}
-
-async function writeIndex(ownerId, projectId, index) {
-  await fs.mkdir(versionsDir(ownerId, projectId), { recursive: true });
-  await fs.writeFile(indexPath(ownerId, projectId), JSON.stringify(index, null, 2));
+  return readJson(indexPath(ownerId, projectId), []);
 }
 
 async function copyProjectContents(fromDir, toDir) {
@@ -121,23 +113,23 @@ export async function createSnapshot(ownerId, projectId, { label, trigger }) {
   const id = nanoid(10);
   await copyProjectContents(projectDir(ownerId, projectId), path.join(versionsDir(ownerId, projectId), id));
 
-  const index = await readIndex(ownerId, projectId);
-  index.push({ id, label: label || null, trigger, createdAt: new Date().toISOString() });
+  // Two collaborators compiling at once both land here; without the lock the
+  // second write drops the first's snapshot from the index, orphaning its
+  // on-disk copy and losing it from version history.
+  await updateJson(indexPath(ownerId, projectId), [], async (current) => {
+    const index = [...current, { id, label: label || null, trigger, createdAt: new Date().toISOString() }];
+    if (trigger !== 'compile') return index;
 
-  if (trigger === 'compile') {
     const autos = index.filter((v) => v.trigger === 'compile');
-    if (autos.length > MAX_AUTO_SNAPSHOTS) {
-      const toRemove = autos.slice(0, autos.length - MAX_AUTO_SNAPSHOTS);
-      for (const v of toRemove) {
-        await fs.rm(path.join(versionsDir(ownerId, projectId), v.id), { recursive: true, force: true });
-      }
-      const removeIds = new Set(toRemove.map((v) => v.id));
-      await writeIndex(ownerId, projectId, index.filter((v) => !removeIds.has(v.id)));
-      return { id, label, trigger };
-    }
-  }
+    if (autos.length <= MAX_AUTO_SNAPSHOTS) return index;
 
-  await writeIndex(ownerId, projectId, index);
+    const toRemove = autos.slice(0, autos.length - MAX_AUTO_SNAPSHOTS);
+    for (const v of toRemove) {
+      await fs.rm(path.join(versionsDir(ownerId, projectId), v.id), { recursive: true, force: true });
+    }
+    const removeIds = new Set(toRemove.map((v) => v.id));
+    return index.filter((v) => !removeIds.has(v.id));
+  });
   return { id, label, trigger };
 }
 
@@ -169,8 +161,9 @@ export async function restoreVersion(ownerId, projectId, versionId) {
   // room identity every live editor uses, so a restore can't be silently
   // undone by an in-flight collaborative session resurrecting pre-restore
   // content (see collab.invalidateProject, called by the route after this).
-  const manifest = await readManifest(ownerId, projectId);
-  manifest.collabGeneration = (manifest.collabGeneration ?? 0) + 1;
-  await writeManifest(ownerId, projectId, manifest);
+  await updateManifest(ownerId, projectId, (manifest) => ({
+    ...manifest,
+    collabGeneration: (manifest.collabGeneration ?? 0) + 1,
+  }));
   return { ok: true };
 }

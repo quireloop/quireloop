@@ -50,7 +50,7 @@ cat > "$PLIST_PATH" <<PLIST
     <key>ProgramArguments</key>
     <array>
         <string>$NODE_BIN</string>
-        <string>$SERVER_DIR/src/index.js</string>
+        <string>$SERVER_DIR/src/start.js</string>
     </array>
     <key>WorkingDirectory</key>
     <string>$SERVER_DIR</string>

@@ -3,7 +3,7 @@ import {
   listProjectsForUser,
   createProject,
   readManifest,
-  writeManifest,
+  updateManifest,
   deleteProject,
 } from '../lib/manifest.js';
 import { TEMPLATES } from '../lib/templates.js';
@@ -70,12 +70,13 @@ export default async function projectsRoutes(app) {
   });
 
   app.patch('/api/projects/:id', { preHandler: requireProjectWrite }, async (req) => {
-    const manifest = req.manifest;
     const { name, mainFile, compiler } = req.body ?? {};
-    if (name) manifest.name = name;
-    if (mainFile) manifest.mainFile = mainFile;
-    if (compiler) manifest.compiler = compiler;
-    return writeManifest(req.ownerId, req.params.id, manifest);
+    return updateManifest(req.ownerId, req.params.id, (manifest) => ({
+      ...manifest,
+      ...(name ? { name } : {}),
+      ...(mainFile ? { mainFile } : {}),
+      ...(compiler ? { compiler } : {}),
+    }));
   });
 
   app.delete('/api/projects/:id', { preHandler: requireProjectOwner }, async (req, reply) => {
@@ -105,12 +106,17 @@ export default async function projectsRoutes(app) {
       return reply.code(400).send({ error: "can't share a project with yourself" });
     }
 
-    const manifest = req.manifest;
-    manifest.collaborators = manifest.collaborators ?? [];
-    if (!manifest.collaborators.some((c) => c.userId === user.id)) {
-      manifest.collaborators.push({ userId: user.id, email: user.email, role: role === 'viewer' ? 'viewer' : 'editor' });
-    }
-    await writeManifest(req.ownerId, req.params.id, manifest);
+    const manifest = await updateManifest(req.ownerId, req.params.id, (current) => {
+      const collaborators = current.collaborators ?? [];
+      if (collaborators.some((c) => c.userId === user.id)) return current;
+      return {
+        ...current,
+        collaborators: [
+          ...collaborators,
+          { userId: user.id, email: user.email, role: role === 'viewer' ? 'viewer' : 'editor' },
+        ],
+      };
+    });
     await sharedIndex.addShare(user.id, req.params.id, req.ownerId);
     return manifest;
   });
@@ -120,9 +126,10 @@ export default async function projectsRoutes(app) {
     if (!userId || typeof userId !== 'string') {
       return reply.code(400).send({ error: 'userId is required' });
     }
-    const manifest = req.manifest;
-    manifest.collaborators = (manifest.collaborators ?? []).filter((c) => c.userId !== userId);
-    await writeManifest(req.ownerId, req.params.id, manifest);
+    const manifest = await updateManifest(req.ownerId, req.params.id, (current) => ({
+      ...current,
+      collaborators: (current.collaborators ?? []).filter((c) => c.userId !== userId),
+    }));
     await sharedIndex.removeShare(userId, req.params.id);
     return manifest;
   });
@@ -132,12 +139,15 @@ export default async function projectsRoutes(app) {
     if (role !== 'editor' && role !== 'viewer') {
       return reply.code(400).send({ error: "role must be 'editor' or 'viewer'" });
     }
-    const manifest = req.manifest;
-    const collaborator = (manifest.collaborators ?? []).find((c) => c.userId === req.params.userId);
-    if (!collaborator) return reply.code(404).send({ error: 'not a collaborator on this project' });
-    collaborator.role = role;
-    await writeManifest(req.ownerId, req.params.id, manifest);
-    return manifest;
+    if (!(req.manifest.collaborators ?? []).some((c) => c.userId === req.params.userId)) {
+      return reply.code(404).send({ error: 'not a collaborator on this project' });
+    }
+    return updateManifest(req.ownerId, req.params.id, (current) => ({
+      ...current,
+      collaborators: (current.collaborators ?? []).map((c) =>
+        c.userId === req.params.userId ? { ...c, role } : c
+      ),
+    }));
   });
 
   app.post('/api/projects/:id/share-links', { preHandler: requireProjectOwner }, async (req, reply) => {
@@ -176,21 +186,37 @@ export default async function projectsRoutes(app) {
       return { projectId: link.projectId };
     }
 
-    manifest.collaborators = manifest.collaborators ?? [];
-    const existing = manifest.collaborators.find((c) => c.userId === req.userId);
-    if (existing) {
-      // Idempotent join — never downgrade an existing editor to viewer.
-      if (existing.role === 'viewer' && link.role === 'editor') {
-        existing.role = 'editor';
-        await writeManifest(link.ownerId, link.projectId, manifest);
-      }
-      return { projectId: link.projectId };
-    }
-
     const user = await findUserById(req.userId);
-    manifest.collaborators.push({ userId: req.userId, email: user?.email ?? '', role: link.role });
-    await writeManifest(link.ownerId, link.projectId, manifest);
-    await sharedIndex.addShare(req.userId, link.projectId, link.ownerId);
+    // Re-read and mutate under the manifest's lock: several people redeeming
+    // the same link at once would otherwise each write a collaborator list
+    // built from the same stale read, and all but the last would be silently
+    // dropped — leaving them with a link that appeared to work but no access.
+    let joined = false;
+    await updateManifest(link.ownerId, link.projectId, (current) => {
+      const collaborators = current.collaborators ?? [];
+      const existing = collaborators.find((c) => c.userId === req.userId);
+      if (existing) {
+        // Idempotent join — never downgrade an existing editor to viewer.
+        if (existing.role === 'viewer' && link.role === 'editor') {
+          return {
+            ...current,
+            collaborators: collaborators.map((c) =>
+              c.userId === req.userId ? { ...c, role: 'editor' } : c
+            ),
+          };
+        }
+        return current;
+      }
+      joined = true;
+      return {
+        ...current,
+        collaborators: [
+          ...collaborators,
+          { userId: req.userId, email: user?.email ?? '', role: link.role },
+        ],
+      };
+    });
+    if (joined) await sharedIndex.addShare(req.userId, link.projectId, link.ownerId);
     return { projectId: link.projectId };
   });
 }

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/start.js",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",

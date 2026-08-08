@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { projectDir } from './storage.js';
+import { withLock, writeJsonAtomic } from './jsonStore.js';
 
 const MAX_TEXT_LENGTH = 2000;
 const MAX_STORED_MESSAGES = 500;
@@ -21,7 +22,7 @@ async function readMessages(ownerId, projectId) {
 
 async function writeMessages(ownerId, projectId, messages) {
   const capped = messages.slice(-MAX_STORED_MESSAGES);
-  await fs.writeFile(chatPath(ownerId, projectId), JSON.stringify(capped, null, 2));
+  await writeJsonAtomic(chatPath(ownerId, projectId), capped);
 }
 
 export function validateChatText(text) {
@@ -39,9 +40,14 @@ export async function listMessages(ownerId, projectId, after) {
 }
 
 export async function addMessage(ownerId, projectId, { userId, email, text }) {
-  const messages = await readMessages(ownerId, projectId);
-  const message = { id: nanoid(10), userId, email, text, at: new Date().toISOString() };
-  messages.push(message);
-  await writeMessages(ownerId, projectId, messages);
-  return message;
+  // Read-modify-write of one shared JSON file: collaborators hitting this
+  // at the same moment would otherwise each write a list built from the
+  // same stale read, silently dropping all but the last change.
+  return withLock(chatPath(ownerId, projectId), async () => {
+    const messages = await readMessages(ownerId, projectId);
+    const message = { id: nanoid(10), userId, email, text, at: new Date().toISOString() };
+    messages.push(message);
+    await writeMessages(ownerId, projectId, messages);
+    return message;
+  });
 }

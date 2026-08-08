@@ -29,7 +29,7 @@ WorkingDirectory=/opt/quireloop/server
 # CHANGE-ME: the absolute path to `node` — `which node` as the quireloop
 # user to confirm (nvm-installed Node lives under that user's home dir,
 # a system package under /usr/bin).
-ExecStart=/usr/bin/node /opt/quireloop/server/src/index.js
+ExecStart=/usr/bin/node /opt/quireloop/server/src/start.js
 
 # CHANGE-ME: where project data (accounts, invites, every project + its
 # git history + version snapshots) is stored — pick a path on a disk with

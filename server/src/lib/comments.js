@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { projectDir } from './storage.js';
+import { withLock, writeJsonAtomic } from './jsonStore.js';
 
 const MAX_TEXT_LENGTH = 5000;
 
@@ -18,7 +19,7 @@ async function readThreads(ownerId, projectId) {
 }
 
 async function writeThreads(ownerId, projectId, threads) {
-  await fs.writeFile(commentsPath(ownerId, projectId), JSON.stringify(threads, null, 2));
+  await writeJsonAtomic(commentsPath(ownerId, projectId), threads);
 }
 
 export function validateCommentText(text) {
@@ -34,40 +35,55 @@ export async function listThreads(ownerId, projectId, filePath) {
 }
 
 export async function createThread(ownerId, projectId, { filePath, anchor, text, userId, email }) {
-  const threads = await readThreads(ownerId, projectId);
-  const now = new Date().toISOString();
-  const thread = {
-    id: nanoid(10),
-    filePath,
-    anchor,
-    createdBy: userId,
-    createdByEmail: email,
-    createdAt: now,
-    resolved: false,
-    messages: [{ id: nanoid(10), userId, email, at: now, text }],
-  };
-  threads.push(thread);
-  await writeThreads(ownerId, projectId, threads);
-  return thread;
+  // Read-modify-write of one shared JSON file: collaborators hitting this
+  // at the same moment would otherwise each write a list built from the
+  // same stale read, silently dropping all but the last change.
+  return withLock(commentsPath(ownerId, projectId), async () => {
+    const threads = await readThreads(ownerId, projectId);
+    const now = new Date().toISOString();
+    const thread = {
+      id: nanoid(10),
+      filePath,
+      anchor,
+      createdBy: userId,
+      createdByEmail: email,
+      createdAt: now,
+      resolved: false,
+      messages: [{ id: nanoid(10), userId, email, at: now, text }],
+    };
+    threads.push(thread);
+    await writeThreads(ownerId, projectId, threads);
+    return thread;
+  });
 }
 
 export async function addMessage(ownerId, projectId, threadId, { userId, email, text }) {
-  const threads = await readThreads(ownerId, projectId);
-  const thread = threads.find((t) => t.id === threadId);
-  if (!thread) return null;
-  const message = { id: nanoid(10), userId, email, at: new Date().toISOString(), text };
-  thread.messages.push(message);
-  await writeThreads(ownerId, projectId, threads);
-  return thread;
+  // Read-modify-write of one shared JSON file: collaborators hitting this
+  // at the same moment would otherwise each write a list built from the
+  // same stale read, silently dropping all but the last change.
+  return withLock(commentsPath(ownerId, projectId), async () => {
+    const threads = await readThreads(ownerId, projectId);
+    const thread = threads.find((t) => t.id === threadId);
+    if (!thread) return null;
+    const message = { id: nanoid(10), userId, email, at: new Date().toISOString(), text };
+    thread.messages.push(message);
+    await writeThreads(ownerId, projectId, threads);
+    return thread;
+  });
 }
 
 export async function setResolved(ownerId, projectId, threadId, resolved) {
-  const threads = await readThreads(ownerId, projectId);
-  const thread = threads.find((t) => t.id === threadId);
-  if (!thread) return null;
-  thread.resolved = !!resolved;
-  await writeThreads(ownerId, projectId, threads);
-  return thread;
+  // Read-modify-write of one shared JSON file: collaborators hitting this
+  // at the same moment would otherwise each write a list built from the
+  // same stale read, silently dropping all but the last change.
+  return withLock(commentsPath(ownerId, projectId), async () => {
+    const threads = await readThreads(ownerId, projectId);
+    const thread = threads.find((t) => t.id === threadId);
+    if (!thread) return null;
+    thread.resolved = !!resolved;
+    await writeThreads(ownerId, projectId, threads);
+    return thread;
+  });
 }
 
 export async function getThread(ownerId, projectId, threadId) {
@@ -78,9 +94,14 @@ export async function getThread(ownerId, projectId, threadId) {
 // Caller must have already checked that the requester is the thread's
 // creator or the project owner — this just performs the removal.
 export async function deleteThread(ownerId, projectId, threadId) {
-  const threads = await readThreads(ownerId, projectId);
-  const next = threads.filter((t) => t.id !== threadId);
-  if (next.length === threads.length) return false;
-  await writeThreads(ownerId, projectId, next);
-  return true;
+  // Read-modify-write of one shared JSON file: collaborators hitting this
+  // at the same moment would otherwise each write a list built from the
+  // same stale read, silently dropping all but the last change.
+  return withLock(commentsPath(ownerId, projectId), async () => {
+    const threads = await readThreads(ownerId, projectId);
+    const next = threads.filter((t) => t.id !== threadId);
+    if (next.length === threads.length) return false;
+    await writeThreads(ownerId, projectId, next);
+    return true;
+  });
 }
