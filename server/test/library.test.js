@@ -9,6 +9,9 @@ import path from 'node:path';
 const libraryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'quireloop-library-'));
 const outsideRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'quireloop-outside-'));
 process.env.QUIRELOOP_LIBRARY_DIRS = `Papers=${libraryRoot}`;
+// This file is about the shared-root mechanism, so point the per-user home
+// convention at nothing — library-home.test.js covers that path instead.
+process.env.QUIRELOOP_USER_HOME_BASE = path.join(outsideRoot, 'no-homes-here');
 
 const { getTestApp, signup } = await import('./helpers.js');
 const { execa } = await import('execa');
@@ -24,6 +27,10 @@ let paperDir;
 before(async () => {
   ({ app } = await getTestApp());
   ({ cookie } = await signup(app, 'library@example.com'));
+  // A second account, so this install isn't single-user: that case hands the
+  // sole member the server process's own home as a root (see homeForUser),
+  // which would show up here as an extra root and isn't what this file tests.
+  await signup(app, 'second@example.com');
 
   paperDir = path.join(libraryRoot, 'thesis');
   await fs.mkdir(path.join(paperDir, 'figures'), { recursive: true });

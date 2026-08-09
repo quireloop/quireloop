@@ -1,4 +1,7 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { listUsers, findUserById, updateUser, publicUser } from '../lib/auth.js';
+import { homeForUser } from '../lib/library.js';
 import { createInvite, listInvites, revokeInvite } from '../lib/invites.js';
 import { requireAdmin } from '../lib/authMiddleware.js';
 import { getSettings, updateSettings } from '../lib/settings.js';
@@ -62,7 +65,49 @@ export default async function adminRoutes(app) {
 
   app.get('/api/admin/users', { preHandler: requireAdmin }, async () => {
     const users = await listUsers();
-    return users.map((u) => ({ ...publicUser(u), disabled: Boolean(u.disabled), createdAt: u.createdAt }));
+    return Promise.all(
+      users.map(async (u) => ({
+        ...publicUser(u),
+        disabled: Boolean(u.disabled),
+        createdAt: u.createdAt,
+        homeDir: u.homeDir ?? '',
+        // What they'd actually get if homeDir is left blank — shown in the
+        // panel so an admin can see the convention already works before
+        // deciding whether to override it.
+        resolvedHomeDir: (await homeForUser(u)) ?? '',
+      }))
+    );
+  });
+
+  // The directory on this host that a member may browse and open projects
+  // from. Admin-only on purpose: letting members name their own would make
+  // the whole containment check in lib/library.js decorative.
+  app.post('/api/admin/users/:id/home-dir', { preHandler: requireAdmin }, async (req, reply) => {
+    const { homeDir } = req.body ?? {};
+    const user = await findUserById(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'user not found' });
+
+    const trimmed = typeof homeDir === 'string' ? homeDir.trim() : '';
+    // Empty clears the override and falls back to the convention.
+    if (trimmed) {
+      if (!path.isAbsolute(trimmed)) {
+        return reply.code(400).send({ error: 'the folder must be an absolute path, e.g. /home/arjun' });
+      }
+      let real;
+      try {
+        real = await fs.realpath(trimmed);
+        if (!(await fs.stat(real)).isDirectory()) throw new Error('not a directory');
+      } catch {
+        return reply.code(400).send({ error: `no such folder on this server: ${trimmed}` });
+      }
+      // Storing the realpath keeps the containment check comparing like with
+      // like, and surfaces the true location if the admin typed a symlink.
+      await updateUser(req.params.id, { homeDir: real });
+      return { homeDir: real };
+    }
+
+    await updateUser(req.params.id, { homeDir: '' });
+    return { homeDir: '', resolvedHomeDir: (await homeForUser({ ...user, homeDir: '' })) ?? '' };
   });
 
   app.post('/api/admin/users/:id/disable', { preHandler: requireAdmin }, async (req, reply) => {

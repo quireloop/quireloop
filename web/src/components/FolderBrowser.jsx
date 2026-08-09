@@ -7,6 +7,7 @@ import { api } from '../api.js';
 // itself just handed back, so there's no path building here to get wrong.
 export default function FolderBrowser({ roots, onClose, onOpened }) {
   const [listing, setListing] = useState(null);
+  const [jumpTo, setJumpTo] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -16,6 +17,7 @@ export default function FolderBrowser({ roots, onClose, onOpened }) {
     try {
       const next = await api.browseLibrary(path);
       setListing(next);
+      setJumpTo(next.path);
       // Default the project name to the folder's own name, which is almost
       // always what the user wants, while still leaving it editable.
       setName(next.path.split('/').filter(Boolean).pop() ?? '');
@@ -63,6 +65,27 @@ export default function FolderBrowser({ roots, onClose, onOpened }) {
         Pick the folder holding your <code>.tex</code> files. Quireloop edits it in place — nothing is copied, and
         the compiled PDF lands in a <code>build/</code> folder next to your sources.
       </p>
+
+      {/* Clicking down to something like /home/you/Thesis/paper is a lot of
+          steps when you already know the path. The server validates it the
+          same way either route. */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (jumpTo.trim()) go(jumpTo.trim());
+        }}
+        style={{ display: 'flex', gap: 8, marginBottom: 10 }}
+      >
+        <input
+          value={jumpTo}
+          onChange={(e) => setJumpTo(e.target.value)}
+          placeholder="…or paste a path, e.g. /home/you/papers/thesis"
+          style={{ flex: 1, padding: 8, fontFamily: 'monospace', fontSize: 13 }}
+        />
+        <button type="submit" style={{ padding: '8px 12px' }}>
+          Go
+        </button>
+      </form>
 
       {!listing && (
         <div style={{ display: 'grid', gap: 6 }}>

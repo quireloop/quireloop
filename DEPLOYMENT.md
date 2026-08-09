@@ -160,7 +160,8 @@ unit, or just prefix the `node` command when running manually.
 | `QUIRELOOP_DATA_DIR` | `<repo>/data` | Where all persistent state lives — accounts, invites, the session-signing key, and every project (with its git history and version snapshots). Docker's image sets this to `/data` and expects a volume mounted there; leave it as the image default rather than overriding it unless you know why you're changing it. |
 | `QUIRELOOP_OPEN_SIGNUP` | unset (`false`) | When `true`, signup stays open to anyone who can reach the server, even after the first account exists. Default behavior (unset) is: the very first account can always sign up freely (bootstrapping), and every account after that requires an admin-issued invite code/link. |
 | `QUIRELOOP_SECURE_COOKIES` | unset (`false`) | When `true`, the session cookie is set with the `secure` flag, so browsers will only send it over HTTPS. Set this once TLS (e.g. the nginx config above) is actually in front of the server — turning it on without TLS in place will lock everyone out, since the cookie won't be sent back over plain HTTP. |
-| `QUIRELOOP_LIBRARY_DIRS` | unset (feature off) | Colon-separated host directories members may browse and open as projects **in place**, via "Open a Folder…" on the dashboard — for editing papers that already live on the server (or on your own machine, running locally) without importing or copying them. Write a root as `/srv/papers` or `Label=/srv/papers`. Leave unset and the feature, its API, and its button do not exist. See [Opening folders already on the server](#opening-folders-already-on-the-server) below before setting it — a root is readable and writable by **every** member unless you use the `{userId}` / `{user}` / `{email}` placeholders to give each one their own. |
+| `QUIRELOOP_USER_HOME_BASE` | `/home` (`/Users` on macOS) | Where the "each member gets their own folder on this host" convention looks: a member with the email `arjun@…` is offered `<base>/arjun` if that directory exists. Only ever grants a member their *own* directory, never the base itself. Overridden per account in Admin panel → Users → Server folder. See [Opening folders already on the server](#opening-folders-already-on-the-server). |
+| `QUIRELOOP_LIBRARY_DIRS` | unset | **Shared** host directories, colon-separated, offered to every member on top of their own home — a lab drive, a templates folder. Write a root as `/mnt/latex` or `Label=/mnt/latex`; `{userId}` / `{user}` / `{email}` expand per request. Unlike a member's own home, a plain root here is readable *and writable* by everyone with an account, so keep it narrow. |
 | `QUIRELOOP_ANTHROPIC_API_KEY` | unset | Server-wide **fallback** Anthropic key, only used for members who haven't set their own key in Account settings → ✨ AI Assistant. Most installs don't need this — each lab member brings their own pay-as-you-go key (console.anthropic.com), billed to them individually, not to the server. When both this and a stored admin-panel key exist, the env var wins. Falls back to `ANTHROPIC_API_KEY` if set. |
 | `QUIRELOOP_ASSISTANT_MODEL` | `claude-opus-4-8` | Model used by the fallback key above; also settable in the Admin panel (env wins). Has no effect on members using their own key — they pick their own model in Account settings. |
 | `QUIRELOOP_OLLAMA_BASE_URL` / `QUIRELOOP_OLLAMA_MODEL` | unset | Server-wide fallback pointing at an Ollama instance (e.g. one running on this same box on port 11434) instead of Anthropic — same fallback-only semantics as above. Each member can instead point at their own Ollama server from Account settings. |
@@ -181,14 +182,34 @@ instead.
 ## Opening folders already on the server
 
 By default a project is something Quireloop creates and stores inside
-`QUIRELOOP_DATA_DIR`. `QUIRELOOP_LIBRARY_DIRS` adds the other direction: point
-it at directories that already exist on the host, and members get an "Open a
-Folder…" button that browses them and opens one as a project **in place** —
-useful when your papers already live in `~/papers` or on a mounted NVMe and you
-don't want a second copy inside `data/`.
+`QUIRELOOP_DATA_DIR`. The other direction — a paper that already exists on the
+host, say at `/home/arjun/Thesis/paper` — is handled by the "Open a Folder…"
+button on the dashboard, which opens that directory as a project **in place**.
+
+**This needs no configuration in the common case.** Each member's own home
+directory on the host is browsable to them and to nobody else. Quireloop works
+out which directory that is in three steps, most explicit first:
+
+1. A folder an admin assigned them in **Admin panel → Users → Server folder**.
+2. `<QUIRELOOP_USER_HOME_BASE>/<the email's local part>` — so `arjun@lab.edu`
+   gets `/home/arjun` — when that directory exists. The base defaults to
+   `/home` (`/Users` on macOS).
+3. The server process's own home, but only while this is a one-account
+   install; that's what makes running Quireloop on your own laptop work with
+   nothing set. It's recorded on the account the first time it applies, so a
+   second person signing up doesn't make your folders disappear.
+
+Step 2 is a convention, not a guarantee: if your Quireloop account is
+`you@gmail.com` but your papers are under `/home/arjun`, step 2 finds nothing
+and the button stays hidden until an admin fills in the Server folder field.
+That field takes an absolute path, is validated against the filesystem when
+saved, and is the supported way to point an account anywhere non-standard.
+
+`QUIRELOOP_LIBRARY_DIRS` is the separate, *shared* case — a lab drive or common
+templates folder that every member should see on top of their own home:
 
 ```
-QUIRELOOP_LIBRARY_DIRS=Papers=/srv/papers:Shared=/mnt/nvme/latex
+QUIRELOOP_LIBRARY_DIRS=Lab drive=/mnt/nvme/latex:Templates=/srv/templates
 ```
 
 What "in place" means concretely:
@@ -208,17 +229,24 @@ What "in place" means concretely:
   folder is already a git repo, the Source Control panel works normally against
   your existing history.
 
-Two things to get right before enabling it on a shared server:
+Two things to know about the boundary on a shared server:
 
-1. **A plain root is visible to every member**, not just you — anyone with an
-   account can browse it and open anything in it. For per-member libraries, put
-   `{userId}`, `{user}` (the email's local part) or `{email}` in the path:
-   `QUIRELOOP_LIBRARY_DIRS=My papers=/srv/home/{user}/papers`. Roots that don't
-   exist for a given member are simply not shown to them.
-2. **Nothing outside the roots is reachable.** Paths are checked after
+1. **A member reaches their own folder and nothing else.** One member cannot
+   browse another's home, and the home *base* (`/home` itself) is not
+   browsable — only the specific directory resolved for that account. Anything
+   listed in `QUIRELOOP_LIBRARY_DIRS`, by contrast, is readable **and
+   writable** by every member with an account, so keep those narrow; the
+   `{userId}` / `{user}` / `{email}` placeholders expand per request if you
+   want one entry to mean a different directory for each member.
+2. **Nothing outside those roots is reachable.** Paths are checked after
    resolving symlinks on both sides, so a link planted inside a root pointing
-   at `/etc` is rejected rather than followed. Keep the roots as narrow as the
-   work actually needs — this is the only boundary.
+   at `/etc` is rejected rather than followed, and a path outside the roots
+   reports the same "no such folder" as one that doesn't exist.
+
+Note that a member's folder is browsable with the permissions of the **server
+process**, not theirs — Quireloop has no unix identity per account. If the
+service runs as root, "their home directory" is enforced by Quireloop alone.
+Run it as an unprivileged user.
 
 **Security checklist before going live:**
 - Set `QUIRELOOP_SECURE_COOKIES=true` once nginx TLS is actually in front (see above) — it's opt-in, easy to forget, and without it the session cookie isn't marked HTTPS-only.

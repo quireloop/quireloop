@@ -54,9 +54,12 @@ creation, entirely separate from this repo's history. Quireloop writes a
 `build/`, `versions/`, the stored remote token), so pushing a project to GitHub
 or the hosted editor sends only the paper.
 
-**A project directory can be a symlink.** `QUIRELOOP_LIBRARY_DIRS` lets a
-member open a folder that already exists on the host as a project, edited in
-place; `data/projects/<ownerId>/<projectId>` is then a link to it
+**A project directory can be a symlink.** A member can open a folder that
+already exists on the host as a project, edited in place — their own home
+directory by default (resolved in `library.js:homeForUser`, three rules:
+admin-assigned, `<base>/<email local part>`, then the process's own home on a
+single-account install), plus anything in `QUIRELOOP_LIBRARY_DIRS`.
+`data/projects/<ownerId>/<projectId>` is then a link to it
 (`manifest.linkedPath` records where). This is deliberately invisible to the
 rest of the app — everything still goes through `projectDir()` — but it has
 three consequences. `readdir` reports such a slot as a link, not a directory,
@@ -153,8 +156,9 @@ or rate-limit reasons look identical to lost writes in the persisted count.
 `VITE_BASE_PATH` (subpath mount, must agree), `QUIRELOOP_OPEN_SIGNUP` (defaults
 to invite-only once one user exists; the first account created is always the
 admin), `QUIRELOOP_SECURE_COOKIES` (set for TLS deployments),
-`QUIRELOOP_LIBRARY_DIRS` (colon-separated host directories members may open as
-projects in place; unset disables the feature and its API entirely),
+`QUIRELOOP_USER_HOME_BASE` (where the per-member "your own folder on this host"
+convention looks, default `/home`) and `QUIRELOOP_LIBRARY_DIRS` (extra *shared*
+directories every member may open projects from),
 `QUIRELOOP_ANTHROPIC_API_KEY` / `QUIRELOOP_ASSISTANT_MODEL` /
 `QUIRELOOP_OLLAMA_BASE_URL` / `QUIRELOOP_OLLAMA_MODEL` (assistant fallbacks),
 `PORT`.

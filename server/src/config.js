@@ -22,15 +22,25 @@ export const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 export const PORT = process.env.PORT ? Number(process.env.PORT) : 4173;
 export const HOST = '0.0.0.0';
 
-// Host directories that members may browse and open as projects in place
-// ("Open a folder on the server"), colon-separated. Empty — the default —
-// disables the feature entirely: without an explicit allowlist, a browse API
-// is a filesystem read primitive for anyone with an account.
+// Each member gets their own home directory on the host as a browsable root,
+// so opening a paper that already lives at /home/arjun/Thesis/paper needs
+// no configuration at all. Which directory that is, is resolved per user in
+// lib/library.js; this is only where the convention "<base>/<username>" starts
+// looking. macOS puts home directories somewhere else, hence the default.
+export const USER_HOME_BASE = process.env.QUIRELOOP_USER_HOME_BASE
+  ? path.resolve(process.env.QUIRELOOP_USER_HOME_BASE)
+  : process.platform === 'darwin'
+    ? '/Users'
+    : '/home';
+
+// Additional *shared* host directories, on top of each member's own home —
+// colon-separated, for a lab drive or a common templates folder. Unlike the
+// per-user home, a plain root here is browsable and writable by every member
+// with an account, so keep it narrow; the {userId} / {user} / {email}
+// placeholders expand per request if you want one entry to mean a different
+// directory for each of them.
 //
-// A root may be written as "Label=/path". It may also contain the placeholders
-// {userId} or {email}, which expand per request — that is the only way to give
-// each member a private library, since a plain path is visible to every
-// member who is logged in.
+// A root may be written as "Label=/path".
 export const LIBRARY_DIRS = (process.env.QUIRELOOP_LIBRARY_DIRS || '')
   .split(':')
   .map((spec) => spec.trim())

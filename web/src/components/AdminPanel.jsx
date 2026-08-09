@@ -1,6 +1,62 @@
 import { useEffect, useState } from 'react';
 import { adminApi } from '../lib/auth.js';
 
+// The folder on this host a member may browse and open projects from. Left
+// blank, Quireloop works it out from their email (<home base>/<username>) —
+// this is the override for when that convention doesn't match, which is the
+// normal case whenever the account email isn't the unix username.
+function HomeDirField({ user, onSaved }) {
+  const [value, setValue] = useState(user.homeDir ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const derived = user.resolvedHomeDir;
+  const dirty = value.trim() !== (user.homeDir ?? '');
+
+  async function save() {
+    setBusy(true);
+    setError('');
+    try {
+      await adminApi.setUserHomeDir(user.id, value.trim());
+      await onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 2, minWidth: 200 }}>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && dirty && save()}
+          placeholder={derived || 'none'}
+          style={{ flex: 1, padding: 4, fontSize: 12, fontFamily: 'monospace' }}
+        />
+        {dirty && (
+          <button onClick={save} disabled={busy} style={{ fontSize: 12 }}>
+            Save
+          </button>
+        )}
+      </div>
+      {error ? (
+        <span style={{ fontSize: 11, color: 'crimson' }}>{error}</span>
+      ) : (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {user.homeDir
+            ? 'set explicitly'
+            : derived
+              ? 'detected automatically'
+              : 'no server folder — this member sees no "Open a Folder" button'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function UsersSection({ currentUserId }) {
   const [users, setUsers] = useState([]);
   const [error, setError] = useState('');
@@ -41,6 +97,9 @@ function UsersSection({ currentUserId }) {
             <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)' }}>Email</th>
             <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)' }}>Role</th>
             <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)' }}>Created</th>
+            <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)' }} title="The folder on this server this member can browse and open projects from">
+              Server folder
+            </th>
             <th style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)' }}></th>
           </tr>
         </thead>
@@ -56,6 +115,9 @@ function UsersSection({ currentUserId }) {
               <td style={{ padding: '6px' }}>{u.role}</td>
               <td style={{ padding: '6px', color: 'var(--text-muted)' }}>
                 {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
+              </td>
+              <td style={{ padding: '6px' }}>
+                <HomeDirField user={u} onSaved={refresh} />
               </td>
               <td style={{ padding: '6px', textAlign: 'right' }}>
                 {u.id !== currentUserId && (

@@ -59,6 +59,7 @@ export const adminApi = {
   listUsers: () => adminRequest('/users'),
   disableUser: (id) => adminPost(`/users/${id}/disable`),
   enableUser: (id) => adminPost(`/users/${id}/enable`),
+  setUserHomeDir: (id, homeDir) => adminPost(`/users/${id}/home-dir`, { homeDir }),
   listInvites: () => adminRequest('/invites'),
   createInvite: () => adminPost('/invites'),
   revokeInvite: (code) => adminRequest(`/invites/${code}`, { method: 'DELETE' }),
