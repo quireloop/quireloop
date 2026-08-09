@@ -169,6 +169,9 @@ function AssistantSettingsSection() {
 }
 
 export default function AccountSettings({ user, onClose, onUserUpdate }) {
+  // Credentials for these live on the host, not in Quireloop, so every control
+  // that would change one is hidden rather than shown and then rejected.
+  const isServerAccount = user?.authProvider === 'pam';
   const [setupData, setSetupData] = useState(null); // { uri, qrDataUrl }
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
@@ -270,19 +273,30 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <strong>{user?.email}</strong>
+        {/* A server account has a username; the email address it carries is
+            synthesized and would only confuse. */}
+        <strong>{isServerAccount ? user.unixUser : user?.email}</strong>
         <button onClick={onClose} style={{ fontSize: 13 }}>
           Close
         </button>
       </div>
 
-      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
-        Two-factor authentication: <strong>{user?.twoFactorEnabled ? 'Enabled' : 'Disabled'}</strong>
-      </div>
+      {isServerAccount && (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+          You sign in with your account on this server, so your password and two-factor authentication are
+          managed there — change them the same way you would for SSH.
+        </p>
+      )}
+
+      {!isServerAccount && (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+          Two-factor authentication: <strong>{user?.twoFactorEnabled ? 'Enabled' : 'Disabled'}</strong>
+        </div>
+      )}
 
       {error && <p style={{ color: 'crimson', fontSize: 13 }}>{error}</p>}
 
-      {!user?.twoFactorEnabled && !setupData && (
+      {!isServerAccount && !user?.twoFactorEnabled && !setupData && (
         <button onClick={handleStartSetup} disabled={busy} style={{ fontSize: 13, width: '100%', padding: 6 }}>
           Enable 2FA
         </button>
@@ -306,7 +320,7 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
         </form>
       )}
 
-      {user?.twoFactorEnabled && (
+      {!isServerAccount && user?.twoFactorEnabled && (
         <form onSubmit={handleDisable} style={{ display: 'grid', gap: 8, marginTop: 8 }}>
           <input
             value={password}
@@ -321,6 +335,8 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
         </form>
       )}
 
+      {!isServerAccount && (
+        <>
       <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '12px 0' }} />
 
       <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Change password</div>
@@ -352,6 +368,8 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
           {pwBusy ? 'Saving…' : 'Change password'}
         </button>
       </form>
+        </>
+      )}
 
       <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '12px 0' }} />
 

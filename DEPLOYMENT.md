@@ -160,6 +160,12 @@ unit, or just prefix the `node` command when running manually.
 | `QUIRELOOP_DATA_DIR` | `<repo>/data` | Where all persistent state lives — accounts, invites, the session-signing key, and every project (with its git history and version snapshots). Docker's image sets this to `/data` and expects a volume mounted there; leave it as the image default rather than overriding it unless you know why you're changing it. |
 | `QUIRELOOP_OPEN_SIGNUP` | unset (`false`) | When `true`, signup stays open to anyone who can reach the server, even after the first account exists. Default behavior (unset) is: the very first account can always sign up freely (bootstrapping), and every account after that requires an admin-issued invite code/link. |
 | `QUIRELOOP_SECURE_COOKIES` | unset (`false`) | When `true`, the session cookie is set with the `secure` flag, so browsers will only send it over HTTPS. Set this once TLS (e.g. the nginx config above) is actually in front of the server — turning it on without TLS in place will lock everyone out, since the cookie won't be sent back over plain HTTP. |
+| `QUIRELOOP_PAM_ENABLED` | unset (`false`) | When `true`, members can log in with **this host's own UNIX accounts** — same username, password and authenticator code as SSH — and their projects live in their real home directory. Requires the auth helper to be installed; see [Logging in with server accounts](#logging-in-with-server-accounts). Email/password accounts keep working alongside it. |
+| `QUIRELOOP_PAM_HELPER` | `sudo -n /usr/local/libexec/quireloop-pam-auth` | How to invoke that helper. Change it only to use a different install path or a socket-activated helper instead of sudo. |
+| `QUIRELOOP_PAM_EMAIL_DOMAIN` | `localhost` | Sharing and collaborator lists are keyed on email, but a UNIX account has only a username, so Quireloop synthesizes `<username>@<this domain>`. Set it to something recognisable, e.g. your lab's domain. |
+| `QUIRELOOP_PAM_SERVICE` | `quireloop` | The PAM service name, i.e. which `/etc/pam.d/` file the login is checked against. Passed through to the helper. |
+| `QUIRELOOP_PAM_MIN_UID` | `1000` | Accounts below this uid can never log in, which keeps `root` and every system account out. Passed through to the helper. |
+| `QUIRELOOP_PAM_ALLOW_GROUP` | unset | If set, only members of this UNIX group may log in — the simplest way to give a subset of the machine's accounts access. Passed through to the helper. |
 | `QUIRELOOP_USER_HOME_BASE` | `/home` (`/Users` on macOS) | Where the "each member gets their own folder on this host" convention looks: a member with the email `arjun@…` is offered `<base>/arjun` if that directory exists. Only ever grants a member their *own* directory, never the base itself. Overridden per account in Admin panel → Users → Server folder. See [Opening folders already on the server](#opening-folders-already-on-the-server). |
 | `QUIRELOOP_LIBRARY_DIRS` | unset | **Shared** host directories, colon-separated, offered to every member on top of their own home — a lab drive, a templates folder. Write a root as `/mnt/latex` or `Label=/mnt/latex`; `{userId}` / `{user}` / `{email}` expand per request. Unlike a member's own home, a plain root here is readable *and writable* by everyone with an account, so keep it narrow. |
 | `QUIRELOOP_ANTHROPIC_API_KEY` | unset | Server-wide **fallback** Anthropic key, only used for members who haven't set their own key in Account settings → ✨ AI Assistant. Most installs don't need this — each lab member brings their own pay-as-you-go key (console.anthropic.com), billed to them individually, not to the server. When both this and a stored admin-panel key exist, the env var wins. Falls back to `ANTHROPIC_API_KEY` if set. |
@@ -178,6 +184,94 @@ subscription (the kind used by the Claude Code CLI or the VS Code
 extension) cannot be linked here — that login is restricted by Anthropic
 to their own first-party apps. Use a pay-as-you-go API key or Ollama
 instead.
+
+## Logging in with server accounts
+
+With `QUIRELOOP_PAM_ENABLED=true`, members sign in with the account they already
+have on this machine — the same username, password and authenticator code they'd
+use over SSH — and their projects live in their real home directory. No second
+set of credentials, no per-account setup, and removing someone's UNIX account
+removes their access here.
+
+### Why there's a separate helper
+
+A PAM stack with `pam_google_authenticator` reads each user's
+`~/.google_authenticator`, which is mode 0600 and owned by them. Only root can
+read all of those. The web server must not be root — so it doesn't do the
+checking. `deploy/quireloop-pam-auth` does: a small program whose entire ability
+is "here are some credentials, are they valid?". It takes no arguments, runs no
+other program, and returns yes or no.
+
+### Install
+
+```bash
+# 1. The helper. Root-owned and not writable by the service user — see the
+#    warning in the sudoers file about why that matters.
+sudo install -o root -g root -m 0755 \
+     deploy/quireloop-pam-auth /usr/local/libexec/quireloop-pam-auth
+
+# 2. Which PAM stack the web login uses. Edit to match your sshd setup.
+sudo install -o root -g root -m 0644 deploy/quireloop.pam.example /etc/pam.d/quireloop
+
+# 3. Let the service user run the helper, and nothing else.
+sudo visudo -f /etc/sudoers.d/quireloop     # paste deploy/quireloop-sudoers.example
+
+# 4. Let Quireloop into members' project folders (see the ownership note below).
+sudo setfacl -Rm  u:quireloop:rwx /home/arjun
+sudo setfacl -Rdm u:quireloop:rwx /home/arjun
+```
+
+Then add to the systemd unit and restart:
+
+```
+Environment=QUIRELOOP_PAM_ENABLED=true
+Environment=QUIRELOOP_PAM_EMAIL_DOMAIN=yourlab.example
+Environment=QUIRELOOP_PAM_ALLOW_GROUP=quireloop-users
+```
+
+Check it before handing out the URL — the helper works standalone:
+
+```bash
+echo '{"username":"arjun","responses":["<password>","<code>"]}' \
+  | sudo -u quireloop sudo -n /usr/local/libexec/quireloop-pam-auth
+```
+
+A reply of `{"ok":true,...,"home":"/home/arjun"}` means the whole chain works. On
+`{"ok":false}`, the *reason* is on stderr — the reply itself is deliberately the
+same for every kind of failure so the web API can't be used to find out who has
+an account on this box.
+
+### Who can log in
+
+Only accounts at or above `QUIRELOOP_PAM_MIN_UID` (default 1000), so `root` and
+system accounts are refused before PAM is even consulted. Set
+`QUIRELOOP_PAM_ALLOW_GROUP` to restrict further to one UNIX group — worth doing
+if not everyone with a shell on the machine should have a Quireloop account.
+The first person to log in becomes the admin, exactly as with email signup;
+after that an admin can disable an account in the Admin panel without touching
+the UNIX account.
+
+Members with no UNIX account — an outside co-author, someone at another
+institution — still sign up with email and password on the "Email" tab.
+
+### What this does not do
+
+**Files Quireloop writes are owned by the service user, not by the member.**
+There is one server process with one uid; it does not become you to touch your
+files. So:
+
+- Members' project folders need an ACL letting the service user in (step 4
+  above). Without it, a member logs in fine and then can't open anything.
+- Files created through the web UI show up as `quireloop`-owned in their home
+  directory, group-readable to them.
+- **PAM proves who someone is; it does not confine what the process can reach.**
+  A member is restricted to their own home directory by Quireloop's checks
+  alone — the same boundary as before this feature, now with a real login in
+  front of it. Run the service as an unprivileged user, and give it access only
+  to the directories that actually need it.
+
+Per-user file ownership would need a worker process per member, running as that
+member. That is a much larger change to the storage layer and is not implemented.
 
 ## Opening folders already on the server
 

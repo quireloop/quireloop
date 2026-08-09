@@ -88,6 +88,76 @@ export async function createUser(email, password) {
   );
 }
 
+export async function findUserByUnixUser(username) {
+  const users = await readUsers();
+  return users.find((u) => u.authProvider === 'pam' && u.unixUser === username) ?? null;
+}
+
+// Turns a UNIX account that PAM has just vouched for into a Quireloop user
+// record, creating it on first login. `account` is what lib/pam.js returned.
+//
+// The record keeps an opaque nanoid `id` like any other, rather than using the
+// UNIX username as the identity. That id is a directory name under
+// data/projects/, the key of shared-index.json, and the value compared in every
+// manifest's ownerId and collaborators[].userId — so making it mean something
+// new would require rewriting all of that. Keeping it opaque means PAM login
+// costs no migration at all, and an account can even be renamed on the host
+// without Quireloop noticing.
+export async function upsertPamUser(account, { emailDomain }) {
+  return updateJsonWithResult(
+    USERS_FILE,
+    [],
+    (users) => {
+      const existing = users.find((u) => u.authProvider === 'pam' && u.unixUser === account.username);
+
+      // The home directory and uid are re-read from the host on every login
+      // rather than trusted from the record: an admin may have moved the home
+      // directory since, and a stale path here would send the file browser
+      // somewhere that no longer belongs to this person.
+      const unix = {
+        unixUser: account.username,
+        unixUid: account.uid,
+        unixGid: account.gid,
+        unixHome: account.home,
+      };
+
+      if (existing) {
+        const updated = { ...existing, ...unix };
+        return {
+          value: users.map((u) => (u.id === existing.id ? updated : u)),
+          result: updated,
+        };
+      }
+
+      const user = {
+        id: nanoid(10),
+        // PAM accounts have a username, not an address, but sharing and
+        // collaborator lists are keyed on email throughout the UI.
+        email: `${account.username}@${emailDomain}`,
+        authProvider: 'pam',
+        ...unix,
+        fullName: account.fullName || '',
+        // No password and no TOTP secret are ever stored for these: both live
+        // on the host, which is the entire point.
+        passwordHash: null,
+        twoFactorEnabled: false,
+        twoFactorSecret: null,
+        pendingTwoFactorSecret: null,
+        role: users.length === 0 ? 'admin' : 'member',
+        disabled: false,
+        createdAt: new Date().toISOString(),
+        assistant: { provider: null },
+      };
+      return { value: [...users, user], result: user };
+    },
+    USERS_MODE
+  );
+}
+
+export function isPamUser(user) {
+  return user?.authProvider === 'pam';
+}
+
 export async function updateUser(id, patch) {
   return updateJsonWithResult(
     USERS_FILE,
@@ -135,7 +205,17 @@ export async function migrateUserRoles() {
 // Strips the password hash and 2FA secrets before a user record ever goes
 // into an HTTP response.
 export function publicUser(user) {
-  return { id: user.id, email: user.email, twoFactorEnabled: user.twoFactorEnabled, role: user.role };
+  return {
+    id: user.id,
+    email: user.email,
+    twoFactorEnabled: user.twoFactorEnabled,
+    role: user.role,
+    // The UI hides password and 2FA settings for these — both are managed on
+    // the host, not here — and shows the account name instead of the
+    // synthesized email address.
+    authProvider: user.authProvider ?? 'local',
+    ...(user.unixUser ? { unixUser: user.unixUser } : {}),
+  };
 }
 
 function maskKey(key) {

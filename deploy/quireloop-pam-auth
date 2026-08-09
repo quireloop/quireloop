@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Authenticate a UNIX account against PAM on behalf of the Quireloop server.
+
+Quireloop runs as an unprivileged service user, but a PAM stack with
+pam_google_authenticator has to read each user's ~/.google_authenticator, which
+is mode 0600 and owned by that user. So the check happens here instead, in a
+process the operator runs as root via one narrowly scoped sudo rule, and the
+web server never holds any privilege of its own.
+
+Protocol — one JSON object in on stdin, one out on stdout:
+
+    in : {"username": "arjun", "responses": ["<password>", "<code>"]}
+    out: {"ok": true, "username": "arjun", "uid": 1001, "gid": 1001,
+          "home": "/home/arjun"}
+         {"ok": false, "error": "authentication failed"}
+
+Credentials arrive on stdin and nowhere else. Passing them as arguments would
+publish them in /proc/<pid>/cmdline to every user on the box, and putting them
+in the environment leaks them to any child process.
+
+Uses libpam directly through ctypes rather than a pip package, so installing
+Quireloop never requires a Python build toolchain or network access.
+
+Configured by (all optional, read from the environment set in the sudoers rule
+or the systemd unit):
+
+    QUIRELOOP_PAM_SERVICE      PAM service name, default "quireloop"
+                               (i.e. /etc/pam.d/quireloop)
+    QUIRELOOP_PAM_MIN_UID      lowest uid allowed to log in, default 1000
+    QUIRELOOP_PAM_ALLOW_GROUP  if set, only members of this group may log in
+"""
+
+import ctypes
+import ctypes.util
+import grp
+import json
+import os
+import pwd
+import sys
+
+SERVICE = os.environ.get("QUIRELOOP_PAM_SERVICE", "quireloop")
+MIN_UID = int(os.environ.get("QUIRELOOP_PAM_MIN_UID", "1000"))
+ALLOW_GROUP = os.environ.get("QUIRELOOP_PAM_ALLOW_GROUP", "").strip()
+
+# One message for every kind of failure. Distinguishing "no such account" from
+# "wrong password" would turn this into an account-enumeration oracle, and the
+# server has no use for the difference anyway.
+GENERIC_FAILURE = "authentication failed"
+
+PAM_SUCCESS = 0
+PAM_PROMPT_ECHO_OFF = 1
+PAM_PROMPT_ECHO_ON = 2
+PAM_ERROR_MSG = 3
+PAM_TEXT_INFO = 4
+
+
+class PamHandle(ctypes.Structure):
+    _fields_ = [("handle", ctypes.c_void_p)]
+
+
+class PamMessage(ctypes.Structure):
+    _fields_ = [("msg_style", ctypes.c_int), ("msg", ctypes.c_char_p)]
+
+
+class PamResponse(ctypes.Structure):
+    _fields_ = [("resp", ctypes.c_char_p), ("resp_retcode", ctypes.c_int)]
+
+
+CONV_FUNC = ctypes.CFUNCTYPE(
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.POINTER(ctypes.POINTER(PamMessage)),
+    ctypes.POINTER(ctypes.POINTER(PamResponse)),
+    ctypes.c_void_p,
+)
+
+
+class PamConv(ctypes.Structure):
+    _fields_ = [("conv", CONV_FUNC), ("appdata_ptr", ctypes.c_void_p)]
+
+
+def load_libpam():
+    name = ctypes.util.find_library("pam")
+    if not name:
+        raise OSError("libpam not found — install libpam0g / pam on this host")
+    lib = ctypes.CDLL(name, use_errno=True)
+    lib.pam_start.restype = ctypes.c_int
+    lib.pam_start.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.POINTER(PamConv),
+        ctypes.POINTER(ctypes.POINTER(PamHandle)),
+    ]
+    lib.pam_authenticate.restype = ctypes.c_int
+    lib.pam_authenticate.argtypes = [ctypes.POINTER(PamHandle), ctypes.c_int]
+    lib.pam_acct_mgmt.restype = ctypes.c_int
+    lib.pam_acct_mgmt.argtypes = [ctypes.POINTER(PamHandle), ctypes.c_int]
+    lib.pam_end.restype = ctypes.c_int
+    lib.pam_end.argtypes = [ctypes.POINTER(PamHandle), ctypes.c_int]
+    return lib
+
+
+def authenticate(libpam, username, responses):
+    """Run the PAM conversation, answering prompts in order from `responses`."""
+    libc = ctypes.CDLL(ctypes.util.find_library("c"))
+    libc.calloc.restype = ctypes.c_void_p
+    libc.calloc.argtypes = [ctypes.c_size_t, ctypes.c_size_t]
+    libc.strdup.restype = ctypes.c_void_p
+    libc.strdup.argtypes = [ctypes.c_char_p]
+
+    remaining = list(responses)
+    # A prompt we have no answer for must fail the conversation rather than
+    # block: this process holds a sudo slot and has no terminal to read from,
+    # so returning an error is the only way it can end.
+    starved = []
+
+    @CONV_FUNC
+    def conversation(num_msg, msg, resp, _appdata):
+        buf = libc.calloc(num_msg, ctypes.sizeof(PamResponse))
+        resp[0] = ctypes.cast(buf, ctypes.POINTER(PamResponse))
+        for i in range(num_msg):
+            style = msg[i].contents.msg_style
+            if style in (PAM_PROMPT_ECHO_OFF, PAM_PROMPT_ECHO_ON):
+                if not remaining:
+                    starved.append(msg[i].contents.msg)
+                    return 19  # PAM_CONV_ERR
+                answer = remaining.pop(0)
+                resp[0][i].resp = ctypes.cast(
+                    libc.strdup(answer.encode("utf-8")), ctypes.c_char_p
+                )
+                resp[0][i].resp_retcode = 0
+            # PAM_ERROR_MSG / PAM_TEXT_INFO carry no question; the stack does
+            # not expect a response, and echoing them back to the client would
+            # leak stack details, so they are simply dropped.
+        return PAM_SUCCESS
+
+    handle = ctypes.POINTER(PamHandle)()
+    conv = PamConv(conversation, 0)
+    rc = libpam.pam_start(
+        SERVICE.encode("utf-8"), username.encode("utf-8"), ctypes.byref(conv), ctypes.byref(handle)
+    )
+    if rc != PAM_SUCCESS:
+        return False, "pam_start failed"
+
+    try:
+        rc = libpam.pam_authenticate(handle, 0)
+        if rc != PAM_SUCCESS:
+            return False, "starved" if starved else "auth"
+        # Catches an expired password or a locked/expired account, which
+        # pam_authenticate alone does not.
+        rc = libpam.pam_acct_mgmt(handle, 0)
+        if rc != PAM_SUCCESS:
+            return False, "acct"
+        return True, None
+    finally:
+        libpam.pam_end(handle, rc)
+
+
+def fail(reason_for_log=None):
+    if reason_for_log:
+        # stderr goes to the server's log, never to the browser.
+        print(f"quireloop-pam-auth: {reason_for_log}", file=sys.stderr)
+    json.dump({"ok": False, "error": GENERIC_FAILURE}, sys.stdout)
+    sys.stdout.write("\n")
+    sys.exit(1)
+
+
+def main():
+    try:
+        request = json.load(sys.stdin)
+    except Exception:
+        fail("malformed request")
+
+    username = request.get("username")
+    responses = request.get("responses")
+    if not isinstance(username, str) or not username or not isinstance(responses, list):
+        fail("malformed request")
+    if not all(isinstance(r, str) for r in responses):
+        fail("malformed request")
+    # PAM would treat these as ordinary characters, but a username with a NUL
+    # or a newline is never legitimate and makes logs ambiguous.
+    if "\0" in username or "\n" in username or len(username) > 64:
+        fail("invalid username")
+
+    # Resolve the account *before* touching PAM, so a system account is
+    # rejected without its PAM stack ever running.
+    try:
+        entry = pwd.getpwnam(username)
+    except KeyError:
+        fail(f"no such account: {username!r}")
+
+    if entry.pw_uid < MIN_UID:
+        fail(f"uid {entry.pw_uid} is below the floor of {MIN_UID}")
+
+    if ALLOW_GROUP:
+        try:
+            allowed = grp.getgrnam(ALLOW_GROUP)
+        except KeyError:
+            fail(f"allow-group {ALLOW_GROUP!r} does not exist")
+        if username not in allowed.gr_mem and entry.pw_gid != allowed.gr_gid:
+            fail(f"{username!r} is not in {ALLOW_GROUP!r}")
+
+    try:
+        libpam = load_libpam()
+    except OSError as err:
+        fail(str(err))
+
+    ok, why = authenticate(libpam, username, responses)
+    if not ok:
+        fail({
+            "starved": "the PAM stack asked for more prompts than were supplied",
+            "acct": f"account {username!r} is not permitted to log in (expired or locked)",
+        }.get(why, f"PAM rejected {username!r}"))
+
+    json.dump(
+        {
+            "ok": True,
+            "username": entry.pw_name,
+            "uid": entry.pw_uid,
+            "gid": entry.pw_gid,
+            "home": entry.pw_dir,
+            # The GECOS field's first comma-separated part is the full name on
+            # every distro that populates it; blank is fine and common.
+            "fullName": (entry.pw_gecos or "").split(",")[0].strip(),
+        },
+        sys.stdout,
+    )
+    sys.stdout.write("\n")
+
+
+if __name__ == "__main__":
+    main()

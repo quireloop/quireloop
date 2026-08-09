@@ -26,6 +26,9 @@ export const authApi = {
   signup: (email, password, inviteCode) => post('/signup', { email, password, inviteCode }),
   login: (email, password) => post('/login', { email, password }),
   loginTwoFactor: (tempToken, code) => post('/login/2fa', { tempToken, code }),
+  // PAM checks the password and the code in one conversation, so unlike
+  // loginTwoFactor above there is no second round trip.
+  loginServerAccount: (username, password, code) => post('/login/server-account', { username, password, code }),
   logout: () => request('/logout', { method: 'POST' }),
   changePassword: (currentPassword, newPassword) => post('/change-password', { currentPassword, newPassword }),
   setup2fa: () => post('/2fa/setup', {}),

@@ -123,11 +123,15 @@ function Page({ children, marketing }) {
 }
 
 export default function LoginPage({ onAuthenticated }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
+  const [mode, setMode] = useState('login'); // 'server' | 'login' | 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [inviteRequired, setInviteRequired] = useState(false);
+  // Whether this server accepts its own UNIX accounts. Off, and the whole
+  // server-account form never appears.
+  const [serverAccounts, setServerAccounts] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -139,7 +143,16 @@ export default function LoginPage({ onAuthenticated }) {
   useEffect(() => {
     authApi
       .config()
-      .then((cfg) => setInviteRequired(cfg.inviteRequired))
+      .then((cfg) => {
+        setInviteRequired(cfg.inviteRequired);
+        setServerAccounts(Boolean(cfg.serverAccounts));
+        // Where server accounts exist they're the normal way in, so lead with
+        // them — but not over an invite link, which is by definition for
+        // someone who has no account on this machine.
+        if (cfg.serverAccounts && !new URLSearchParams(window.location.search).get('invite')) {
+          setMode('server');
+        }
+      })
       .catch(() => {});
     const params = new URLSearchParams(window.location.search);
     const invite = params.get('invite');
@@ -148,6 +161,22 @@ export default function LoginPage({ onAuthenticated }) {
       setMode('signup');
     }
   }, []);
+
+  async function handleServerSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      // Password and code go together in one request: PAM asks for both in a
+      // single conversation, so unlike Quireloop's own 2FA there is no second
+      // step to advance to.
+      onAuthenticated(await authApi.loginServerAccount(username.trim(), password, code.trim()));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -224,11 +253,19 @@ export default function LoginPage({ onAuthenticated }) {
           <h1 style={{ margin: 0 }}>Quireloop</h1>
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          {serverAccounts && (
+            <button
+              onClick={() => setMode('server')}
+              style={{ flex: 1, background: mode === 'server' ? 'var(--accent-bg)' : undefined }}
+            >
+              Server account
+            </button>
+          )}
           <button
             onClick={() => setMode('login')}
             style={{ flex: 1, background: mode === 'login' ? 'var(--accent-bg)' : undefined }}
           >
-            Log in
+            {serverAccounts ? 'Email' : 'Log in'}
           </button>
           <button
             onClick={() => setMode('signup')}
@@ -237,6 +274,43 @@ export default function LoginPage({ onAuthenticated }) {
             Sign up
           </button>
         </div>
+
+        {mode === 'server' ? (
+          <form onSubmit={handleServerSubmit} style={{ display: 'grid', gap: 8 }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '0 0 4px' }}>
+              Use your account on this server — the same username, password and authenticator code you'd use to
+              log in over SSH.
+            </p>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Username"
+              autoFocus
+              autoComplete="username"
+              style={{ padding: 8 }}
+            />
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              type="password"
+              autoComplete="current-password"
+              style={{ padding: 8 }}
+            />
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Verification code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              style={{ padding: 8, letterSpacing: 2 }}
+            />
+            {error && <p style={{ color: 'crimson', margin: 0 }}>{error}</p>}
+            <button type="submit" disabled={busy} style={{ padding: 8 }}>
+              {busy ? 'Checking…' : 'Log in'}
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 8 }}>
           <input
             value={email}
@@ -267,6 +341,7 @@ export default function LoginPage({ onAuthenticated }) {
             {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Log in'}
           </button>
         </form>
+        )}
       </div>
     </Page>
   );

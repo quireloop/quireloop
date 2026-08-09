@@ -71,6 +71,7 @@ export default async function adminRoutes(app) {
         disabled: Boolean(u.disabled),
         createdAt: u.createdAt,
         homeDir: u.homeDir ?? '',
+        unixUser: u.unixUser ?? '',
         // What they'd actually get if homeDir is left blank — shown in the
         // panel so an admin can see the convention already works before
         // deciding whether to override it.
@@ -86,6 +87,14 @@ export default async function adminRoutes(app) {
     const { homeDir } = req.body ?? {};
     const user = await findUserById(req.params.id);
     if (!user) return reply.code(404).send({ error: 'user not found' });
+    if (user.authProvider === 'pam') {
+      // Their home directory comes from the host on every login and is
+      // overwritten each time, so anything set here would silently stop
+      // applying. Change it in /etc/passwd instead.
+      return reply.code(400).send({
+        error: "this account's folder is its UNIX home directory — change it on the server, not here",
+      });
+    }
 
     const trimmed = typeof homeDir === 'string' ? homeDir.trim() : '';
     // Empty clears the override and falls back to the convention.

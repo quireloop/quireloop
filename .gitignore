@@ -2,6 +2,7 @@ node_modules/
 server/public/
 *.log
 .DS_Store
+__pycache__/
 
 # Your papers never live in this repo — see README "Where your data lives".
 data/

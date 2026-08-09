@@ -56,9 +56,9 @@ or the hosted editor sends only the paper.
 
 **A project directory can be a symlink.** A member can open a folder that
 already exists on the host as a project, edited in place — their own home
-directory by default (resolved in `library.js:homeForUser`, three rules:
-admin-assigned, `<base>/<email local part>`, then the process's own home on a
-single-account install), plus anything in `QUIRELOOP_LIBRARY_DIRS`.
+directory by default (`library.js:homeForUser`: a PAM account's real UNIX home,
+else for local accounts admin-assigned → `<base>/<email local part>` → the
+process's own home on a single-account install), plus `QUIRELOOP_LIBRARY_DIRS`.
 `data/projects/<ownerId>/<projectId>` is then a link to it
 (`manifest.linkedPath` records where). This is deliberately invisible to the
 rest of the app — everything still goes through `projectDir()` — but it has
@@ -87,6 +87,24 @@ routes must use it rather than mutating the `req.manifest` read by middleware
 (that value is already stale by the time a handler runs); and the locking is
 in-process only, so two server processes over one `data/` directory would still
 race — a documented non-goal.
+
+### Two kinds of account
+
+`authProvider: 'local'` (email + password + Quireloop's own TOTP) and `'pam'`
+(a UNIX account on the host, checked by `deploy/quireloop-pam-auth` — a separate
+root-run helper, because the web server is unprivileged and cannot read
+`~/.google_authenticator`). Credentials never touch argv: they go to the helper
+on stdin, and `lib/pam.js` hands it a narrow env allowlist that **must** include
+`PATH`, since the command it runs is `sudo` by name.
+
+The internal `id` stays an opaque nanoid for both. That is deliberate and worth
+preserving: the id is a directory name under `data/projects/`, the key of
+`shared-index.json`, and the value compared in every `manifest.ownerId` and
+`collaborators[].userId`, so making it mean "UNIX username" would require
+migrating all of it. A PAM login resolves to a normal user record via
+`upsertPamUser`, which must stay inside the `updateJsonWithResult` lock —
+without it, concurrent first logins create several accounts for one person
+(there's a test that fails when the lock is removed).
 
 ### Request pipeline
 

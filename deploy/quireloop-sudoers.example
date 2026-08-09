@@ -1,0 +1,33 @@
+# /etc/sudoers.d/quireloop  —  install with: visudo -f /etc/sudoers.d/quireloop
+#
+# Lets the unprivileged Quireloop service user run the PAM auth helper, and
+# nothing else. The helper reads credentials on stdin, checks them against PAM,
+# and prints yes or no; it takes no arguments and never runs another program.
+#
+# Replace "quireloop" with the user your systemd unit runs as.
+
+# The helper needs its own configuration, and sudo strips the environment by
+# default. Only these three names are let through — never a PATH, a
+# LD_PRELOAD, or anything else that could change what code the helper loads.
+Defaults:quireloop  env_keep += "QUIRELOOP_PAM_SERVICE QUIRELOOP_PAM_MIN_UID QUIRELOOP_PAM_ALLOW_GROUP"
+
+# No TTY: this runs from a web request, not a terminal. NOPASSWD because there
+# is no human present to type a password.
+Defaults:quireloop  !requiretty
+
+quireloop  ALL=(root) NOPASSWD: /usr/local/libexec/quireloop-pam-auth
+
+# ---------------------------------------------------------------------------
+# The rule above is only as safe as the file it names. If the service user can
+# modify the helper, or any directory on its path, this is a straight root
+# escalation. After installing, verify:
+#
+#   sudo install -o root -g root -m 0755 \
+#        deploy/quireloop-pam-auth /usr/local/libexec/quireloop-pam-auth
+#
+#   ls -ld /usr/local /usr/local/libexec /usr/local/libexec/quireloop-pam-auth
+#     -> every one root-owned, none group- or world-writable
+#
+# Do not use a wildcard in the command path. A rule ending in a directory or a
+# glob lets the service user run anything it can drop there, as root.
+# ---------------------------------------------------------------------------

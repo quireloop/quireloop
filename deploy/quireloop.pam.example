@@ -1,0 +1,33 @@
+# /etc/pam.d/quireloop
+#
+# The PAM stack Quireloop's web login uses. Install this as /etc/pam.d/quireloop
+# — it is deliberately its own service name rather than reusing "sshd", so that
+# what the web login requires is an explicit decision you can see and change
+# without touching remote shell access.
+#
+# The stack below is the common case on Debian/Ubuntu: the normal system
+# password, plus the same TOTP authenticator you already use for SSH. Adjust to
+# match whatever your sshd stack actually does.
+
+# 1. The verification code from the authenticator app.
+#
+#    Order matters and is not arbitrary: Quireloop sends the password first and
+#    the code second, so the module that prompts for the password must come
+#    second here. If you swap these lines, swap them in the login form's
+#    expectations too — otherwise every login fails with each answer going to
+#    the wrong prompt.
+#
+#    nullok lets accounts that have not run google-authenticator yet log in
+#    with just their password. Drop it to make 2FA mandatory.
+auth    required    pam_google_authenticator.so nullok
+
+# 2. The UNIX password (via common-auth: pam_unix, plus SSSD/LDAP if you use it).
+@include common-auth
+
+# Account validation — expired passwords, locked and expired accounts. Quireloop
+# calls pam_acct_mgmt, so this is enforced.
+@include common-account
+
+# Deliberately absent: session and password stacks. Quireloop never opens a
+# login session (no pam_systemd, no pam_mkhomedir, no motd) and never changes
+# passwords — it only ever asks "are these credentials valid".

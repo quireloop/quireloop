@@ -33,6 +33,11 @@ once it's running.
 
 ## Features
 
+- **Log in with the server's own accounts** — optionally authenticate against
+  the host's UNIX accounts through PAM, so members use the same username,
+  password and authenticator they already use for SSH, and their projects
+  live in their real home directory with nothing to configure. Email/password
+  accounts still work alongside it for collaborators without a shell.
 - **Accounts & access control** — email/password accounts with TOTP 2FA,
   invite-only signup by default (`QUIRELOOP_OPEN_SIGNUP=true` to open it
   up), an admin panel (list/deactivate users, revoke sessions, manage

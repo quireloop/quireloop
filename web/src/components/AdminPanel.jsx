@@ -13,6 +13,18 @@ function HomeDirField({ user, onSaved }) {
   const derived = user.resolvedHomeDir;
   const dirty = value.trim() !== (user.homeDir ?? '');
 
+  // A server account's folder is its UNIX home, re-read from the host on every
+  // login — anything typed here would be overwritten, so show it read-only
+  // rather than offering an edit that silently doesn't stick.
+  if (user.unixUser) {
+    return (
+      <div style={{ minWidth: 200, fontSize: 12, fontFamily: 'monospace', color: 'var(--text-muted)' }}>
+        {derived || '—'}
+        <div style={{ fontFamily: 'inherit', fontSize: 11 }}>home of {user.unixUser} on this server</div>
+      </div>
+    );
+  }
+
   async function save() {
     setBusy(true);
     setError('');
@@ -107,7 +119,22 @@ function UsersSection({ currentUserId }) {
           {users.map((u) => (
             <tr key={u.id}>
               <td style={{ padding: '6px' }}>
-                {u.email}
+                {u.unixUser || u.email}
+                {u.unixUser && (
+                  <span
+                    style={{
+                      marginLeft: 6,
+                      fontSize: 11,
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                      background: 'var(--accent-bg)',
+                      color: 'var(--text-muted)',
+                    }}
+                    title="Authenticates against this server's own accounts"
+                  >
+                    server
+                  </span>
+                )}
                 {u.disabled && (
                   <span style={{ marginLeft: 6, fontSize: 11, color: 'crimson' }}>disabled</span>
                 )}

@@ -11,7 +11,11 @@ import {
   signTempToken,
   verifyTempToken,
   usersExist,
+  upsertPamUser,
+  isPamUser,
 } from '../lib/auth.js';
+import { pamEnabled, authenticate as pamAuthenticate } from '../lib/pam.js';
+import { PAM_EMAIL_DOMAIN } from '../config.js';
 import { createSecret, checkCode, enrollmentDetails } from '../lib/twoFactor.js';
 import { requireAuth } from '../lib/authMiddleware.js';
 import { consumeInvite, isInviteValid } from '../lib/invites.js';
@@ -29,9 +33,22 @@ function tooManyAttempts(reply, seconds) {
   return reply.code(429).send({ error: `too many attempts, retry in ${seconds} seconds` });
 }
 
+// A PAM account's password and authenticator live on the host, so the routes
+// that manage Quireloop's own credentials have nothing to act on. Saying so is
+// better than the confusing failures they'd otherwise produce — change-password
+// comparing against a null hash, or 2FA enrollment silently creating a second
+// secret that the login path never consults.
+function rejectIfPam(user, reply, what) {
+  if (!isPamUser(user)) return false;
+  reply.code(400).send({
+    error: `${what} is managed on the server for this account — change it there, the same way you would for SSH`,
+  });
+  return true;
+}
+
 export default async function authRoutes(app) {
   app.get('/api/auth/config', async () => {
-    return { inviteRequired: await inviteRequired() };
+    return { inviteRequired: await inviteRequired(), serverAccounts: pamEnabled() };
   });
 
   app.post('/api/auth/signup', async (req, reply) => {
@@ -88,6 +105,61 @@ export default async function authRoutes(app) {
     return reply.code(201).send(publicUser(user));
   });
 
+  // Logging in with a UNIX account on this host. PAM checks the password and
+  // the authenticator code together, in one round trip, because the stack in
+  // deploy/quireloop.pam.example asks for exactly those two prompts — so there
+  // is no separate 2FA step and no temp token for this path.
+  app.post('/api/auth/login/server-account', async (req, reply) => {
+    if (!pamEnabled()) {
+      return reply.code(404).send({ error: 'server-account login is not enabled on this server' });
+    }
+    const { username, password, code } = req.body ?? {};
+    const ipKey = `ip:${req.ip}`;
+    const userKey = `unix:${(username ?? '').toLowerCase()}`;
+
+    const ipBlocked = isBlocked(ipKey);
+    const userBlocked = isBlocked(userKey);
+    if (ipBlocked || userBlocked) {
+      return tooManyAttempts(reply, Math.max(ipBlocked || 0, userBlocked || 0));
+    }
+
+    if (!username || typeof username !== 'string' || !password) {
+      registerFailure(ipKey);
+      return reply.code(400).send({ error: 'username and password are required' });
+    }
+
+    let account;
+    try {
+      // Answers the stack's prompts in order. An empty code is still sent, so
+      // a stack configured with `nullok` (no authenticator enrolled yet) has
+      // something to consume rather than starving the conversation.
+      account = await pamAuthenticate(username, [password, String(code ?? '')]);
+    } catch (err) {
+      // A helper that can't run at all is an operator problem, not a wrong
+      // password — say so plainly instead of sending them to reset it.
+      req.log.error({ err }, 'PAM helper failed');
+      return reply.code(503).send({ error: 'the server could not check your credentials — check the server log' });
+    }
+
+    if (!account) {
+      registerFailure(ipKey);
+      registerFailure(userKey);
+      return reply.code(401).send({ error: 'invalid username, password, or code' });
+    }
+
+    const user = await upsertPamUser(account, { emailDomain: PAM_EMAIL_DOMAIN });
+    // Checked after authentication, not before: an admin disabling someone
+    // here should not also tell an attacker that the account exists.
+    if (user.disabled) {
+      return reply.code(403).send({ error: 'this account has been disabled' });
+    }
+
+    clear(ipKey);
+    clear(userKey);
+    req.session.set('userId', user.id);
+    return publicUser(user);
+  });
+
   app.post('/api/auth/login', async (req, reply) => {
     const { email, password } = req.body ?? {};
     const ipKey = `ip:${req.ip}`;
@@ -100,7 +172,10 @@ export default async function authRoutes(app) {
     }
 
     const user = await findUserByEmail(email ?? '');
-    if (!user || !(await verifyPassword(password ?? '', user.passwordHash))) {
+    // A PAM account has no stored password hash, so verifyPassword would
+    // reject it anyway — but refusing explicitly keeps that a deliberate
+    // property rather than a happy accident of how null hashes compare.
+    if (!user || isPamUser(user) || !(await verifyPassword(password ?? '', user.passwordHash))) {
       registerFailure(ipKey);
       registerFailure(emailKey);
       return reply.code(401).send({ error: 'invalid email or password' });
@@ -160,6 +235,7 @@ export default async function authRoutes(app) {
   app.post('/api/auth/change-password', { preHandler: requireAuth }, async (req, reply) => {
     const { currentPassword, newPassword } = req.body ?? {};
     const user = await findUserById(req.userId);
+    if (rejectIfPam(user, reply, 'your password')) return;
     if (!(await verifyPassword(currentPassword ?? '', user.passwordHash))) {
       return reply.code(401).send({ error: 'current password is incorrect' });
     }
@@ -170,9 +246,10 @@ export default async function authRoutes(app) {
     return { ok: true };
   });
 
-  app.post('/api/auth/2fa/setup', { preHandler: requireAuth }, async (req) => {
-    const secret = createSecret();
+  app.post('/api/auth/2fa/setup', { preHandler: requireAuth }, async (req, reply) => {
     const user = await findUserById(req.userId);
+    if (rejectIfPam(user, reply, 'two-factor authentication')) return;
+    const secret = createSecret();
     await updateUser(req.userId, { pendingTwoFactorSecret: secret });
     const { uri, qrDataUrl } = await enrollmentDetails(user.email, secret);
     return { uri, qrDataUrl };

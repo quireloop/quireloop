@@ -37,10 +37,14 @@ async function isDirectory(p) {
   }
 }
 
-// Which directory on the host belongs to this member. There is no inherent
-// link between a Quireloop account and a unix user, so this is three rules in
-// descending order of explicitness:
+// Which directory on the host belongs to this member.
 //
+// For an account that logged in through PAM this is not a guess at all: the
+// host told us the home directory during authentication, so rule 0 below is
+// the answer and the rest never runs. The remaining rules exist for local
+// email/password accounts, which have no inherent link to a UNIX user:
+//
+//   0. The home directory of the UNIX account they authenticated as.
 //   1. A path an admin assigned to them (Admin panel → Server folder). The
 //      escape hatch for when the convention doesn't hold — an account whose
 //      email is nothing like its unix username, or papers kept off /home.
@@ -51,6 +55,9 @@ async function isDirectory(p) {
 //      is what makes running Quireloop on your own laptop work out of the box.
 //      With two accounts that inference is wrong, so it stops applying.
 export async function homeForUser(user) {
+  if (user.unixHome) {
+    return (await isDirectory(user.unixHome)) ? user.unixHome : null;
+  }
   if (user.homeDir) {
     return (await isDirectory(user.homeDir)) ? user.homeDir : null;
   }

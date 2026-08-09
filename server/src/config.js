@@ -22,6 +22,28 @@ export const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 export const PORT = process.env.PORT ? Number(process.env.PORT) : 4173;
 export const HOST = '0.0.0.0';
 
+// Log in with the host's own UNIX accounts instead of Quireloop-managed ones.
+// Unset disables it entirely and only email/password login exists.
+//
+// Authentication runs in deploy/quireloop-pam-auth, a separate process the
+// operator installs as root, because a PAM stack with pam_google_authenticator
+// must read each user's ~/.google_authenticator (mode 0600, owned by them) —
+// which this server, running unprivileged, cannot and should not be able to do.
+export const PAM_ENABLED = process.env.QUIRELOOP_PAM_ENABLED === 'true';
+
+// How to invoke that helper. The default runs it through sudo under the one
+// narrowly scoped rule in deploy/quireloop-sudoers.example. Overridable as a
+// whole so a deployment can use a socket-activated helper instead — and so the
+// tests can point at a fake one, since PAM can't be exercised in a test suite.
+export const PAM_HELPER_COMMAND = process.env.QUIRELOOP_PAM_HELPER
+  ? process.env.QUIRELOOP_PAM_HELPER.split(' ').filter(Boolean)
+  : ['sudo', '-n', '/usr/local/libexec/quireloop-pam-auth'];
+
+// Synthesized for PAM accounts, which have a username but no email address.
+// Sharing and collaborator lists are keyed on email in the UI, so every account
+// needs one that is stable and unique.
+export const PAM_EMAIL_DOMAIN = process.env.QUIRELOOP_PAM_EMAIL_DOMAIN || 'localhost';
+
 // Each member gets their own home directory on the host as a browsable root,
 // so opening a paper that already lives at /home/arjun/Thesis/paper needs
 // no configuration at all. Which directory that is, is resolved per user in
