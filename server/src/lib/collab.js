@@ -5,7 +5,7 @@ import * as syncProtocol from 'y-protocols/sync.js';
 import * as awarenessProtocol from 'y-protocols/awareness.js';
 import * as encoding from 'lib0/encoding.js';
 import * as decoding from 'lib0/decoding.js';
-import { projectDir, resolveProjectPath } from './storage.js';
+import { projectDir, resolveUserPath } from './storage.js';
 
 // Hand-rolled y-websocket wire protocol — y-websocket v3 ships no
 // server-side utilities, only the browser client, so the sync/awareness
@@ -29,7 +29,7 @@ function roomKey(ownerId, projectId, filePath) {
 
 async function loadInitialContent(ownerId, projectId, filePath) {
   try {
-    return await fs.readFile(resolveProjectPath(ownerId, projectId, filePath), 'utf8');
+    return await fs.readFile(await resolveUserPath(ownerId, projectId, filePath), 'utf8');
   } catch {
     return '';
   }
@@ -82,7 +82,7 @@ async function persistRoom(room) {
   room.persistTimer = null;
   const text = room.doc.getText('content').toString();
   try {
-    await fs.writeFile(resolveProjectPath(room.ownerId, room.projectId, room.filePath), text);
+    await fs.writeFile(await resolveUserPath(room.ownerId, room.projectId, room.filePath), text);
   } catch {
     // file/project gone (deleted, restored, renamed mid-session) — nothing to persist to
   }

@@ -77,7 +77,18 @@ export async function compileProject(ownerId, projectId, mainFile, compiler = 'p
 // can, whatever openin_any says, so the real wall is lib/compileSandbox.js.
 const SANDBOX_FLAGS = ['-norc'];
 
+// The main file is passed to latexmk as an argument, where a name starting
+// with a dash would be read as an option, and latexmk's -e option runs Perl.
+export function isSafeMainFile(mainFile) {
+  if (typeof mainFile !== 'string' || !mainFile.endsWith('.tex')) return false;
+  if (path.isAbsolute(mainFile)) return false;
+  return !mainFile.split('/').some((part) => part === '..' || part.startsWith('-'));
+}
+
 async function runLatexmk(cwd, mainFile, compiler) {
+  if (!isSafeMainFile(mainFile)) {
+    return { success: false, log: `Can't compile "${mainFile}": not a .tex file in this project.`, pdfPath: null };
+  }
   const outdir = 'build';
   const engineFlag = ENGINE_FLAGS[compiler] ?? ENGINE_FLAGS.pdflatex;
   const pdfPath = pdfPathFor(mainFile);
@@ -137,6 +148,7 @@ async function runLatexmk(cwd, mainFile, compiler) {
 
 export async function cleanProject(ownerId, projectId, mainFile) {
   const cwd = projectDir(ownerId, projectId);
+  if (!isSafeMainFile(mainFile)) return { ok: false, error: 'invalid main file' };
   // Shares build/ with compileProject — taking the same lock keeps a clean
   // from deleting intermediates out from under an in-flight compile.
   return withLock(`compile:${cwd}`, async () => {

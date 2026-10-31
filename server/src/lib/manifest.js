@@ -250,7 +250,9 @@ export async function buildManifestFromDirectory(
   if (!files.some((f) => f.path === manifest.mainFile)) manifest.mainFile = mainFile;
   const written = await writeManifest(ownerId, id, manifest);
   await projectIndex.setOwner(id, ownerId);
-  if (initGit || (await hasGitRepo(dir))) await ensureGitRepo(ownerId, id);
+  if (initGit) await ensureGitRepo(ownerId, id);
+  // A folder whose repository isn't accepted still opens, just without git.
+  else if (await hasGitRepo(dir)) await ensureGitRepo(ownerId, id).catch(() => {});
   return written;
 }
 

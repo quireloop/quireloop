@@ -335,6 +335,14 @@ If TeX is installed outside `/usr`, list its folder in
 `QUIRELOOP_COMPILE_SANDBOX_PATHS` (colon-separated). Each project keeps a font
 cache in `compile-cache/` in the data directory, and it is safe to delete.
 
+## What the file and git features may touch
+
+Editors work only on the paper. Quireloop's own files (`.git`, `manifest.json`,
+`versions/` and `.quireloop*`) can't be read or changed through the interface,
+and links that lead outside a project are refused. Git never runs hooks, turns
+links into plain files, and is switched off for a folder whose `.git/config`
+contains settings that could run a program, such as filters or custom commands.
+
 ## Opening folders already on the server
 
 By default a project is something Quireloop creates and stores inside

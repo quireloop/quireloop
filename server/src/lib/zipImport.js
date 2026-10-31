@@ -60,6 +60,8 @@ export async function importFromZip(ownerId, name, buffer) {
 
   await fs.rm(path.join(dir, '__MACOSX'), { recursive: true, force: true });
   await flattenSingleWrapperFolder(dir);
+  // git's config can name programs to run, so one from a zip is never trusted.
+  await fs.rm(path.join(dir, '.git'), { recursive: true, force: true });
 
   try {
     return await buildManifestFromDirectory(ownerId, id, name, dir, 'Uploaded project');

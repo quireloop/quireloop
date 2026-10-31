@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import { requireAuth, requireProjectAccess } from '../lib/authMiddleware.js';
-import { resolveProjectPath } from '../lib/storage.js';
+import { resolveUserPath } from '../lib/storage.js';
 import { getSettings } from '../lib/settings.js';
 import { findUserById } from '../lib/auth.js';
 import * as anthropicProvider from '../lib/assistantProviders/anthropic.js';
@@ -67,7 +67,7 @@ Rules:
 async function readFileContext(ownerId, projectId, filePath) {
   if (!filePath) return null;
   try {
-    const abs = resolveProjectPath(ownerId, projectId, filePath);
+    const abs = await resolveUserPath(ownerId, projectId, filePath);
     const content = await fs.readFile(abs, 'utf8');
     return content.length > MAX_CONTEXT_CHARS
       ? `${content.slice(0, MAX_CONTEXT_CHARS)}\n%% [truncated — file continues]`

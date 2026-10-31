@@ -29,7 +29,7 @@ export default async function versionsRoutes(app) {
     const relPath = (req.query?.path ?? '').toString();
     if (!relPath) return reply.code(400).send({ error: 'path is required' });
     try {
-      const filePath = resolveSnapshotFilePath(req.ownerId, req.params.id, req.params.versionId, relPath);
+      const filePath = await resolveSnapshotFilePath(req.ownerId, req.params.id, req.params.versionId, relPath);
       const content = await fs.readFile(filePath, 'utf8');
       return reply.type('text/plain').send(content);
     } catch (err) {

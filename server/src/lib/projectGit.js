@@ -27,6 +27,35 @@ const GITIGNORE_CONTENT = `# Quireloop bookkeeping — not part of your project
 .DS_Store
 `;
 
+// Git can run programs named in a repository's own config or hooks, and a
+// project's repository may have been written by someone with a server login.
+// Links are turned into plain files so a pull can't bring one in.
+export const GIT_SAFETY = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.symlinks=false'];
+
+// Filters, diff drivers, includes and the rest can't all be switched off with
+// -c because their names are open-ended, so only settings known to run nothing
+// are accepted. Git itself reads the file here, and --file never follows includes.
+const SAFE_GIT_CONFIG = [
+  /^core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks|autocrlf|safecrlf)$/,
+  /^remote\..+\.(url|pushurl|fetch)$/,
+  /^branch\..+\.(remote|merge|rebase)$/,
+  /^user\.(name|email)$/,
+  /^pull\.(rebase|ff)$/,
+  /^push\.default$/,
+];
+
+async function assertSafeRepo(dir) {
+  const gitPath = path.join(dir, '.git');
+  const stat = await fs.lstat(gitPath).catch(() => null);
+  if (!stat) return;
+  if (!stat.isDirectory()) throw new Error("this folder's .git isn't a normal repository, so Source Control is off");
+  const { stdout } = await execa('git', ['config', '--file', path.join(gitPath, 'config'), '--name-only', '--list']);
+  const unsafe = stdout.split('\n').filter((key) => key && !SAFE_GIT_CONFIG.some((rule) => rule.test(key)));
+  if (unsafe.length > 0) {
+    throw new Error(`this repository's git settings aren't allowed here, so Source Control is off: ${unsafe[0]}`);
+  }
+}
+
 // Naive repo discovery — git walking upward from -C dir looking for the
 // nearest .git — finds whatever repo the project folder happens to sit inside,
 // and any add/commit then silently lands there instead. For a normal project
@@ -40,11 +69,12 @@ const GITIGNORE_CONTENT = `# Quireloop bookkeeping — not part of your project
 // ceiling naming the symlink's parent would never match. PROJECTS_DIR is kept
 // as the fallback for the case where realpath fails.
 async function git(dir, args, opts = {}) {
+  await assertSafeRepo(dir);
   const ceiling = await fs
     .realpath(dir)
     .then((real) => path.dirname(real))
     .catch(() => PROJECTS_DIR);
-  return execa('git', ['-C', dir, ...args], {
+  return execa('git', [...GIT_SAFETY, '-C', dir, ...args], {
     ...opts,
     env: { ...process.env, GIT_CEILING_DIRECTORIES: ceiling, ...opts.env },
   });
@@ -120,7 +150,7 @@ export async function ensureGitRepo(ownerId, projectId) {
 
   const status = await git(dir, ['status', '--porcelain']);
   if (status.stdout.trim()) {
-    await git(dir, [...GIT_IDENTITY, 'add', '-A']);
+    await git(dir, [...GIT_IDENTITY, 'add', '-A', '--', '.', `:!${CREDENTIALS_FILE}`]);
     await git(dir, [...GIT_IDENTITY, 'commit', '-m', 'Initial commit']);
   }
 }
@@ -163,7 +193,7 @@ export async function gitCommit(ownerId, projectId, message) {
     return { ok: true, committed: false };
   }
 
-  await git(dir, [...GIT_IDENTITY, 'add', '-A']);
+  await git(dir, [...GIT_IDENTITY, 'add', '-A', '--', '.', `:!${CREDENTIALS_FILE}`]);
   await git(dir, [...GIT_IDENTITY, 'commit', '-m', message?.trim() || 'Update']);
   return { ok: true, committed: true };
 }
@@ -295,7 +325,7 @@ export async function pushProject(ownerId, projectId) {
 // so pull is worth the extra round trip to get right, and it also means a
 // remote that isn't the hosted editor (doesn't use `master`) just works.
 async function resolveRemoteBranch(authedUrl, localBranch) {
-  const { stdout } = await execa('git', ['ls-remote', '--heads', authedUrl], {
+  const { stdout } = await execa('git', [...GIT_SAFETY, 'ls-remote', '--heads', authedUrl], {
     timeout: PUSH_PULL_TIMEOUT_MS,
   });
   const heads = stdout

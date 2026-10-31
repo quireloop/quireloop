@@ -43,7 +43,7 @@ async function walkSearchable(root, base = '') {
       if (SKIP_DIRS.has(entry.name)) continue;
       const relPath = base ? `${base}/${entry.name}` : entry.name;
       files = files.concat(await walkSearchable(root, relPath));
-    } else {
+    } else if (entry.isFile()) {
       const relPath = base ? `${base}/${entry.name}` : entry.name;
       if (relPath === 'manifest.json') continue;
       if (isBinaryPath(relPath)) continue;

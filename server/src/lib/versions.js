@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
-import { projectDir } from './storage.js';
+import { assertInsideRoot, isPrivatePath, projectDir } from './storage.js';
 import { updateManifest } from './manifest.js';
 import { readJson, updateJson } from './jsonStore.js';
 
@@ -78,13 +78,17 @@ export async function listSnapshotFiles(ownerId, projectId, versionId) {
 // Resolves a URL-supplied relative file path against a version snapshot's
 // folder, same containment check as storage.js's resolveProjectPath —
 // throws if it would escape the snapshot root (e.g. via "../..").
-export function resolveSnapshotFilePath(ownerId, projectId, versionId, relPath) {
+export async function resolveSnapshotFilePath(ownerId, projectId, versionId, relPath) {
   assertSafeVersionId(versionId);
   const base = path.join(versionsDir(ownerId, projectId), versionId);
   const resolved = path.resolve(base, relPath);
   if (resolved !== base && !resolved.startsWith(base + path.sep)) {
     throw new Error(`path escapes version root: ${relPath}`);
   }
+  if (isPrivatePath(path.relative(base, resolved))) {
+    throw new Error(`that path is not available: ${relPath}`);
+  }
+  await assertInsideRoot(base, resolved);
   return resolved;
 }
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { compileProject, cleanProject, pdfPathFor } from '../lib/latex.js';
 import { parseLatexLog } from '../lib/latexLog.js';
-import { resolveProjectPath } from '../lib/storage.js';
+import { resolveUserPath } from '../lib/storage.js';
 import { createSnapshot } from '../lib/versions.js';
 import { requireProjectAccess, requireProjectWrite } from '../lib/authMiddleware.js';
 import * as collab from '../lib/collab.js';
@@ -26,9 +26,11 @@ export default async function compileRoutes(app) {
 
   app.get('/api/projects/:id/pdf', { preHandler: requireProjectAccess }, async (req, reply) => {
     try {
-      const pdfPath = resolveProjectPath(req.ownerId, req.params.id, pdfPathFor(req.manifest.mainFile));
+      const pdfPath = await resolveUserPath(req.ownerId, req.params.id, pdfPathFor(req.manifest.mainFile));
       fs.accessSync(pdfPath);
-      return reply.type('application/pdf').send(fs.createReadStream(pdfPath));
+      // O_NOFOLLOW because a running compile can still swap this file for a link.
+      const flags = fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW;
+      return reply.type('application/pdf').send(fs.createReadStream(pdfPath, { flags }));
     } catch {
       return reply.code(404).send({ error: 'pdf not found — compile the project first' });
     }

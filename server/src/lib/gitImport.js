@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid';
 import { projectDir } from './storage.js';
 import { buildManifestFromDirectory } from './manifest.js';
 import { withToken } from './gitAuth.js';
-import { setRemote } from './projectGit.js';
+import { GIT_SAFETY, setRemote } from './projectGit.js';
 
 const CLONE_TIMEOUT_MS = 60_000;
 
@@ -24,7 +24,7 @@ export async function importFromGit(ownerId, name, gitUrl, token) {
   const authedUrl = withToken(gitUrl, token);
 
   try {
-    await execa('git', ['clone', '--depth', '1', authedUrl, dir], { timeout: CLONE_TIMEOUT_MS });
+    await execa('git', [...GIT_SAFETY, 'clone', '--depth', '1', authedUrl, dir], { timeout: CLONE_TIMEOUT_MS });
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });
     const stderr = err.stderr ?? '';

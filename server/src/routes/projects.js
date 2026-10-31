@@ -7,6 +7,7 @@ import {
   deleteProject,
 } from '../lib/manifest.js';
 import { TEMPLATES } from '../lib/templates.js';
+import { isSafeMainFile } from '../lib/latex.js';
 import { projectDir } from '../lib/storage.js';
 import { importFromGit } from '../lib/gitImport.js';
 import { importFromZip } from '../lib/zipImport.js';
@@ -69,8 +70,11 @@ export default async function projectsRoutes(app) {
     return { ...req.manifest, yourRole: req.projectRole };
   });
 
-  app.patch('/api/projects/:id', { preHandler: requireProjectWrite }, async (req) => {
+  app.patch('/api/projects/:id', { preHandler: requireProjectWrite }, async (req, reply) => {
     const { name, mainFile, compiler } = req.body ?? {};
+    if (mainFile && !isSafeMainFile(mainFile)) {
+      return reply.code(400).send({ error: 'the main file must be a .tex file inside the project' });
+    }
     return updateManifest(req.ownerId, req.params.id, (manifest) => ({
       ...manifest,
       ...(name ? { name } : {}),
@@ -91,7 +95,7 @@ export default async function projectsRoutes(app) {
     reply.header('content-type', 'application/zip');
     reply.header('content-disposition', `attachment; filename="${manifest.name.replace(/[^\w.-]/g, '_')}.zip"`);
     reply.send(archive);
-    archive.glob('**/*', { cwd: dir, ignore: ['build/**', 'versions/**', 'manifest.json'] });
+    archive.glob('**/*', { cwd: dir, ignore: ['build/**', 'versions/**', 'manifest.json', '.git/**', '.quireloop*', '.quireloop*/**'] });
     await archive.finalize();
   });
 
