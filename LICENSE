@@ -1,4 +1,4 @@
-# PolyForm Noncommercial License 1.0.0, with Attribution Addendum
+# PolyForm Noncommercial License 1.0.0, with Attribution and Academic Use Addenda
 
 Copyright (c) Arjun Pogaku
 
@@ -6,16 +6,15 @@ Required Notice: Copyright Arjun Pogaku (https://github.com/arjunpogaku/quireloo
 
 This license is the standard **PolyForm Noncommercial License 1.0.0**
 (<https://polyformproject.org/licenses/noncommercial/1.0.0>), reproduced
-verbatim below, plus one additional term appended at the end (the
-"Attribution Addendum") that is not part of the original PolyForm text.
-Because of that addition, this is technically a modified license — it is
-not identical to stock PolyForm Noncommercial 1.0.0 — but the underlying
-terms are unchanged, only the attribution obligation is new.
+verbatim below, plus two additional terms appended at the end (the
+"Attribution Addendum" and the "Academic Use Addendum") that are not part
+of the original PolyForm text. Because of those additions, this is a
+modified license — it is not identical to stock PolyForm Noncommercial
+1.0.0. The Academic Use Addendum narrows the permitted uses to academic
+purposes.
 
-For commercial use (anything outside the "Noncommercial Purposes" and
-"Personal Uses" sections below — e.g., use by a for-profit company),
-contact the licensor at pchakri.rj@gmail.com to arrange a separate
-commercial license.
+For any other use, including commercial use, contact the licensor at
+pchakri.rj@gmail.com to arrange a separate license.
 
 ------------------------------------------------------------------------
 
@@ -162,4 +161,18 @@ file.
 
 This addendum is a condition of the licenses granted above, on the
 same footing as the rest of these terms, and is subject to the same
+[Violations](#violations) cure period.
+
+## Academic Use Addendum (additional term, not part of stock PolyForm text)
+
+Despite the Noncommercial Purposes, Personal Uses, and Noncommercial
+Organizations sections above, the licenses granted above cover only
+academic purposes. **Academic purposes** means study, teaching, and
+scholarly research, including preparing theses, papers, and other
+scholarly work, carried out by students, teachers, or researchers, or by
+educational or research institutions. Any other use requires separate
+written permission from the licensor.
+
+This addendum is a condition of the licenses granted above, on the same
+footing as the rest of these terms, and is subject to the same
 [Violations](#violations) cure period.

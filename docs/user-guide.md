@@ -2,7 +2,7 @@
 
 Everything you need to know to use Quireloop, from your first login to advanced
 collaboration. This guide is for **users** of a running Quireloop server. If you
-are the person *setting up* the server, start with [DEPLOYMENT.md](DEPLOYMENT.md)
+are the person *setting up* the server, start with [Install on a server](install-server.md)
 and come back here.
 
 ## Contents
@@ -31,8 +31,8 @@ and come back here.
 
 ## What is Quireloop?
 
-Quireloop is a self-hosted, collaborative LaTeX editor — an open-source
-(Apache 2.0) alternative to the hosted editor that your lab runs on its own server.
+Quireloop is a self-hosted, collaborative LaTeX editor that your lab runs on
+its own server. It is licensed for [academic use only](../README.md#license).
 Your papers never leave your hardware, there are no subscriptions, and there
 are no artificial limits on collaborators, compile time, or history.
 
@@ -206,17 +206,41 @@ Four tabs at the top:
 - **Dark/light theme** — the ☀/🌙 toggle, applied across editor and UI.
 - **Undo/redo** — `Cmd/Ctrl-Z`, `Cmd/Ctrl-Y`. Undo is *yours*: it only
   reverts your own edits, never a collaborator's.
+- **Equation preview** — hover over any math (`$…$`, `\(…\)`, `\[…\]`,
+  `$$…$$`, `equation`/`align`/`gather`/`multline`…) to see it typeset. Your
+  own `\newcommand`, `\DeclareMathOperator` and `\def` macros from the main
+  file and the open file are applied.
+- **Citation preview** — hover a key inside any `\cite`-style command to see
+  the reference's title, authors, venue and year from the project's `.bib`
+  files (or a warning if the key isn't defined).
+- **Paste or drop images** — paste a screenshot, or drag image/PDF files into
+  the editor: they're uploaded to `figures/` (pasted screenshots get a
+  timestamped name, never overwriting an existing file) and a
+  `\begin{figure}…\includegraphics…\end{figure}` block is inserted where you
+  pasted or dropped.
+- **Folding** — fold sections and environments from the gutter arrows, or
+  with `Ctrl-Shift-[` / `Ctrl-Shift-]` (`Cmd-Alt-[` / `Cmd-Alt-]` on macOS).
 
 ### The PDF pane
 
 Rendered PDF with zoom and page navigation. It updates after each compile.
+
+- **Select and copy text** — the PDF has a real text layer, so you can select
+  and copy from it.
+- **Find in PDF** — type in the *Find in PDF* box (or press `Cmd/Ctrl-F`
+  while the PDF pane has focus). `Enter` / `Shift-Enter` step through matches,
+  `Esc` clears them.
+- **Dark PDF** — the *◐ Dark PDF* toggle shows pages inverted for reading at
+  night. Display only: the PDF file itself is unchanged.
 
 ---
 
 ## Compiling
 
 - **Compile** — runs `latexmk` on the server against the project's main
-  file. The right pane refreshes with the new PDF.
+  file. The right pane refreshes with the new PDF. Shortcuts:
+  `Cmd/Ctrl-Enter` or `Cmd/Ctrl-S`. The main file may live in a subfolder
+  (e.g. `ms/paper.tex`).
 - **Engine picker** — pdfLaTeX (default), XeLaTeX, or LuaLaTeX, remembered
   per project. Use XeLaTeX/LuaLaTeX for `fontspec`/system fonts.
 - **Auto** — auto-compile: when toggled on, the project recompiles shortly
@@ -233,10 +257,13 @@ Rendered PDF with zoom and page navigation. It updates after each compile.
 
 ### SyncTeX (jump between source and PDF)
 
-- **Source → PDF**: double-click a line in the editor; the PDF scrolls to
-  and highlights the matching spot.
-- **PDF → source**: double-click in the PDF; the editor jumps to the
-  matching file and line.
+- **Source → PDF**: double-click a word in the editor (or press
+  `Ctrl-Alt-J` at the cursor); the PDF scrolls there, outlines everything
+  that line produced, and marks the word itself.
+- **PDF → source**: double-click a word in the PDF; the editor opens the
+  matching file, selects that word on its line, and briefly flashes the line.
+  Works for `\input`/`\include`d files and for projects opened in place from
+  a folder on the server.
 
 ---
 
@@ -362,7 +389,7 @@ Enable it from inside the app: **Admin panel → ✨ Assistant tab**, paste an
 Anthropic API key (from [console.anthropic.com](https://console.anthropic.com/settings/keys)),
 pick a model — it takes effect immediately, no restart, no terminal.
 (Ops-managed servers can set `QUIRELOOP_ANTHROPIC_API_KEY` in the
-environment instead; the env var wins. See [DEPLOYMENT.md](DEPLOYMENT.md).)
+environment instead; the env var wins. See [the server guide](install-server.md).)
 
 > **API key, not a Claude subscription.** Claude Pro/Max plans cover
 > claude.ai and Claude Code but do not include API access — the assistant
@@ -481,7 +508,7 @@ whatever cadence you push and pull.
 Everything — accounts, invites, projects, version snapshots, git history —
 lives in one directory on the server (`QUIRELOOP_DATA_DIR`, `/data` in the
 Docker image). **Backing up Quireloop = backing up that one directory.**
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the backup/restore and upgrade
+See [the server guide](install-server.md) for the backup/restore and upgrade
 procedures.
 
 As a user, your personal escape hatches are:
@@ -496,7 +523,7 @@ As a user, your personal escape hatches are:
 
 **"latexmk not found" / compiles fail with a server error**
 The server can't see a TeX installation. This is a server-setup issue —
-point the admin at DEPLOYMENT.md (in systemd setups, it's almost always the
+point the admin at the server guide (in systemd setups, it's almost always the
 `PATH=` line missing from the service file).
 
 **A package/font is missing in Docker**
@@ -531,4 +558,5 @@ moment it's revoked.
 
 **Signup asks for an invite code but I don't have one**
 That's by design: signups are invite-only after the first account. Ask a
+- Press **Ctrl/Cmd+K** to search every command and file from one box.
 server admin for an invite link.

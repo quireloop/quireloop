@@ -1,6 +1,8 @@
 node_modules/
 server/public/
 *.log
+.env
+.env.*
 .DS_Store
 __pycache__/
 

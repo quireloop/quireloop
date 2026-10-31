@@ -1,8 +1,22 @@
-# Deploying Quireloop for a lab/team
+# Install on a server
 
 This covers running Quireloop as a shared, multi-user server for a lab or
-research group — as opposed to the single-machine, `npm start` setup in the
-main [README](README.md). Two paths: Docker (recommended — TeX Live is
+research group. For one person on their own machine, see
+[Install on your computer](install-personal.md). Quireloop is licensed for
+[academic use only](../README.md#license).
+
+**Steps, in order:**
+
+1. Install with [Docker](#docker-recommended) or on
+   [bare metal](#bare-metal-no-docker).
+2. Put [HTTPS in front of it](#tls-nginx-in-front-of-either-option).
+3. Create the first account (it becomes the admin), and turn on two-factor
+   sign-in for it.
+4. Invite your lab from the admin panel, or set up
+   [server logins](#logging-in-with-server-accounts).
+5. Set up backups of the data directory.
+
+Two paths: Docker (recommended — TeX Live is
 notoriously fiddly to install correctly, and the image pins a known-good
 set of packages) or bare metal (more control, no Docker dependency).
 
@@ -17,7 +31,7 @@ of `localhost`.
 Node and TeX Live are both baked into the image.
 
 ```
-git clone <this-repo-url> quireloop
+git clone https://github.com/arjunpogaku/quireloop.git
 cd quireloop
 docker compose up -d --build
 ```
@@ -80,7 +94,7 @@ exposing it directly.
 
 **Build and install:**
 ```
-git clone <this-repo-url> quireloop
+git clone https://github.com/arjunpogaku/quireloop.git
 cd quireloop
 npm run setup:texlive   # Debian/Ubuntu: apt-get installs latexmk, biber, git, unzip — see below if you're on something else
 npm ci
@@ -109,7 +123,7 @@ QUIRELOOP_DATA_DIR=/var/lib/quireloop/data PORT=4173 node src/start.js
 ```
 
 **Run it as a service:** copy
-[`deploy/quireloop.service.example`](deploy/quireloop.service.example) to
+[`deploy/quireloop.service.example`](../deploy/quireloop.service.example) to
 `/etc/systemd/system/quireloop.service`, edit the `CHANGE-ME` lines (user,
 paths, and — importantly — the `PATH` environment line so systemd's
 minimal default PATH doesn't hide your TeX Live install from it), then:
@@ -129,7 +143,7 @@ sudo systemctl restart quireloop
 
 ## TLS: nginx in front of either option
 
-[`deploy/nginx.conf.example`](deploy/nginx.conf.example) is a commented
+[`deploy/nginx.conf.example`](../deploy/nginx.conf.example) is a commented
 reference config: HTTP→HTTPS redirect, a certbot-friendly certificate
 path, correct WebSocket upgrade handling for the `/ws/` collaboration
 endpoint (with a long read timeout so idle collab sessions aren't cut),
@@ -210,7 +224,10 @@ other program, and returns yes or no.
 sudo install -o root -g root -m 0755 \
      deploy/quireloop-pam-auth /usr/local/libexec/quireloop-pam-auth
 
-# 2. Which PAM stack the web login uses. Edit to match your sshd setup.
+# 2. Which PAM stack the web login uses. Same modules as your sshd setup, but
+#    password FIRST and authenticator code SECOND — the order the login form
+#    sends them in. sshd's usual order rejects every login (see the file).
+#    And don't set NoNewPrivileges in the systemd unit: it breaks the sudo call.
 sudo install -o root -g root -m 0644 deploy/quireloop.pam.example /etc/pam.d/quireloop
 
 # 3. Let the service user run the helper, and nothing else.
@@ -272,6 +289,14 @@ files. So:
 
 Per-user file ownership would need a worker process per member, running as that
 member. That is a much larger change to the storage layer and is not implemented.
+
+## What a compile may touch
+
+Anyone who can edit a project decides what TeX runs, as the service user, so
+compiles are restricted: a project's `.latexmkrc` is ignored (it is Perl that
+latexmk would execute), and TeX can't open absolute paths or `..` paths outside
+the project. A paper that needs `\input{../shared}` must keep that file inside
+the project instead.
 
 ## Opening folders already on the server
 
