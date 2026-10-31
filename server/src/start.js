@@ -1,7 +1,12 @@
 import { buildApp } from './index.js';
 import { PORT, HOST } from './config.js';
+import { sandboxStatus } from './lib/compileSandbox.js';
 
 const app = await buildApp();
+
+const sandbox = await sandboxStatus();
+if (sandbox === 'on') app.log.info('compile sandbox: on');
+else app.log.warn(`compile sandbox: ${sandbox}. LaTeX runs with this server's full access, see docs/install-server.md`);
 
 // A hard kill mid-request could cut off a compile or a collaborative-edit
 // flush halfway. LaunchAgent and systemd both send SIGTERM before SIGKILL, so

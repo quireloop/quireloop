@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { projectDir } from './storage.js';
 import { withLock } from './jsonStore.js';
+import { sandboxCommand } from './compileSandbox.js';
 
 const ENGINE_FLAGS = {
   pdflatex: '-pdf',
@@ -72,9 +73,9 @@ export async function compileProject(ownerId, projectId, mainFile, compiler = 'p
 // Papers are untrusted input: anyone who can edit a project decides what TeX
 // runs, as the service user that can read every project and the session key.
 // -norc ignores a project's .latexmkrc, which is Perl that latexmk would run.
-// openin_any=p stops \input and \openin reaching outside the project.
+// That stops only latexmk: LuaTeX reads and writes anywhere the service user
+// can, whatever openin_any says, so the real wall is lib/compileSandbox.js.
 const SANDBOX_FLAGS = ['-norc'];
-const SANDBOX_ENV = { openin_any: 'p', openout_any: 'p' };
 
 async function runLatexmk(cwd, mainFile, compiler) {
   const outdir = 'build';
@@ -87,7 +88,7 @@ async function runLatexmk(cwd, mainFile, compiler) {
   await fs.rm(path.join(cwd, pdfPath), { force: true });
 
   try {
-    const result = await execa(
+    const { file, args, options, after } = await sandboxCommand(cwd, [
       'latexmk',
       // -g forces a full rebuild every time: without it, latexmk skips
       // recompiling (and skips emitting fresh error text) whenever it thinks
@@ -99,18 +100,17 @@ async function runLatexmk(cwd, mainFile, compiler) {
       // hanging on a prompt; LaTeX will skip a missing package/command and
       // keep going, usually still reaching \end{document} with a real PDF
       // even when the log has errors in it.
-      [
-        ...SANDBOX_FLAGS,
-        engineFlag,
-        '-g',
-        '-synctex=1',
-        '-interaction=nonstopmode',
-        '-file-line-error',
-        `-outdir=${outdir}`,
-        mainFile,
-      ],
-      { cwd, env: SANDBOX_ENV, timeout: 60_000, reject: false }
-    );
+      ...SANDBOX_FLAGS,
+      engineFlag,
+      '-g',
+      '-synctex=1',
+      '-interaction=nonstopmode',
+      '-file-line-error',
+      `-outdir=${outdir}`,
+      mainFile,
+    ]);
+    const result = await execa(file, args, { ...options, timeout: 60_000, reject: false });
+    await after();
 
     const log = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
     // latexmk/pdflatex exit non-zero whenever the log has any error in it,
@@ -141,12 +141,15 @@ export async function cleanProject(ownerId, projectId, mainFile) {
   // from deleting intermediates out from under an in-flight compile.
   return withLock(`compile:${cwd}`, async () => {
     try {
-      await execa('latexmk', [...SANDBOX_FLAGS, '-C', '-outdir=build', mainFile], {
-        cwd,
-        env: SANDBOX_ENV,
-        timeout: 30_000,
-        reject: false,
-      });
+      const { file, args, options, after } = await sandboxCommand(cwd, [
+        'latexmk',
+        ...SANDBOX_FLAGS,
+        '-C',
+        '-outdir=build',
+        mainFile,
+      ]);
+      await execa(file, args, { ...options, timeout: 30_000, reject: false });
+      await after();
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };

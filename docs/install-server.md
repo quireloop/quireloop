@@ -292,11 +292,48 @@ member. That is a much larger change to the storage layer and is not implemented
 
 ## What a compile may touch
 
-Anyone who can edit a project decides what TeX runs, as the service user, so
-compiles are restricted: a project's `.latexmkrc` is ignored (it is Perl that
-latexmk would execute), and TeX can't open absolute paths or `..` paths outside
-the project. A paper that needs `\input{../shared}` must keep that file inside
-the project instead.
+Anyone who can edit a project decides what TeX runs, so each compile runs in a
+locked-down space built with [bubblewrap](https://github.com/containers/bubblewrap).
+Inside it, a compile:
+
+- sees only TeX and the system files it needs, not `/home`, other projects,
+  accounts or the login signing key
+- can read its own project but write only to `build/`
+- has no network and no access to the server's settings or API keys
+- stops after 60 seconds, 3 minutes of CPU time, 6 GB of address space, or
+  2 GB in any one file
+
+A project's `.latexmkrc` is always ignored, because it is Perl that latexmk
+would execute. A paper that needs `\input{../shared}` must keep that file inside
+the project, and a link to a file outside the project won't work during a compile.
+
+Install it once, as root:
+
+```bash
+sudo bash scripts/install-compile-sandbox.sh
+```
+
+Then make it mandatory on any server with more than one user, by adding this to
+the systemd unit and restarting:
+
+```
+Environment=QUIRELOOP_COMPILE_SANDBOX=required
+```
+
+| `QUIRELOOP_COMPILE_SANDBOX` | What happens |
+|---|---|
+| `auto` (default) | Uses the sandbox if it can run, otherwise warns in the log and compiles without it |
+| `required` | Refuses to compile if the sandbox can't run |
+| `off` | Never uses it |
+
+**Without the sandbox, LuaLaTeX can read and write any file the service user
+can**, including every project. Only run that way when you trust everyone who
+can edit. The sandbox usually can't start inside Docker, so a Docker install has
+only the container around it, which still holds all the projects.
+
+If TeX is installed outside `/usr`, list its folder in
+`QUIRELOOP_COMPILE_SANDBOX_PATHS` (colon-separated). Each project keeps a font
+cache in `compile-cache/` in the data directory, and it is safe to delete.
 
 ## Opening folders already on the server
 

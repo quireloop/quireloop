@@ -1,0 +1,13 @@
+# /etc/apparmor.d/quireloop-bwrap
+#
+# Ubuntu 23.10 and later stop ordinary programs creating the private namespaces
+# bubblewrap is built on, unless an AppArmor profile lets them. This one covers
+# only /usr/bin/bwrap. It gives bubblewrap no extra file access.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile quireloop-bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/quireloop-bwrap>
+}

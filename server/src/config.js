@@ -18,9 +18,23 @@ export const SESSION_KEY_FILE = path.join(DATA_DIR, 'session-key');
 export const PROJECTS_INDEX_FILE = path.join(DATA_DIR, 'projects-index.json');
 export const SHARED_INDEX_FILE = path.join(DATA_DIR, 'shared-index.json');
 export const SHARE_LINKS_FILE = path.join(DATA_DIR, 'share-links.json');
+export const COMPILE_CACHE_DIR = path.join(DATA_DIR, 'compile-cache');
 export const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 export const PORT = process.env.PORT ? Number(process.env.PORT) : 4173;
 export const HOST = '0.0.0.0';
+
+// How compiles are isolated (lib/compileSandbox.js). "auto" uses bubblewrap
+// where it can run, which suits a laptop; a shared server should say "required"
+// so that losing bubblewrap stops compiles rather than exposing every project.
+const SANDBOX_MODES = ['auto', 'required', 'off'];
+export const COMPILE_SANDBOX_MODE = SANDBOX_MODES.includes(process.env.QUIRELOOP_COMPILE_SANDBOX)
+  ? process.env.QUIRELOOP_COMPILE_SANDBOX
+  : 'auto';
+
+// Extra read-only folders for a TeX install outside /usr, colon-separated.
+export const COMPILE_SANDBOX_PATHS = (process.env.QUIRELOOP_COMPILE_SANDBOX_PATHS || '')
+  .split(':')
+  .filter(Boolean);
 
 // Log in with the host's own UNIX accounts instead of Quireloop-managed ones.
 // Unset disables it entirely and only email/password login exists.

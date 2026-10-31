@@ -164,3 +164,69 @@ test('a compile cannot read outside its project or run a project .latexmkrc', { 
   assert.doesNotMatch(log, /LEAKED/);
   await assert.rejects(fs.access(ran), 'the project .latexmkrc must not run');
 });
+
+test('a compile gets a clean environment and leaves no symlinks in build', { skip }, async () => {
+  const { sandboxCommand, removeSymlinks } = await import('../src/lib/compileSandbox.js');
+  process.env.QUIRELOOP_ANTHROPIC_API_KEY = 'must-not-leak';
+  try {
+    const { options } = await sandboxCommand(libraryRoot, ['latexmk']);
+    assert.equal(options.extendEnv, false);
+    assert.equal(options.env.QUIRELOOP_ANTHROPIC_API_KEY, undefined);
+    assert.equal(options.env.openin_any, 'p');
+  } finally {
+    delete process.env.QUIRELOOP_ANTHROPIC_API_KEY;
+  }
+
+  const build = path.join(libraryRoot, 'links', 'build');
+  await fs.mkdir(path.join(build, 'nested'), { recursive: true });
+  await fs.writeFile(path.join(build, 'main.log'), 'kept');
+  await fs.symlink('/etc/hostname', path.join(build, 'main.pdf'));
+  await fs.symlink('/etc/hostname', path.join(build, 'nested', 'x'));
+  await removeSymlinks(build);
+  assert.deepEqual((await fs.readdir(build)).sort(), ['main.log', 'nested']);
+  assert.deepEqual(await fs.readdir(path.join(build, 'nested')), []);
+});
+
+const { sandboxAvailable } = await import('../src/lib/compileSandbox.js');
+const sandboxSkip = skip || (!(await sandboxAvailable()) && 'bubblewrap cannot run here');
+
+test('LuaLaTeX cannot reach anything outside the sandbox', { skip: sandboxSkip }, async () => {
+  const secret = path.join(libraryRoot, 'lua-secret.txt');
+  const escaped = path.join(libraryRoot, 'lua-escaped.txt');
+  await fs.writeFile(secret, 'TOPSECRET');
+  const paper = path.join(libraryRoot, 'lua');
+  await fs.mkdir(path.join(paper, '.git', 'hooks'), { recursive: true });
+  await fs.writeFile(
+    path.join(paper, 'main.tex'),
+    `\\documentclass{article}\n\\begin{document}\n\\directlua{
+      local f = io.open("${secret}", "r")
+      texio.write_nl("SECRET:" .. tostring(f and f:read("*a")))
+      local g = io.open("${escaped}", "w")
+      texio.write_nl("ESCAPE:" .. tostring(g ~= nil))
+      local h = io.open("${paper}/.git/hooks/pre-commit", "w")
+      texio.write_nl("HOOK:" .. tostring(h ~= nil))
+      local s = io.open("${paper}/main.tex", "a")
+      texio.write_nl("SOURCE:" .. tostring(s ~= nil))
+      local b = io.open("build/written.txt", "w")
+      texio.write_nl("BUILD:" .. tostring(b ~= nil))
+      if b then b:close() end
+    }\nBody.\n\\end{document}\n`
+  );
+
+  const { app } = await getTestApp();
+  const { cookie } = await signup(app, 'lua-sandbox@example.com');
+  const opened = await post(app, cookie, '/api/projects/open-folder', { path: paper, name: 'Lua' });
+  assert.equal(opened.statusCode, 201, opened.body);
+  const id = opened.json().id;
+  await app.inject({ method: 'PATCH', url: `/api/projects/${id}`, headers: { cookie }, payload: { compiler: 'lualatex' } });
+  await compile(app, cookie, id);
+
+  const log = await fs.readFile(path.join(paper, 'build', 'main.log'), 'utf8');
+  assert.match(log, /SECRET:nil/);
+  assert.doesNotMatch(log, /TOPSECRET/);
+  assert.match(log, /HOOK:false/);
+  assert.match(log, /SOURCE:false/);
+  assert.match(log, /BUILD:true/);
+  // /tmp is private inside the box, so that write may appear to work there.
+  await assert.rejects(fs.access(escaped), 'nothing may reach the real disk');
+});

@@ -55,6 +55,10 @@ Environment=PORT=4173
 # puts it under /usr/local/texlive/<year>/bin/<arch>, e.g.:
 Environment=PATH=/usr/local/texlive/2025/bin/x86_64-linux:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+# Refuse to compile unless the sandbox can run. Install it first with
+# scripts/install-compile-sandbox.sh; see docs/install-server.md.
+# Environment=QUIRELOOP_COMPILE_SANDBOX=required
+
 # Restart on crash, but not in a tight loop if something is fundamentally
 # broken (e.g. the data dir is unwritable) — 10s between attempts, and
 # systemd's own default StartLimitBurst (5 restarts within
