@@ -9,20 +9,21 @@
 # password, plus the same TOTP authenticator you already use for SSH. Adjust to
 # match whatever your sshd stack actually does.
 
-# 1. The verification code from the authenticator app.
-#
-#    Order matters and is not arbitrary: Quireloop sends the password first and
-#    the code second, so the module that prompts for the password must come
-#    second here. If you swap these lines, swap them in the login form's
-#    expectations too — otherwise every login fails with each answer going to
-#    the wrong prompt.
+# Order matters and is not arbitrary. The login form sends its answers as
+# [password, code] (server/src/routes/auth.js) and the helper answers PAM's
+# prompts strictly in that order, so the module that asks for the password
+# must come FIRST and the authenticator SECOND. This is the reverse of the
+# usual sshd stack (code, then password) — copying sshd's order hands the
+# password to the "Verification code" prompt and rejects every login.
+
+# 1. The UNIX password (via common-auth: pam_unix, plus SSSD/LDAP if you use it).
+@include common-auth
+
+# 2. The verification code from the authenticator app.
 #
 #    nullok lets accounts that have not run google-authenticator yet log in
 #    with just their password. Drop it to make 2FA mandatory.
 auth    required    pam_google_authenticator.so nullok
-
-# 2. The UNIX password (via common-auth: pam_unix, plus SSSD/LDAP if you use it).
-@include common-auth
 
 # Account validation — expired passwords, locked and expired accounts. Quireloop
 # calls pam_acct_mgmt, so this is enforced.

@@ -3,7 +3,7 @@
 # Quireloop container image: a Fastify API + built React frontend, with a
 # curated TeX Live install so `latexmk` (pdflatex/xelatex/lualatex) and
 # `biber` work out of the box, plus `git`/`unzip` for Source Control and
-# project import. See DEPLOYMENT.md for how to run this.
+# project import. See docs/install-server.md for how to run this.
 
 ########################################
 # Stage 1 — builder: install deps, build the web app
@@ -123,7 +123,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # than whatever useradd picks next: with a bind-mounted ./data volume
 # (docker-compose.yml uses one), the *host* directory's ownership is what
 # actually governs write access, not anything chown'd inside the image —
-# see DEPLOYMENT.md for the one-time `chown -R 1000:1000 ./data` a
+# see docs/install-server.md for the one-time `chown -R 1000:1000 ./data` a
 # deployer needs if their host user isn't already uid 1000.
 RUN useradd --create-home --home-dir /home/quireloop --uid 1000 --shell /usr/sbin/nologin quireloop
 
@@ -135,7 +135,7 @@ COPY --from=builder --chown=quireloop:quireloop /app/server/package.json ./serve
 
 # /data is where everything persistent lives (users.json, invites,
 # session key, every project + its git history + version snapshots) —
-# see DEPLOYMENT.md's backup section. Mount a volume here.
+# see docs/install-server.md's backup section. Mount a volume here.
 ENV QUIRELOOP_DATA_DIR=/data
 ENV PORT=4173
 EXPOSE 4173

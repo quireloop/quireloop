@@ -6,7 +6,7 @@
 #
 # Assumes: this repo is already cloned, `npm ci` has run at the repo root
 # (installs both the server/ and web/ workspaces), and `npm run build
-# --workspace=web` has produced server/public — see DEPLOYMENT.md's bare
+# --workspace=web` has produced server/public — see docs/install-server.md's bare
 # metal section for the full sequence. This unit only runs the already-
 # built app; it does not build anything itself.
 
@@ -44,7 +44,7 @@ Environment=PORT=4173
 # Environment=QUIRELOOP_SECURE_COOKIES=true
 
 # Uncomment to re-open public signup instead of the default invite-only
-# mode (see DEPLOYMENT.md's configuration reference).
+# mode (see docs/install-server.md's configuration reference).
 # Environment=QUIRELOOP_OPEN_SIGNUP=true
 
 # CRITICAL: unlike a login shell, systemd services get a minimal PATH by
@@ -65,8 +65,12 @@ RestartSec=10
 
 # Modest hardening — the process only needs to read the repo and read/
 # write its own data directory, nothing else on the system.
-NoNewPrivileges=true
 PrivateTmp=true
+
+# Only with QUIRELOOP_PAM_ENABLED unset: server-account login runs its helper
+# through `sudo`, and NoNewPrivileges stops sudo from gaining root, so every
+# PAM login would fail. Safe to uncomment on an email-accounts-only install.
+# NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target

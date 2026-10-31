@@ -1,5 +1,5 @@
 # One-service deployment: `docker compose up -d` builds the image (from
-# the Dockerfile in this same directory) and runs it. See DEPLOYMENT.md
+# the Dockerfile in this same directory) and runs it. See docs/install-server.md
 # for the full walkthrough — first visit to the running app creates the
 # admin account, then everyone else comes in via admin-issued invites.
 services:
@@ -36,12 +36,12 @@ services:
       # Everything Quireloop keeps state in — accounts, invites, the
       # session-signing key, every project (with its own git history and
       # version snapshots) — lives under here. This bind mount is the
-      # entire backup surface; see DEPLOYMENT.md's backup section.
+      # entire backup surface; see docs/install-server.md's backup section.
       - ./data:/data
     environment:
       # Passed through from the host shell/`.env` file if set, otherwise
       # left unset so the image's own defaults apply (invite-only signup,
-      # cookie without the `secure` flag). See DEPLOYMENT.md's
+      # cookie without the `secure` flag). See docs/install-server.md's
       # configuration reference for what each one does.
       QUIRELOOP_OPEN_SIGNUP: ${QUIRELOOP_OPEN_SIGNUP:-}
       QUIRELOOP_SECURE_COOKIES: ${QUIRELOOP_SECURE_COOKIES:-}
