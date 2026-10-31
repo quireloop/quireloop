@@ -47,6 +47,16 @@ async function withCompileSlot(fn) {
   }
 }
 
+// Where the compiled PDF lands, relative to the project directory. latexmk
+// names its outputs after the job name — the main file's *basename* — and
+// puts them straight into -outdir, so a main file at `ms/paper.tex` produces
+// `build/paper.pdf`, not `build/ms/paper.pdf`. Deriving it from the full
+// path made every subfolder main file look like a failed compile.
+// The compile check, the PDF route and SyncTeX all go through this.
+export function pdfPathFor(mainFile) {
+  return path.join('build', `${path.basename(mainFile, '.tex')}.pdf`);
+}
+
 // Compiles a project's main file with latexmk. Never throws for LaTeX
 // compile failures (non-zero latexmk exit) — only for infra problems
 // (e.g. latexmk not found), which callers should treat as a 500.
@@ -59,11 +69,17 @@ export async function compileProject(ownerId, projectId, mainFile, compiler = 'p
   return withLock(`compile:${cwd}`, () => withCompileSlot(() => runLatexmk(cwd, mainFile, compiler)));
 }
 
+// Papers are untrusted input: anyone who can edit a project decides what TeX
+// runs, as the service user that can read every project and the session key.
+// -norc ignores a project's .latexmkrc, which is Perl that latexmk would run.
+// openin_any=p stops \input and \openin reaching outside the project.
+const SANDBOX_FLAGS = ['-norc'];
+const SANDBOX_ENV = { openin_any: 'p', openout_any: 'p' };
+
 async function runLatexmk(cwd, mainFile, compiler) {
   const outdir = 'build';
   const engineFlag = ENGINE_FLAGS[compiler] ?? ENGINE_FLAGS.pdflatex;
-  const pdfName = mainFile.replace(/\.tex$/, '.pdf');
-  const pdfPath = path.join(outdir, pdfName);
+  const pdfPath = pdfPathFor(mainFile);
 
   // Otherwise a totally broken compile (source now fails outright) would
   // leave a stale PDF from the last *successful* run sitting in build/,
@@ -84,6 +100,7 @@ async function runLatexmk(cwd, mainFile, compiler) {
       // keep going, usually still reaching \end{document} with a real PDF
       // even when the log has errors in it.
       [
+        ...SANDBOX_FLAGS,
         engineFlag,
         '-g',
         '-synctex=1',
@@ -92,7 +109,7 @@ async function runLatexmk(cwd, mainFile, compiler) {
         `-outdir=${outdir}`,
         mainFile,
       ],
-      { cwd, timeout: 60_000, reject: false }
+      { cwd, env: SANDBOX_ENV, timeout: 60_000, reject: false }
     );
 
     const log = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
@@ -124,7 +141,12 @@ export async function cleanProject(ownerId, projectId, mainFile) {
   // from deleting intermediates out from under an in-flight compile.
   return withLock(`compile:${cwd}`, async () => {
     try {
-      await execa('latexmk', ['-C', '-outdir=build', mainFile], { cwd, timeout: 30_000, reject: false });
+      await execa('latexmk', [...SANDBOX_FLAGS, '-C', '-outdir=build', mainFile], {
+        cwd,
+        env: SANDBOX_ENV,
+        timeout: 30_000,
+        reject: false,
+      });
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };

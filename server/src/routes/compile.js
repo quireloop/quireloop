@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { compileProject, cleanProject } from '../lib/latex.js';
+import { compileProject, cleanProject, pdfPathFor } from '../lib/latex.js';
 import { parseLatexLog } from '../lib/latexLog.js';
 import { resolveProjectPath } from '../lib/storage.js';
 import { createSnapshot } from '../lib/versions.js';
@@ -26,8 +26,7 @@ export default async function compileRoutes(app) {
 
   app.get('/api/projects/:id/pdf', { preHandler: requireProjectAccess }, async (req, reply) => {
     try {
-      const pdfName = req.manifest.mainFile.replace(/\.tex$/, '.pdf');
-      const pdfPath = resolveProjectPath(req.ownerId, req.params.id, `build/${pdfName}`);
+      const pdfPath = resolveProjectPath(req.ownerId, req.params.id, pdfPathFor(req.manifest.mainFile));
       fs.accessSync(pdfPath);
       return reply.type('application/pdf').send(fs.createReadStream(pdfPath));
     } catch {
