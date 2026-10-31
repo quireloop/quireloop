@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../lib/dialog.js';
 import { useRef, useState } from 'react';
 import { buildTree } from '../lib/fileTree.js';
 
@@ -64,15 +65,16 @@ function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, readO
 }
 
 function FileRow({ file, activePath, dirty, depth, readOnly, selected, onToggleSelect, onSelect, onRename, onDelete }) {
-  function handleRename(e) {
+  async function handleRename(e) {
     e.stopPropagation();
-    const name = prompt('Rename to:', file.path);
-    if (name && name.trim() && name.trim() !== file.path) onRename(file.path, name.trim());
+    const name = await promptDialog({ title: 'Rename', defaultValue: file.path, confirmLabel: 'Rename' });
+    if (name && name !== file.path) onRename(file.path, name);
   }
 
-  function handleDelete(e) {
+  async function handleDelete(e) {
     e.stopPropagation();
-    if (confirm(`Delete ${file.path}?`)) onDelete(file.path);
+    const confirmed = await confirmDialog({ title: `Delete ${file.path}?`, confirmLabel: 'Delete', danger: true });
+    if (confirmed) onDelete(file.path);
   }
 
   return (
@@ -161,14 +163,14 @@ export default function FileTree({
     for (const file of chosen) await onUpload(file);
   }
 
-  function handleCreate() {
-    const name = prompt('New file name (e.g. section2.tex):');
-    if (name) onCreate(name.trim());
+  async function handleCreate() {
+    const name = await promptDialog({ title: 'New file', placeholder: 'section2.tex', confirmLabel: 'Create' });
+    if (name) onCreate(name);
   }
 
-  function handleCreateFolder() {
-    const name = prompt('New folder name (e.g. figures):');
-    if (name) onCreateFolder(name.trim());
+  async function handleCreateFolder() {
+    const name = await promptDialog({ title: 'New folder', placeholder: 'figures', confirmLabel: 'Create' });
+    if (name) onCreateFolder(name);
   }
 
   async function handleDrop(e) {
@@ -182,7 +184,12 @@ export default function FileTree({
   async function handleDeleteSelected() {
     const paths = [...selected];
     if (paths.length === 0) return;
-    if (!confirm(`Delete ${paths.length} item${paths.length > 1 ? 's' : ''}?`)) return;
+    const confirmed = await confirmDialog({
+      title: `Delete ${paths.length} item${paths.length > 1 ? 's' : ''}?`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!confirmed) return;
     await onDeleteMany(paths);
     setSelected(new Set());
   }
@@ -216,17 +223,16 @@ export default function FileTree({
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 8px', gap: 4 }}>
-          <h4 style={{ margin: 0 }}>Files</h4>
+        <div style={{ display: 'flex', alignItems: 'center', margin: '0 0 6px', gap: 4 }}>
           {!readOnly && (
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button onClick={handleCreate} style={{ fontSize: 12, padding: '2px 8px' }}>
-                + New
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              <button onClick={handleCreate} style={{ fontSize: 12, padding: '3px 8px', whiteSpace: 'nowrap' }}>
+                New file
               </button>
-              <button onClick={handleCreateFolder} style={{ fontSize: 12, padding: '2px 8px' }}>
-                + Folder
+              <button onClick={handleCreateFolder} style={{ fontSize: 12, padding: '3px 8px', whiteSpace: 'nowrap' }}>
+                Folder
               </button>
-              <button onClick={() => fileInputRef.current.click()} style={{ fontSize: 12, padding: '2px 8px' }}>
+              <button onClick={() => fileInputRef.current.click()} style={{ fontSize: 12, padding: '3px 8px' }}>
                 Upload
               </button>
             </div>

@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../lib/dialog.js';
 import { useState } from 'react';
 import VersionDiffModal from './VersionDiffModal.jsx';
 
@@ -10,15 +11,23 @@ const TRIGGER_LABELS = {
 export default function VersionHistoryPanel({ projectId, versions, files, readOnly, onSave, onRestore, onClose }) {
   const [diffVersion, setDiffVersion] = useState(null);
 
-  function handleSave() {
-    const label = prompt('Label for this version (optional):');
-    onSave(label || undefined);
+  async function handleSave() {
+    const label = await promptDialog({
+      title: 'Save this version',
+      placeholder: 'Label (optional)',
+      confirmLabel: 'Save',
+      optional: true,
+    });
+    if (label !== null) onSave(label || undefined);
   }
 
-  function handleRestore(v) {
-    if (confirm(`Restore to this version (${new Date(v.createdAt).toLocaleString()})? Your current state will be saved first.`)) {
-      onRestore(v.id);
-    }
+  async function handleRestore(v) {
+    const confirmed = await confirmDialog({
+      title: 'Restore this version?',
+      message: `${new Date(v.createdAt).toLocaleString()}. Your current state will be saved first.`,
+      confirmLabel: 'Restore',
+    });
+    if (confirmed) onRestore(v.id);
   }
 
   return (

@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { EditorView, keymap, lineNumbers, Decoration, gutter, GutterMarker, drawSelection } from '@codemirror/view';
 import { EditorState, StateField, StateEffect, Compartment, Transaction, EditorSelection } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
-import { defaultHighlightStyle, syntaxHighlighting, foldGutter, HighlightStyle } from '@codemirror/language';
+import { defaultHighlightStyle, syntaxHighlighting, foldGutter, foldKeymap, HighlightStyle } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { tags as t } from '@lezer/highlight';
@@ -13,6 +13,7 @@ import { IndexeddbPersistence } from 'y-indexeddb';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import { vim, CodeMirror as VimCodeMirror } from '@replit/codemirror-vim';
 import { BASE_PATH } from '../basePath.js';
+import { syncFlashField, revealSyncTarget, latexHoverPreviews, editorExtrasTheme } from '../lib/editorExtras.js';
 
 // @replit/codemirror-vim's normal-mode 'u' / Ctrl-r drive its own internal
 // CodeMirror.commands.undo/redo, which by default call @codemirror/commands'
@@ -58,6 +59,18 @@ function citationCompletionSource(getBibEntries) {
       validFor: /^[^,}]*$/,
     };
   };
+}
+
+// Image files carried by a paste or drop. A screenshot paste arrives as a
+// single unnamed "image.png" item; drops carry real files.
+function imageFilesFrom(transfer) {
+  if (!transfer) return [];
+  const files = [...(transfer.files ?? [])].filter((f) => f.type.startsWith('image/') || /\.pdf$/i.test(f.name));
+  if (files.length > 0) return files;
+  return [...(transfer.items ?? [])]
+    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
 }
 
 function jumpToLine(view, line) {
@@ -386,6 +399,8 @@ const Editor = forwardRef(function Editor(
     onCollabHandles,
     onSelectionChange,
     onSuggestedChange,
+    onImageFiles,
+    getMacroSource,
   },
   ref
 ) {
@@ -401,6 +416,10 @@ const Editor = forwardRef(function Editor(
   const onCollabHandlesRef = useRef(onCollabHandles);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const onSuggestedChangeRef = useRef(onSuggestedChange);
+  const onImageFilesRef = useRef(onImageFiles);
+  const getMacroSourceRef = useRef(getMacroSource);
+  onImageFilesRef.current = onImageFiles;
+  getMacroSourceRef.current = getMacroSource;
   onChangeRef.current = onChange;
   onJumpToPdfRef.current = onJumpToPdf;
   onStatusRef.current = onStatus;
@@ -412,6 +431,19 @@ const Editor = forwardRef(function Editor(
   useImperativeHandle(ref, () => ({
     goToLine: (line) => {
       if (viewRef.current) jumpToLine(viewRef.current, line);
+    },
+    // SyncTeX landing: { line, word } selects the double-clicked word when it
+    // is on (or near) that line and flashes the line either way.
+    revealSource: (target) => {
+      if (viewRef.current) revealSyncTarget(viewRef.current, target);
+    },
+    getCursorWord: () => {
+      const view = viewRef.current;
+      if (!view) return '';
+      const { from, to, head } = view.state.selection.main;
+      if (from !== to) return view.state.doc.sliceString(from, to);
+      const word = view.state.wordAt(head);
+      return word ? view.state.doc.sliceString(word.from, word.to) : '';
     },
     insertAtCursor: (text) => {
       if (viewRef.current) insertAtCursor(viewRef.current, text);
@@ -554,14 +586,59 @@ const Editor = forwardRef(function Editor(
           dblclick(event, view) {
             // Leaves the browser's own double-click word-selection alone —
             // this just additionally jumps the PDF preview to the matching
-            // spot, same idea as the hosted editor's double-click-to-locate.
+            // spot, same idea as the hosted editor's double-click-to-locate. By now
+            // CodeMirror has already selected the word under the pointer
+            // (on the second mousedown), so it rides along: the viewer uses
+            // it to pick the exact word out of the line's boxes.
             const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
             if (pos == null) return;
             const line = view.state.doc.lineAt(pos).number;
-            onJumpToPdfRef.current?.(line);
+            const { from, to } = view.state.selection.main;
+            const word = to > from && to - from < 80 ? view.state.doc.sliceString(from, to) : '';
+            onJumpToPdfRef.current?.(line, word);
+          },
+          // Pasting a screenshot or dropping image files uploads them into
+          // figures/ and inserts a figure block, like the hosted editor and LaTeX
+          // Workshop. Plain-text pastes and drops fall through untouched.
+          paste(event, view) {
+            const files = imageFilesFrom(event.clipboardData);
+            if (files.length === 0 || !onImageFilesRef.current || readOnly) return false;
+            event.preventDefault();
+            onImageFilesRef.current(files, view.state.selection.main.head);
+            return true;
+          },
+          drop(event, view) {
+            const files = imageFilesFrom(event.dataTransfer);
+            if (files.length === 0 || !onImageFilesRef.current || readOnly) return false;
+            event.preventDefault();
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+            onImageFilesRef.current(files, pos);
+            return true;
           },
         }),
+        keymap.of([
+          // LaTeX Workshop's binding for "SyncTeX from cursor". (Compile
+          // shortcuts live in ProjectView, so they work outside the editor.)
+          {
+            key: 'Ctrl-Alt-j',
+            preventDefault: true,
+            run: (view) => {
+              const { head, from, to } = view.state.selection.main;
+              const word = to > from ? view.state.doc.sliceString(from, to) : view.state.wordAt(head);
+              const text = typeof word === 'string' ? word : word ? view.state.doc.sliceString(word.from, word.to) : '';
+              onJumpToPdfRef.current?.(view.state.doc.lineAt(head).number, text);
+              return true;
+            },
+          },
+          ...foldKeymap,
+        ]),
         keymap.of([...yUndoManagerKeymap, ...defaultKeymap, ...searchKeymap]),
+        syncFlashField,
+        latexHoverPreviews({
+          getBibEntries: () => bibEntriesRef.current,
+          getMacros: () => getMacroSourceRef.current?.() ?? {},
+        }),
+        editorExtrasTheme,
         commentHighlightField,
         suggestionHighlightField,
         diagnosticsField,
@@ -586,7 +663,7 @@ const Editor = forwardRef(function Editor(
           '&': { height: '100%', fontSize: '14px' },
           '.cm-scroller': {
             overflow: 'auto',
-            fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+            fontFamily: "'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
           },
           '.cm-comment-range': { backgroundColor: 'rgba(255, 205, 60, 0.35)' },
           '.cm-comment-range-resolved': { backgroundColor: 'rgba(150, 150, 150, 0.2)' },
@@ -614,13 +691,37 @@ const Editor = forwardRef(function Editor(
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
 
-    if (initialLine) jumpToLine(view, initialLine);
+    // A jump into a file that isn't open yet (PDF double-click, search hit)
+    // mounts this editor with an initial target. The document is usually
+    // still empty at this point — its text arrives from IndexedDB or the
+    // server a moment later — so jumping now clamped every target to line
+    // 1. Wait until the target line exists, or the first sync completes.
+    let pendingTarget = initialLine ?? null;
+    const targetLine = (t) => (typeof t === 'number' ? t : t?.line ?? 1);
+    const tryPendingJump = (synced = false) => {
+      if (!pendingTarget || !viewRef.current) return;
+      if (!synced && view.state.doc.lines < targetLine(pendingTarget)) return;
+      const target = pendingTarget;
+      pendingTarget = null;
+      // After the current update: yCollab applies the text to the view in
+      // its own observer of this same change.
+      setTimeout(() => {
+        if (view.dom.isConnected) revealSyncTarget(view, target);
+      }, 0);
+    };
+    tryPendingJump();
+    const onTextForJump = () => tryPendingJump();
+    const onSyncForJump = (synced) => synced && tryPendingJump(true);
+    ytext.observe(onTextForJump);
+    provider.on('sync', onSyncForJump);
 
     onCollabHandlesRef.current?.({ ydoc, ytext, view });
 
     return () => {
       onCollabHandlesRef.current?.(null);
       ytext.unobserve(reportChange);
+      ytext.unobserve(onTextForJump);
+      provider.off('sync', onSyncForJump);
       view.destroy();
       provider.destroy();
       indexeddb.destroy();

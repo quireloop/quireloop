@@ -20,17 +20,21 @@ function extractDelimited(text, openIdx) {
   return { value: text.slice(openIdx + 1, i), end: i };
 }
 
-function extractTitle(entryBody) {
-  const fieldMatch = entryBody.match(/title\s*=\s*/i);
+// A field's value, braced, quoted or bare (`year = 2024`). The name is
+// anchored to a field boundary so `title` doesn't match inside `booktitle`.
+function extractField(entryBody, name) {
+  const fieldMatch = entryBody.match(new RegExp(`(?:^|[,\\s])${name}\\s*=\\s*`, 'i'));
   if (!fieldMatch) return '';
   const delimIdx = fieldMatch.index + fieldMatch[0].length;
   const opener = entryBody[delimIdx];
-  if (opener !== '{' && opener !== '"') return '';
-  return extractDelimited(entryBody, delimIdx).value.trim();
+  if (opener !== '{' && opener !== '"') {
+    return (entryBody.slice(delimIdx).match(/^[^,}\s]+/)?.[0] ?? '').trim();
+  }
+  return extractDelimited(entryBody, delimIdx).value.replace(/\s+/g, ' ').trim();
 }
 
-// Minimal BibTeX key/title extraction for citation autocomplete — not a
-// full parser, just enough to power \cite{} suggestions. Braces are
+// Minimal BibTeX extraction for citation autocomplete and the \cite hover
+// card — not a full parser, just key, title, authors, year and venue. Braces are
 // counted rather than regex-matched so entries (and fields within them)
 // with nested braces — common in titles, e.g. "{DNA} sequencing" or
 // "a {GPT-4} study" — don't get truncated at the first inner `}`.
@@ -43,7 +47,14 @@ export function parseBibEntries(text) {
     const openBrace = text.indexOf('{', m.index);
     const { end } = extractDelimited(text, openBrace);
     const body = text.slice(entryStart.lastIndex, end);
-    entries.push({ type, key, title: extractTitle(body) });
+    entries.push({
+      type,
+      key,
+      title: extractField(body, 'title'),
+      author: extractField(body, 'author'),
+      year: extractField(body, 'year'),
+      venue: extractField(body, 'journal') || extractField(body, 'booktitle'),
+    });
     entryStart.lastIndex = end + 1;
   }
   return entries;

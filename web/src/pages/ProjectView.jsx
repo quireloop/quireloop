@@ -18,9 +18,14 @@ import ChatPanel from '../components/ChatPanel.jsx';
 import AssistantPanel from '../components/AssistantPanel.jsx';
 import Logo from '../components/Logo.jsx';
 import ToolbarMenu, { MenuItem } from '../components/ToolbarMenu.jsx';
+import SlidePanel from '../components/SlidePanel.jsx';
+import CommandPalette from '../components/CommandPalette.jsx';
+import { BackIcon, SearchIcon, SidebarIcon } from '../components/Icons.jsx';
+import { confirmDialog, promptDialog } from '../lib/dialog.js';
 import { buildOutline, countWords } from '../lib/outline.js';
 import { useTheme, useSidebarOpen } from '../lib/theme.js';
 import { parseBibEntries } from '../lib/bibtex.js';
+import { collectMacros } from '../lib/editorExtras.js';
 import { encodeAnchor, decodeAnchor } from '../lib/commentAnchors.js';
 
 const RECENT_EDITORS_POLL_MS = 8000;
@@ -36,11 +41,18 @@ const SUGGEST_MODE_STORAGE_KEY = 'quireloop:suggestMode';
 
 const STATUS_LABEL = {
   connecting: 'Connecting…',
-  connected: 'Connected — syncing…',
+  connected: 'Syncing…',
   syncing: 'Syncing…',
-  synced: 'Synced',
+  synced: 'Saved',
   disconnected: 'Offline — changes saved locally',
 };
+
+const SIDEBAR_TABS = [
+  ['files', 'Files'],
+  ['outline', 'Outline'],
+  ['git', 'Git'],
+  ['search', 'Search'],
+];
 
 const THEME_LABEL = {
   light: { name: 'Light', icon: '☀' },
@@ -68,6 +80,9 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [bibEntries, setBibEntries] = useState([]);
   const [theme, cycleTheme] = useTheme();
   const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
+  const sidebarPanelRef = useRef(null);
+  const [draggingSplit, setDraggingSplit] = useState(false);
+  const [showPalette, setShowPalette] = useState(false);
   const editorRef = useRef(null);
   const pdfViewerRef = useRef(null);
   const handleCompileRef = useRef(() => {});
@@ -486,16 +501,39 @@ export default function ProjectView({ projectId, onBack, user }) {
   // Cmd+S (or Ctrl+S on Windows/Linux) compiles instead of triggering the
   // browser's "Save page" dialog — collaborative edits are already saved
   // continuously via Yjs, so "save" here means "give me a fresh PDF".
+  // Cmd/Ctrl+Enter does the same, matching the hosted editor's recompile shortcut.
   useEffect(() => {
     function onKeyDown(e) {
-      const isSaveShortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's';
-      if (!isSaveShortcut) return;
+      const mod = e.metaKey || e.ctrlKey;
+      const isCompileShortcut = mod && (e.key.toLowerCase() === 's' || (e.key === 'Enter' && !e.altKey));
+      if (!isCompileShortcut) return;
       e.preventDefault();
       if (compilingRef.current) return;
       handleCompileRef.current();
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // The sidebar is a real panel, so hiding it collapses it rather than removing
+  // it, and any way of collapsing it (the button, dragging) lands in one state.
+  useEffect(() => {
+    const panel = sidebarPanelRef.current;
+    if (!panel) return;
+    if (sidebarOpen) panel.expand();
+    else panel.collapse();
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowPalette((v) => !v);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
   async function handleCompilerChange(compiler) {
@@ -508,15 +546,76 @@ export default function ProjectView({ projectId, onBack, user }) {
     setPdfUrl(null);
   }
 
-  function jumpToSource(file, line) {
+  // `hint.word` comes from a PDF double-click: the editor lands on that word
+  // when it is on or near the line, instead of the start of the line.
+  function jumpToSource(file, line, hint) {
+    const target = hint?.word ? { line, word: hint.word } : line;
     if (file === activePath) {
-      editorRef.current?.goToLine(line);
+      if (hint) editorRef.current?.revealSource(target);
+      else editorRef.current?.goToLine(line);
     } else {
-      setInitialLine(line);
+      setInitialLine(target);
       setContent('');
       setActivePath(file);
     }
   }
+
+  // Pasted screenshots and dropped image files: upload each into figures/
+  // under a name that can't overwrite an existing file (every clipboard
+  // paste is called "image.png"), then insert a figure block where the
+  // paste or drop happened.
+  async function handleImageFiles(files, pos) {
+    if (isViewer) return;
+    const taken = new Set((manifest?.files ?? []).map((f) => f.path));
+    const blocks = [];
+    for (const original of files) {
+      const ext = (original.name.match(/\.[A-Za-z0-9]+$/)?.[0] ?? `.${original.type.split('/')[1] || 'png'}`).toLowerCase();
+      const isClipboardPaste = /^image\.\w+$/i.test(original.name) || !original.name;
+      const stem = isClipboardPaste
+        ? `pasted-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}`
+        : original.name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'figure';
+      let name = `${stem}${ext}`;
+      for (let i = 2; taken.has(`figures/${name}`); i++) name = `${stem}-${i}${ext}`;
+      taken.add(`figures/${name}`);
+      const file = new File([original], name, { type: original.type });
+      const uploaded = await api.uploadFile(projectId, file);
+      const label = stem.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase();
+      blocks.push(
+        [
+          '\\begin{figure}[htbp]',
+          '  \\centering',
+          `  \\includegraphics[width=0.8\\linewidth]{${uploaded.path}}`,
+          '  \\caption{}',
+          `  \\label{fig:${label}}`,
+          '\\end{figure}',
+        ].join('\n')
+      );
+    }
+    if (blocks.length > 0) editorRef.current?.replaceRange(pos, pos, `\n${blocks.join('\n\n')}\n`);
+    await refreshManifest();
+  }
+
+  // User macros for the equation hover preview come from the main file's
+  // preamble (where \newcommand usually lives), refreshed on each compile
+  // and whenever the main file changes; the open file's own definitions are
+  // merged in by the editor itself.
+  const mainMacrosRef = useRef({});
+  const mainFile = manifest?.mainFile;
+  useEffect(() => {
+    if (!mainFile) return;
+    let cancelled = false;
+    api
+      .readFile(projectId, mainFile)
+      .then((res) => {
+        if (cancelled) return;
+        const text = typeof res === 'string' ? res : res?.content ?? '';
+        mainMacrosRef.current = collectMacros(text);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, mainFile, compileResult]);
 
   function handleOutlineJump(line) {
     editorRef.current?.goToLine(line);
@@ -537,10 +636,10 @@ export default function ProjectView({ projectId, onBack, user }) {
     if (!view || !ytext) return;
     const { from, to } = view.state.selection.main;
     if (from === to) return;
-    const text = prompt('Comment:');
-    if (!text || !text.trim()) return;
+    const text = await promptDialog({ title: 'Add a comment', confirmLabel: 'Comment', multiline: true });
+    if (!text) return;
     const anchor = encodeAnchor(ytext, from, to);
-    await api.createComment(projectId, activePath, anchor, text.trim());
+    await api.createComment(projectId, activePath, anchor, text);
     await refreshComments();
     setShowComments(true);
   }
@@ -563,7 +662,8 @@ export default function ProjectView({ projectId, onBack, user }) {
   }
 
   async function handleDeleteComment(threadId) {
-    if (!confirm('Delete this comment thread?')) return;
+    const confirmed = await confirmDialog({ title: 'Delete this comment thread?', confirmLabel: 'Delete', danger: true });
+    if (!confirmed) return;
     await api.deleteComment(projectId, threadId);
     await refreshComments();
   }
@@ -664,78 +764,83 @@ export default function ProjectView({ projectId, onBack, user }) {
     await refreshVersions();
   }
 
-  async function jumpToPdfAtLine(line) {
+  async function jumpToPdfAtLine(line, word) {
     if (!activePath || !pdfUrl) return;
     try {
       const result = await api.synctexToPdf(projectId, activePath, line);
-      pdfViewerRef.current?.scrollToPosition(result.page, result.x, result.y);
+      pdfViewerRef.current?.showSyncResult(result, word);
     } catch {
       // no synctex match for this position — ignore
     }
   }
 
   function handleShowInPdf() {
-    return jumpToPdfAtLine(editorRef.current?.getCursorLine() ?? 1);
+    return jumpToPdfAtLine(editorRef.current?.getCursorLine() ?? 1, editorRef.current?.getCursorWord());
   }
+
+  const commands = [
+    { id: 'compile', label: 'Compile', hint: 'Ctrl Enter', run: handleCompile },
+    ...(pdfUrl ? [{ id: 'show-in-pdf', label: 'Show in PDF', hint: 'Ctrl Alt J', run: handleShowInPdf }] : []),
+    { id: 'sidebar', label: sidebarOpen ? 'Hide sidebar' : 'Show sidebar', run: () => setSidebarOpen((v) => !v) },
+    ...SIDEBAR_TABS.map(([id, label]) => ({
+      id: `tab-${id}`,
+      label: `Go to ${label}`,
+      run: () => {
+        setSidebarOpen(true);
+        setSidebarTab(id);
+      },
+    })),
+    ...(manifest ? [{ id: 'share', label: 'Share', run: () => setShowShare(true) }] : []),
+    { id: 'history', label: 'Version history', run: handleToggleHistory },
+    ...(compileResult ? [{ id: 'logs', label: 'Compile log', run: () => setShowLogPanel((v) => !v) }] : []),
+    { id: 'comments', label: 'Comments', run: () => setShowComments((v) => !v) },
+    { id: 'suggestions', label: 'Suggestions', run: () => setShowSuggestions((v) => !v) },
+    { id: 'chat', label: 'Chat', run: () => setShowChat((v) => !v) },
+    { id: 'symbols', label: 'Insert symbol', run: () => setShowSymbols((v) => !v) },
+    { id: 'auto', label: `${autoCompile ? 'Turn off' : 'Turn on'} auto-compile`, run: () => setAutoCompile((v) => !v) },
+    { id: 'theme', label: 'Change theme', run: cycleTheme },
+    { id: 'back', label: 'All projects', run: onBack },
+    ...(manifest?.files ?? [])
+      .map((f) => ({ id: `file-${f.path}`, label: f.path, run: () => handleSelectFile(f) })),
+  ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          columnGap: 12,
-          rowGap: 6,
-          padding: 8,
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
+      <div className="workspace-toolbar">
         <button
+          className="icon-button"
           onClick={() => setSidebarOpen((v) => !v)}
           title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-          style={{ fontSize: 15, lineHeight: 1 }}
+          aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
         >
-          ☰
+          <SidebarIcon />
         </button>
-        <button onClick={onBack}>&larr; Back</button>
-        <Logo size={20} />
-        <strong>{manifest?.name}</strong>
-        <span style={{ color: collabStatus === 'disconnected' ? '#e0a030' : 'var(--text-muted)', fontSize: 12 }}>
-          {STATUS_LABEL[collabStatus] ?? collabStatus}
+        <button className="icon-button" onClick={onBack} title="All projects" aria-label="All projects">
+          <BackIcon />
+        </button>
+        <strong className="workspace-title" title={manifest?.name}>
+          {manifest?.name}
+        </strong>
+        <span className={`status-pill ${collabStatus}`} title={STATUS_LABEL[collabStatus] ?? collabStatus}>
+          <i />
+          <span>{STATUS_LABEL[collabStatus] ?? collabStatus}</span>
         </span>
         {isViewer && (
-          <span
-            title="You have view-only access to this project"
-            style={{
-              fontSize: 11,
-              padding: '2px 6px',
-              borderRadius: 4,
-              background: 'var(--accent-bg)',
-              color: 'var(--text-muted)',
-            }}
-          >
+          <span className="status-pill" title="You have view-only access to this project">
             Read-only
           </span>
         )}
-        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{wordCount} words</span>
+        <span className="toolbar-note">{wordCount} words</span>
         {recentEditors.length > 0 && (
-          <span style={{ color: 'var(--text-muted)', fontSize: 12 }} title={recentEditors.map((e) => e.email).join(', ')}>
-            👥 {recentEditors.map((e) => e.email.split('@')[0]).join(', ')}
+          <span className="toolbar-note" title={recentEditors.map((e) => e.email).join(', ')}>
+            {recentEditors.map((e) => e.email.split('@')[0]).join(', ')}
           </span>
         )}
-        <div
-          style={{
-            marginLeft: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            justifyContent: 'flex-end',
-            columnGap: 8,
-            rowGap: 6,
-            position: 'relative',
-          }}
-        >
+        <div className="toolbar-actions">
+          <button className="palette-trigger" onClick={() => setShowPalette(true)} title="Search commands and files">
+            <SearchIcon />
+            <kbd>{navigator.platform.startsWith('Mac') ? '⌘K' : 'Ctrl K'}</kbd>
+          </button>
           <ToolbarMenu label="Menu">
             {manifest && (
               <MenuItem onClick={() => setShowShare((v) => !v)} active={showShare}>
@@ -835,14 +940,15 @@ export default function ProjectView({ projectId, onBack, user }) {
           {showSymbols && <SymbolPalette onInsert={handleInsertSnippet} onClose={() => setShowSymbols(false)} />}
 
           <button
+            className="toolbar-button"
             onClick={cycleTheme}
             title={`Theme: ${THEME_LABEL[theme].name} — click to switch to ${THEME_LABEL[NEXT_THEME_NAME[theme]].name}`}
-            style={{ fontSize: 13 }}
+            aria-label={`Theme: ${THEME_LABEL[theme].name}`}
           >
-            {THEME_LABEL[theme].icon} {THEME_LABEL[theme].name}
+            {THEME_LABEL[theme].icon}
           </button>
 
-          <button onClick={handleToggleHistory} style={{ fontSize: 13 }}>
+          <button className="toolbar-button" onClick={handleToggleHistory}>
             History
           </button>
           {showHistory && (
@@ -861,7 +967,8 @@ export default function ProjectView({ projectId, onBack, user }) {
             onClick={() => setShowLogPanel((v) => !v)}
             disabled={!compileResult}
             title={compileResult ? "Show this compile's log and errors" : 'Compile to see the log'}
-            style={{ fontSize: 13, background: showLogPanel ? 'var(--accent-bg)' : undefined, position: 'relative' }}
+            className="toolbar-button"
+            style={{ background: showLogPanel ? 'var(--accent-bg)' : undefined, position: 'relative' }}
           >
             Logs
             {compileResult && problemCount > 0 && (
@@ -886,70 +993,40 @@ export default function ProjectView({ projectId, onBack, user }) {
           <button
             onClick={handleCompile}
             disabled={compiling}
-            className="compile-button"
-            title="Compile (Cmd/Ctrl+S)"
-            style={{ padding: '6px 16px' }}
+            className={`compile-button${compiling ? ' compiling' : ''}`}
+            title="Compile (Cmd/Ctrl+S or Cmd/Ctrl+Enter)"
           >
-            {compiling ? 'Compiling…' : 'Compile'}
+            {compiling ? 'Compiling' : 'Compile'}
           </button>
         </div>
+        <div className={`compile-progress${compiling ? ' active' : ''}`} />
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        {sidebarOpen && (
-        <div style={{ width: 220, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-            <button
-              onClick={() => setSidebarTab('files')}
-              style={{
-                flex: 1,
-                border: 'none',
-                borderRadius: 0,
-                background: sidebarTab === 'files' ? 'var(--accent-bg)' : 'transparent',
-                fontSize: 13,
-                padding: 6,
-              }}
-            >
-              Files
-            </button>
-            <button
-              onClick={() => setSidebarTab('outline')}
-              style={{
-                flex: 1,
-                border: 'none',
-                borderRadius: 0,
-                background: sidebarTab === 'outline' ? 'var(--accent-bg)' : 'transparent',
-                fontSize: 13,
-                padding: 6,
-              }}
-            >
-              Outline
-            </button>
-            <button
-              onClick={() => setSidebarTab('git')}
-              style={{
-                flex: 1,
-                border: 'none',
-                borderRadius: 0,
-                background: sidebarTab === 'git' ? 'var(--accent-bg)' : 'transparent',
-                fontSize: 13,
-                padding: 6,
-              }}
-            >
-              Source Control
-            </button>
-            <button
-              onClick={() => setSidebarTab('search')}
-              style={{
-                flex: 1,
-                border: 'none',
-                borderRadius: 0,
-                background: sidebarTab === 'search' ? 'var(--accent-bg)' : 'transparent',
-                fontSize: 13,
-                padding: 6,
-              }}
-            >
-              Search
-            </button>
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="quireloop-workspace"
+          className={draggingSplit ? '' : 'panels-animate'}
+          style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+        >
+        <Panel
+          ref={sidebarPanelRef}
+          id="sidebar"
+          order={1}
+          defaultSize={17}
+          minSize={11}
+          maxSize={35}
+          collapsible
+          onCollapse={() => setSidebarOpen(false)}
+          onExpand={() => setSidebarOpen(true)}
+        >
+        <div className="workspace-sidebar">
+          <div className="segmented" style={{ '--count': SIDEBAR_TABS.length, '--index': SIDEBAR_TABS.findIndex(([id]) => id === sidebarTab) }}>
+            <i />
+            {SIDEBAR_TABS.map(([id, label]) => (
+              <button key={id} className={sidebarTab === id ? 'active' : ''} onClick={() => setSidebarTab(id)}>
+                {label}
+              </button>
+            ))}
           </div>
           <div style={{ flex: 1, minHeight: 0 }}>
             {sidebarTab === 'files' && manifest && (
@@ -973,7 +1050,9 @@ export default function ProjectView({ projectId, onBack, user }) {
             {sidebarTab === 'search' && <SearchPanel projectId={projectId} onJump={jumpToSource} />}
           </div>
         </div>
-        )}
+        </Panel>
+        <PanelResizeHandle className="split-handle" onDragging={setDraggingSplit} />
+        <Panel id="workspace" order={2} minSize={40}>
         <PanelGroup
           direction="horizontal"
           autoSaveId="quireloop-editor-pdf-split"
@@ -1003,6 +1082,8 @@ export default function ProjectView({ projectId, onBack, user }) {
                     onCollabHandles={setCollabHandles}
                     onSelectionChange={setSelectionNonEmpty}
                     onSuggestedChange={handleSuggestedChange}
+                    onImageFiles={handleImageFiles}
+                    getMacroSource={() => mainMacrosRef.current}
                   />
                 )}
               </div>
@@ -1017,19 +1098,14 @@ export default function ProjectView({ projectId, onBack, user }) {
               )}
             </div>
           </Panel>
-          <PanelResizeHandle
-            style={{
-              width: 6,
-              cursor: 'col-resize',
-              background: 'var(--border)',
-              flexShrink: 0,
-            }}
-          />
+          <PanelResizeHandle className="split-handle" />
           <Panel defaultSize={45} minSize={15}>
             <PdfViewer ref={pdfViewerRef} url={pdfUrl} projectId={projectId} onJumpToSource={jumpToSource} />
           </Panel>
         </PanelGroup>
-        {showComments && (
+        </Panel>
+        </PanelGroup>
+        <SlidePanel open={showComments} width={300}>
           <CommentsPanel
             threads={commentThreadsWithStatus}
             showResolved={showResolvedComments}
@@ -1042,8 +1118,8 @@ export default function ProjectView({ projectId, onBack, user }) {
             onDelete={handleDeleteComment}
             onClose={() => setShowComments(false)}
           />
-        )}
-        {showSuggestions && (
+        </SlidePanel>
+        <SlidePanel open={showSuggestions} width={300}>
           <SuggestionsPanel
             suggestions={suggestionsWithText}
             canWrite={!isViewer}
@@ -1051,16 +1127,16 @@ export default function ProjectView({ projectId, onBack, user }) {
             onReject={handleRejectSuggestion}
             onClose={() => setShowSuggestions(false)}
           />
-        )}
-        {showChat && (
+        </SlidePanel>
+        <SlidePanel open={showChat} width={280}>
           <ChatPanel
             messages={chatMessages}
             currentUserId={user?.id}
             onSend={handleSendChat}
             onClose={() => setShowChat(false)}
           />
-        )}
-        {showAssistant && (
+        </SlidePanel>
+        <SlidePanel open={showAssistant} width={340}>
           <AssistantPanel
             projectId={projectId}
             activePath={activePath}
@@ -1068,8 +1144,9 @@ export default function ProjectView({ projectId, onBack, user }) {
             readOnly={isViewer}
             onClose={() => setShowAssistant(false)}
           />
-        )}
+        </SlidePanel>
       </div>
+      <CommandPalette open={showPalette} onClose={() => setShowPalette(false)} commands={commands} />
     </div>
   );
 }

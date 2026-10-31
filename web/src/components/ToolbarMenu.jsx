@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { ChevronIcon } from './Icons.jsx';
+import { usePresence } from '../lib/motion.js';
 
 // Small dropdown used to group related toolbar actions (File-ish stuff,
 // Edit/collaboration stuff) behind a single "Menu"/"Edit" button instead of
@@ -6,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 export default function ToolbarMenu({ label, badge, children }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const { mounted, shown } = usePresence(open, 160);
 
   useEffect(() => {
     if (!open) return;
@@ -25,8 +28,8 @@ export default function ToolbarMenu({ label, badge, children }) {
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen((v) => !v)} style={{ fontSize: 13, position: 'relative' }}>
-        {label} <span style={{ fontSize: 10, opacity: 0.7 }}>▾</span>
+      <button onClick={() => setOpen((v) => !v)} className="menu-trigger" aria-expanded={open}>
+        {label} <ChevronIcon />
         {badge > 0 && (
           <span
             style={{
@@ -45,25 +48,14 @@ export default function ToolbarMenu({ label, badge, children }) {
           </span>
         )}
       </button>
-      {open && (
+      {mounted && (
         <div
-          className="pop-in"
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            position: 'absolute',
-            top: '100%',
-            right: 0,
-            marginTop: 6,
-            background: 'var(--panel-bg)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-            padding: 6,
-            minWidth: 220,
-            zIndex: 50,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
+          className={`menu-surface glass${shown ? ' shown' : ''}`}
+          // Choosing something closes the menu, as a desktop menu would. The
+          // compiler <select> is left out so it stays open while in use.
+          onClick={(e) => {
+            e.stopPropagation();
+            if (e.target.closest('button, a')) setOpen(false);
           }}
         >
           {children}
@@ -81,20 +73,7 @@ export function MenuItem({ onClick, active, disabled, title, children }) {
       onClick={onClick}
       disabled={disabled}
       title={title}
-      style={{
-        fontSize: 13,
-        textAlign: 'left',
-        border: 'none',
-        boxShadow: 'none',
-        background: active ? 'var(--accent-bg)' : 'transparent',
-        padding: '7px 10px',
-        borderRadius: 'var(--radius-sm)',
-        width: '100%',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: 8,
-      }}
+      className={`menu-item${active ? ' active' : ''}`}
     >
       {children}
     </button>

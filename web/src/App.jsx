@@ -4,6 +4,8 @@ import ProjectView from './pages/ProjectView.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import { authApi } from './lib/auth.js';
 import { api } from './api.js';
+import { withTransition } from './lib/motion.js';
+import DialogHost from './components/DialogHost.jsx';
 
 export default function App() {
   const [openProjectId, setOpenProjectId] = useState(null);
@@ -45,12 +47,21 @@ export default function App() {
 
   if (checkingAuth) return null;
 
+  const openProject = (id) => withTransition(() => setOpenProjectId(id));
+
+  let page;
   if (!user) {
-    return <LoginPage onAuthenticated={setUser} />;
+    page = <LoginPage onAuthenticated={(u) => withTransition(() => setUser(u))} />;
+  } else if (openProjectId) {
+    page = <ProjectView projectId={openProjectId} onBack={() => openProject(null)} user={user} />;
+  } else {
+    page = <Dashboard onOpen={openProject} user={user} onLogout={handleLogout} onUserUpdate={setUser} />;
   }
 
-  if (openProjectId) {
-    return <ProjectView projectId={openProjectId} onBack={() => setOpenProjectId(null)} user={user} />;
-  }
-  return <Dashboard onOpen={setOpenProjectId} user={user} onLogout={handleLogout} onUserUpdate={setUser} />;
+  return (
+    <>
+      {page}
+      <DialogHost />
+    </>
+  );
 }

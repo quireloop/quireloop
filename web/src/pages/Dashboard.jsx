@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import { confirmDialog } from '../lib/dialog.js';
 import { authApi } from '../lib/auth.js';
 import { useDarkMode } from '../lib/theme.js';
 import Logo from '../components/Logo.jsx';
 import AccountSettings from '../components/AccountSettings.jsx';
 import AdminPanel from '../components/AdminPanel.jsx';
-import ReactiveBackground from '../components/ReactiveBackground.jsx';
 import FolderBrowser from '../components/FolderBrowser.jsx';
+import CopyrightNotice from '../components/CopyrightNotice.jsx';
 
 function ImportFromthe hosted editor({ onClose, onImported }) {
   const [name, setName] = useState('');
@@ -137,10 +138,21 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
   // Quireloop showing it, so the wording must not imply their files are going
   // anywhere.
   async function handleDelete(project) {
-    const message = project.linkedPath
-      ? `Remove "${project.name}" from Quireloop?\n\nYour folder at ${project.linkedPath} stays exactly where it is — only the link to it is removed.`
-      : 'Delete this project? This cannot be undone.';
-    if (!confirm(message)) return;
+    const confirmed = await confirmDialog(
+      project.linkedPath
+        ? {
+            title: `Remove "${project.name}" from Quireloop?`,
+            message: `Your folder at ${project.linkedPath} stays exactly where it is — only the link to it is removed.`,
+            confirmLabel: 'Remove',
+          }
+        : {
+            title: `Delete "${project.name}"?`,
+            message: 'This cannot be undone.',
+            confirmLabel: 'Delete',
+            danger: true,
+          }
+    );
+    if (!confirmed) return;
     await api.deleteProject(project.id);
     await refresh();
   }
@@ -169,7 +181,6 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh' }}>
-      <ReactiveBackground dark={dark} />
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '40px auto', padding: '0 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -213,7 +224,7 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
             </option>
           ))}
         </select>
-        <button type="submit" style={{ padding: '8px 16px' }}>
+        <button type="submit" className="primary-button" style={{ padding: '8px 16px' }}>
           New Project
         </button>
       </form>
@@ -249,19 +260,8 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
 
       <div style={{ display: 'grid', gap: 12 }}>
         {projects.map((p) => (
-          <div
-            key={p.id}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: 16,
-              background: 'var(--panel-bg)',
-              borderRadius: 8,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            }}
-          >
-            <div onClick={() => onOpen(p.id)} style={{ cursor: 'pointer', flex: 1 }}>
+          <div key={p.id} className="project-card" onClick={() => onOpen(p.id)}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <strong>{p.name}</strong>
               {p.ownerId !== user?.id && (
                 <span
@@ -297,11 +297,17 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
                 {p.linkedPath && ` · ${p.linkedPath}`}
               </div>
             </div>
-            <a href={api.downloadUrl(p.id)} download style={{ marginRight: 12, fontSize: 13 }}>
+            <a href={api.downloadUrl(p.id)} download className="link-button" onClick={(e) => e.stopPropagation()}>
               Download .zip
             </a>
             {p.ownerId === user?.id && (
-              <button onClick={() => handleDelete(p)} style={{ color: 'crimson' }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(p);
+                }}
+                style={{ color: 'var(--danger)', background: 'transparent' }}
+              >
                 {p.linkedPath ? 'Remove' : 'Delete'}
               </button>
             )}
@@ -314,6 +320,7 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
         <a href="https://github.com/arjunpogaku" target="_blank" rel="noreferrer">
           Arjun Pogaku
         </a>
+        <CopyrightNotice style={{ marginTop: 6, paddingBottom: 16 }} />
       </div>
       </div>
     </div>

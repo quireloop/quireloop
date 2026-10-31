@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { withTransition } from './motion.js';
 
 const VALID_THEMES = ['light', 'dark', 'neon'];
 const NEXT_THEME = { light: 'dark', dark: 'neon', neon: 'light' };
@@ -19,7 +20,7 @@ export function useTheme() {
   }, [theme]);
 
   function cycleTheme() {
-    setThemeState((t) => NEXT_THEME[t] ?? 'light');
+    withTransition(() => setThemeState((t) => NEXT_THEME[t] ?? 'light'));
   }
 
   return [theme, cycleTheme];

@@ -3,31 +3,48 @@
 }
 
 :root {
-  --bg: #f7f8fa;
+  --bg: #f5f5f7;
   --panel-bg: #ffffff;
-  --text: #1f2328;
-  --text-muted: #5b6572;
-  --border: #e1e4e8;
-  --accent-bg: #eaf1ff;
-  --accent: #2f6fed;
-  --pdf-bg: #ececee;
-  --primary: #1a7f37;
-  --primary-hover: #146c2e;
-  --radius: 8px;
-  --radius-sm: 6px;
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --border: rgba(0, 0, 0, 0.09);
+  --accent-bg: rgba(0, 113, 227, 0.1);
+  --accent: #0071e3;
+  --pdf-bg: #ececef;
+  --primary: #0071e3;
+  --primary-hover: #0077ed;
+  --danger: #d70015;
+  --control: rgba(0, 0, 0, 0.05);
+  --control-hover: rgba(0, 0, 0, 0.09);
+  --glass: rgba(255, 255, 255, 0.76);
+  --scrim: rgba(0, 0, 0, 0.26);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-float: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 12px 40px rgba(0, 0, 0, 0.18);
+  --radius: 12px;
+  --radius-sm: 8px;
+  /* Quick to start, long to settle: the curve of iOS sheets and drawers. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion: 340ms;
 }
 
 :root[data-theme='dark'] {
-  --bg: #181a1f;
-  --panel-bg: #22252b;
-  --text: #e8eaed;
-  --text-muted: #97a0ad;
-  --border: #383c44;
-  --accent-bg: #253355;
-  --accent: #6d97ff;
-  --pdf-bg: #101114;
-  --primary: #2ea043;
-  --primary-hover: #3fb954;
+  --bg: #161617;
+  --panel-bg: #1e1e20;
+  --text: #f5f5f7;
+  --text-muted: #98989d;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent-bg: rgba(10, 132, 255, 0.2);
+  --accent: #2997ff;
+  --pdf-bg: #101011;
+  --primary: #0a84ff;
+  --primary-hover: #409cff;
+  --danger: #ff453a;
+  --control: rgba(255, 255, 255, 0.08);
+  --control-hover: rgba(255, 255, 255, 0.14);
+  --glass: rgba(44, 44, 46, 0.72);
+  --scrim: rgba(0, 0, 0, 0.46);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 14px 44px rgba(0, 0, 0, 0.55);
 }
 
 /* Neon — a cyberpunk-leaning theme for the editor surface (and the chrome
@@ -44,6 +61,13 @@
   --pdf-bg: #05060c;
   --primary: #ff2bd6;
   --primary-hover: #ff5be0;
+  --danger: #ff4d6d;
+  --control: rgba(120, 140, 255, 0.12);
+  --control-hover: rgba(120, 140, 255, 0.22);
+  --glass: rgba(11, 14, 26, 0.78);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-float: 0 0 0 0.5px rgba(57, 240, 255, 0.3), 0 14px 44px rgba(0, 0, 0, 0.6);
 }
 
 :root[data-theme='neon'] .compile-button {
@@ -58,66 +82,99 @@
   box-shadow: 0 0 8px rgba(57, 240, 255, 0.6);
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: "Inter Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  letter-spacing: -0.006em;
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-bg);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--control-hover) transparent;
 }
 
 button {
   font-family: inherit;
   font-size: inherit;
-  cursor: pointer;
-  background: var(--panel-bg);
+  letter-spacing: inherit;
+  cursor: default;
+  background: var(--control);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+  padding: 5px 11px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 200ms var(--ease);
 }
 
 button:hover:not(:disabled) {
-  background: var(--accent-bg);
-  border-color: var(--accent);
+  background: var(--control-hover);
 }
 
 button:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: scale(0.96);
+  transition-duration: 60ms;
 }
 
 button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+textarea:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-bg), 0 0 0 1px var(--accent);
 }
 
 input, select, textarea {
   font-family: inherit;
+  font-size: inherit;
   background: var(--panel-bg);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 a {
   color: inherit;
 }
 
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  box-shadow: var(--shadow-float);
+}
+
+/* Screen changes cross-fade with a slight settle (lib/motion.js). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+  animation-timing-function: var(--ease);
+}
+
 @keyframes popIn {
   from {
     opacity: 0;
-    transform: scale(0.97);
+    transform: scale(0.96);
   }
   to {
     opacity: 1;
@@ -125,20 +182,688 @@ a {
   }
 }
 
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideProgress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+
 .pop-in {
-  animation: popIn 0.12s ease-out;
+  animation: popIn 260ms var(--ease);
+}
+
+/* ---- Workspace --------------------------------------------------------- */
+
+.workspace-toolbar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  flex-shrink: 0;
+  padding: 0 10px;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.workspace-title {
+  max-width: 28ch;
+  margin-left: 4px;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-note {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.icon-button,
+.toolbar-button,
+.menu-trigger,
+.palette-trigger,
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 9px;
+  background: transparent;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.link-button {
+  height: auto;
+  border-radius: 6px;
+  padding: 3px 8px;
+  text-decoration: none;
+  transition: background-color 160ms ease;
+}
+
+.link-button:hover {
+  background: var(--control-hover);
+}
+
+.icon-button {
+  justify-content: center;
+  width: 30px;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+.palette-trigger {
+  color: var(--text-muted);
+}
+
+kbd {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff9f0a;
+  transition: background-color 300ms ease;
+}
+
+.status-pill.synced i {
+  background: #30d158;
+}
+
+.status-pill.disconnected {
+  color: #c77700;
+}
+
+.compile-progress {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 240ms ease;
+}
+
+.compile-progress.active {
+  opacity: 1;
+}
+
+.compile-progress::after {
+  content: '';
+  display: block;
+  width: 25%;
+  height: 100%;
+  background: var(--accent);
+  animation: slideProgress 1.2s var(--ease) infinite;
 }
 
 /* Primary action — Compile is the one button on the toolbar that should
-   read as "the button to press", same idea as the hosted editor's green Recompile. */
-.compile-button {
+   read as "the button to press". */
+.compile-button,
+.primary-button {
   background: var(--primary);
   color: #ffffff;
-  border-color: var(--primary);
+  font-weight: 590;
+}
+
+.compile-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  margin-left: 4px;
+  padding: 0 14px;
+}
+
+.compile-button:hover:not(:disabled),
+.primary-button:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.compile-button.compiling:disabled {
+  opacity: 0.8;
+}
+
+.compile-button.compiling::before {
+  content: '';
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+.danger-button {
+  background: var(--danger);
+  color: #fff;
+  font-weight: 590;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: var(--danger);
+  filter: brightness(1.08);
+}
+
+.workspace-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 170px;
+  background: var(--bg);
+}
+
+.segmented {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--count), 1fr);
+  flex-shrink: 0;
+  margin: 8px;
+  padding: 2px;
+  background: var(--control);
+  border-radius: 9px;
+}
+
+.segmented > i {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / var(--count));
+  background: var(--panel-bg);
+  border-radius: 7px;
+  box-shadow: var(--shadow-soft);
+  transform: translateX(calc(var(--index) * 100%));
+  transition: transform var(--motion) var(--ease);
+}
+
+.segmented > button,
+.segmented > button:hover:not(:disabled) {
+  position: relative;
+  padding: 4px 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.segmented > button.active {
+  color: var(--text);
+  font-weight: 550;
+}
+
+/* Disabled while a split is being dragged, so panels track the pointer. */
+.panels-animate > [data-panel] {
+  transition: flex-grow var(--motion) var(--ease);
+}
+
+.split-handle {
+  position: relative;
+  flex: 0 0 1px;
+  background: var(--border);
+  outline: none;
+}
+
+.split-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  background: var(--accent);
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  transform: scaleX(0.3);
+}
+
+.split-handle[data-resize-handle-state='hover']::after,
+.split-handle[data-resize-handle-state='drag']::after {
+  opacity: 0.5;
+}
+
+.slide-panel {
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+  transition: width var(--motion) var(--ease);
+}
+
+/* ---- Menus, dialogs, palette ------------------------------------------- */
+
+.menu-surface {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 220px;
+  margin-top: 6px;
+  padding: 5px;
+  border-radius: var(--radius);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.96) translateY(-3px);
+  transform-origin: top right;
+  transition: opacity 120ms ease, transform 160ms var(--ease);
+}
+
+.menu-surface.shown {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.menu-surface > a,
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 9px;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.menu-surface > a:hover,
+.menu-item:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.menu-item:active:not(:disabled) {
+  transform: none;
+}
+
+.menu-item.active::after {
+  content: '✓';
+  font-size: 12px;
+}
+
+.dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--scrim);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.dialog-scrim.shown {
+  opacity: 1;
+}
+
+.dialog {
+  width: 340px;
+  max-width: 100%;
+  padding: 20px;
+  border-radius: 16px;
+  transform: scale(0.95);
+  transition: transform 220ms var(--ease);
+}
+
+.dialog-scrim.shown .dialog,
+.dialog-scrim.shown .palette {
+  transform: none;
+}
+
+.dialog h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dialog p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.dialog input,
+.dialog textarea {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 7px 10px;
+  resize: vertical;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.palette-scrim {
+  align-items: flex-start;
+  padding-top: 14vh;
+}
+
+.palette {
+  width: 560px;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  transform: scale(0.97);
+  transition: transform 220ms var(--ease);
+}
+
+.palette > input,
+.palette > input:focus-visible {
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 16px;
+}
+
+.palette-list {
+  max-height: 340px;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.palette-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  text-align: left;
+}
+
+.palette-list button.selected,
+.palette-list button.selected:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.palette-list button.selected kbd {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.palette-list p {
+  margin: 0;
+  padding: 18px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  background: var(--pdf-bg);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.empty-state strong {
+  color: var(--text);
+  font-size: 15px;
   font-weight: 600;
 }
 
-.compile-button:hover:not(:disabled) {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+/* Dashboard */
+.project-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--panel-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  cursor: default;
+  transition: box-shadow 240ms var(--ease), transform 240ms var(--ease);
+}
+
+.project-card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.07), 0 10px 26px rgba(0, 0, 0, 0.09);
+  transform: translateY(-1px);
+}
+
+.project-card:active {
+  transform: scale(0.995);
+  transition-duration: 80ms;
+}
+
+@media (max-width: 1100px) {
+  .toolbar-note,
+  .palette-trigger kbd,
+  .status-pill > span {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace-toolbar {
+    padding: 0 6px;
+    gap: 4px;
+  }
+
+  .toolbar-actions > .toolbar-button {
+    display: none;
+  }
+
+  .workspace-title {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ---- PDF preview ------------------------------------------------------ */
+
+.pdf-page {
+  position: relative;
+  margin: 0 auto 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+.pdf-page-enter {
+  animation: fadeUp 300ms var(--ease);
+}
+
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.pdf-toolbar input {
+  background: var(--control);
+  border-color: transparent;
+}
+
+.pdf-page > canvas {
+  display: block;
+}
+
+/* pdf.js's own text-layer rules (pdfjs-dist/web/pdf_viewer.css), trimmed to
+   what this viewer uses: transparent, selectable text laid over the canvas. */
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 0;
+}
+
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+}
+
+.textLayer span.markedContent {
+  top: 0;
+  height: 0;
+}
+
+.textLayer ::selection {
+  background: rgba(0, 0, 255, 0.25);
+}
+
+.textLayer br::selection {
+  background: transparent;
+}
+
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+
+/* Search hits and SyncTeX highlights sit above the text, never take clicks. */
+.pdf-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.pdf-overlay > div {
+  position: absolute;
+  border-radius: 2px;
+  transition: opacity 0.8s ease;
+}
+
+.pdf-overlay > .fading {
+  opacity: 0;
+}
+
+.pdf-sync-box {
+  background: rgba(255, 170, 0, 0.16);
+  outline: 1.5px solid rgba(230, 120, 0, 0.75);
+}
+
+.pdf-sync-word {
+  background: rgba(255, 120, 0, 0.45);
+}
+
+.pdf-sync-dot {
+  border-radius: 50% !important;
+  background: rgba(255, 80, 0, 0.7);
+}
+
+.pdf-search-hit {
+  background: rgba(255, 220, 0, 0.45);
+}
+
+.pdf-search-hit.current {
+  background: rgba(255, 130, 0, 0.6);
+  outline: 1px solid rgba(200, 90, 0, 0.9);
+}
+
+/* Dark reading mode: invert the page, then rotate hues back so figures keep
+   roughly their colours. Display-only — the downloaded PDF is unchanged. */
+.pdf-dark .pdf-page {
+  background: #1b1c20;
+}
+
+.pdf-dark .pdf-page > canvas {
+  filter: invert(0.9) hue-rotate(180deg);
 }
