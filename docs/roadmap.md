@@ -1,16 +1,15 @@
-# Quireloop Roadmap — from working prototype to the hosted editor alternative
+# Quireloop Roadmap
 
 Quireloop's goal: labs and research groups self-host their own LaTeX
 workspace on hardware they already own, instead of renting per-seat
-subscriptions. the hosted editor's most-missed features (track changes, full
-history, unlimited collaborators) are paywalled — here they're just
-features.
+subscriptions. Track changes, full history and unlimited collaborators
+are simply included.
 
 Already shipped: accounts + TOTP 2FA, per-user storage, project sharing,
 real-time collaborative editing (Yjs CRDT) with attribution, compile
 (latexmk) + SyncTeX, version history with restore, per-project git,
 citation/command autocomplete, symbol palette, file outline, templates,
-zip/the hosted editor import, dark mode.
+zip and git import, dark mode.
 
 ## Stage A — Team security & access control
 The gap: signup is open to anyone who can reach the server, there's no
@@ -29,14 +28,13 @@ lacks the `secure` flag for TLS deployments.
   `QUIRELOOP_SECURE_COOKIES=true` for TLS/nginx deployments.
 - **Password change** (self-service, requires current password).
 
-## Stage B — Collaboration depth (the the hosted editor paid tier, free)
+## Stage B — Collaboration depth
 - **Roles**: collaborators are `editor` or `viewer` (read-only opens,
   no writes/compiles blocked reads).
 - **Link sharing**: tokenized invite links with a role attached,
   revocable.
 - **Comments**: anchored to text ranges (Yjs relative positions so they
-  survive concurrent edits), threaded, resolvable. the hosted editor charges for
-  this.
+  survive concurrent edits), threaded, resolvable.
 - **Track changes / suggest mode**: edits recorded as pending
   insertions/deletions, accept/reject per change. (Riskiest item —
   sequenced last, may ship behind a toggle.)
@@ -65,7 +63,7 @@ lacks the `secure` flag for TLS deployments.
 ## Non-goals
 - No database — plain files/JSON only, sized for a lab (tens of users),
   not a public SaaS.
-- No rich-text/WYSIWYG editor mode (the hosted editor's "Visual Editor") — source
+- No rich-text/WYSIWYG editor mode — source
   editing with a great preview is the identity here.
 - No external sync integrations (Dropbox, Mendeley) for now; git covers
   interop.

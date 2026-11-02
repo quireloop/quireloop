@@ -194,8 +194,7 @@ its provider from the logged-in member's own Account settings first
 Admin panel settings above are only a fallback for members who haven't
 configured anything themselves. Nobody's usage gets billed to someone
 else's key. **What's not supported:** a personal Claude Pro/Max
-subscription (the kind used by the Claude Code CLI or the VS Code
-extension) cannot be linked here — that login is restricted by Anthropic
+subscription (the kind used by Anthropic's own apps) cannot be linked here — that login is restricted by Anthropic
 to their own first-party apps. Use a pay-as-you-go API key or Ollama
 instead.
 

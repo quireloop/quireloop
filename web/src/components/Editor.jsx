@@ -395,6 +395,7 @@ const Editor = forwardRef(function Editor(
     onChange,
     onJumpToPdf,
     onStatus,
+    onRoomReset,
     bibEntries,
     onCollabHandles,
     onSelectionChange,
@@ -412,6 +413,7 @@ const Editor = forwardRef(function Editor(
   const onChangeRef = useRef(onChange);
   const onJumpToPdfRef = useRef(onJumpToPdf);
   const onStatusRef = useRef(onStatus);
+  const onRoomResetRef = useRef(onRoomReset);
   const bibEntriesRef = useRef(bibEntries ?? []);
   const onCollabHandlesRef = useRef(onCollabHandles);
   const onSelectionChangeRef = useRef(onSelectionChange);
@@ -423,6 +425,7 @@ const Editor = forwardRef(function Editor(
   onChangeRef.current = onChange;
   onJumpToPdfRef.current = onJumpToPdf;
   onStatusRef.current = onStatus;
+  onRoomResetRef.current = onRoomReset;
   bibEntriesRef.current = bibEntries ?? [];
   onCollabHandlesRef.current = onCollabHandles;
   onSelectionChangeRef.current = onSelectionChange;
@@ -544,6 +547,14 @@ const Editor = forwardRef(function Editor(
       provider.awareness.setLocalStateField('user', { name: user.email, color, colorLight });
     }
 
+    // The server replaced this file's history, so this doc's saved state must
+    // not rejoin it. Reloading the project opens a new local store.
+    provider.on('connection-close', (event) => {
+      if (event?.code === 4000) {
+        provider.disconnect();
+        onRoomResetRef.current?.();
+      }
+    });
     provider.on('status', ({ status }) => onStatusRef.current?.(status));
     provider.on('sync', (synced) => onStatusRef.current?.(synced ? 'synced' : 'syncing'));
 
@@ -586,7 +597,7 @@ const Editor = forwardRef(function Editor(
           dblclick(event, view) {
             // Leaves the browser's own double-click word-selection alone —
             // this just additionally jumps the PDF preview to the matching
-            // spot, same idea as the hosted editor's double-click-to-locate. By now
+            // spot, double-click to locate. By now
             // CodeMirror has already selected the word under the pointer
             // (on the second mousedown), so it rides along: the viewer uses
             // it to pick the exact word out of the line's boxes.
@@ -598,7 +609,7 @@ const Editor = forwardRef(function Editor(
             onJumpToPdfRef.current?.(line, word);
           },
           // Pasting a screenshot or dropping image files uploads them into
-          // figures/ and inserts a figure block, like the hosted editor and LaTeX
+          // figures/ and inserts a figure block, like LaTeX
           // Workshop. Plain-text pastes and drops fall through untouched.
           paste(event, view) {
             const files = imageFilesFrom(event.clipboardData);
@@ -617,7 +628,7 @@ const Editor = forwardRef(function Editor(
           },
         }),
         keymap.of([
-          // LaTeX Workshop's binding for "SyncTeX from cursor". (Compile
+          // the usual binding for "SyncTeX from cursor". (Compile
           // shortcuts live in ProjectView, so they work outside the editor.)
           {
             key: 'Ctrl-Alt-j',

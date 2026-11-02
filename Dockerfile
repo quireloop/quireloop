@@ -71,7 +71,7 @@ RUN npm prune --omit=dev
 #   additional font families) and texlive-lang-* (non-Latin language
 #   support) to keep the image reasonable; if your lab needs either,
 #   add the relevant package(s) to the apt-get line below and rebuild.
-#   Even so, no curated subset matches the hosted editor's near-complete CTAN
+#   Even so, no curated subset matches a near-complete CTAN
 #   install — if a specific template still hits a missing .sty, add the
 #   Debian package that provides it (https://ctan.org/pkg/<name> lists
 #   it, or `apt-cache search <name>`) and rebuild.

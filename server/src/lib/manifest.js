@@ -190,7 +190,7 @@ export function fileTypeFor(relPath) {
 // real content — never something to list as one of the project's files.
 const BOOKKEEPING_ENTRIES = new Set(['manifest.json', 'build', 'versions']);
 
-async function walkFiles(root, base = '') {
+export async function walkFiles(root, base = '') {
   const entries = await fs.readdir(path.join(root, base), { withFileTypes: true });
   let files = [];
   for (const entry of entries) {

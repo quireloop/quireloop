@@ -21,6 +21,7 @@ import {
 import { findUserByEmail, findUserById } from '../lib/auth.js';
 import * as sharedIndex from '../lib/sharedIndex.js';
 import * as shareLinks from '../lib/shareLinks.js';
+import { ignoreRemoteProject } from '../lib/syncClient.js';
 
 export default async function projectsRoutes(app) {
   app.get('/api/templates', { preHandler: requireAuth }, async () => {
@@ -84,6 +85,7 @@ export default async function projectsRoutes(app) {
   });
 
   app.delete('/api/projects/:id', { preHandler: requireProjectOwner }, async (req, reply) => {
+    if (req.manifest.sync) await ignoreRemoteProject(req.manifest.sync.remoteId);
     await deleteProject(req.ownerId, req.params.id);
     return reply.code(204).send();
   });

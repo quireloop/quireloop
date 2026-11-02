@@ -22,6 +22,8 @@ import collabRoutes from './routes/collab.js';
 import commentsRoutes from './routes/comments.js';
 import suggestionsRoutes from './routes/suggestions.js';
 import chatRoutes from './routes/chat.js';
+import syncRoutes from './routes/sync.js';
+import linkRoutes from './routes/link.js';
 import assistantRoutes from './routes/assistant.js';
 import registerMultipart from './plugins/multipart.js';
 
@@ -93,6 +95,8 @@ export async function buildApp({ logger = true } = {}) {
     suggestionsRoutes,
     chatRoutes,
     assistantRoutes,
+    syncRoutes,
+    linkRoutes,
   ]) {
     await app.register(routes, { prefix: BASE_PATH });
   }

@@ -3,7 +3,7 @@ import { requireProjectAccess } from '../lib/authMiddleware.js';
 import { findUserById } from '../lib/auth.js';
 
 export default async function collabRoutes(app) {
-  app.get('/ws/:id/*', { websocket: true, preHandler: requireProjectAccess }, async (ws, req) => {
+  app.get('/ws/:id/*', { websocket: true, config: { allowDevice: true }, preHandler: requireProjectAccess }, async (ws, req) => {
     const filePath = req.params['*'];
 
     // The client fires its syncStep1 the instant the socket opens — often

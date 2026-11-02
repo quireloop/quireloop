@@ -107,7 +107,7 @@ async function runLatexmk(cwd, mainFile, compiler) {
       // -synctex=1 produces a .synctex.gz for PDF<->source jumping.
       // No -halt-on-error: that stops at the very first error (an
       // "Emergency stop", zero output) instead of pushing through like
-      // the hosted editor does. -interaction=nonstopmode alone already prevents
+      // other hosted compilers do. -interaction=nonstopmode alone already prevents
       // hanging on a prompt; LaTeX will skip a missing package/command and
       // keep going, usually still reaching \end{document} with a real PDF
       // even when the log has errors in it.
@@ -125,7 +125,7 @@ async function runLatexmk(cwd, mainFile, compiler) {
 
     const log = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
     // latexmk/pdflatex exit non-zero whenever the log has any error in it,
-    // even if a PDF was still produced (the hosted editor shows that PDF with the
+    // even if a PDF was still produced (the UI shows that PDF with the
     // errors listed alongside it, rather than nothing) — so success is
     // "did a PDF actually come out of this", checked on disk, not the exit
     // code alone.

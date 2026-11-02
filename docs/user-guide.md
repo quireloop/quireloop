@@ -23,7 +23,8 @@ and come back here.
 14. [The AI writing assistant](#the-ai-writing-assistant)
 15. [Version history](#version-history)
 16. [Git integration](#git-integration)
-17. [Syncing with an the hosted editor project](#syncing-with-an-hosted-editor-project)
+17. [Syncing with a git remote](#syncing-with-a-git-remote)
+18. [Working offline with a server](#working-offline-with-a-server)
 18. [Where your data lives, and backups](#where-your-data-lives-and-backups)
 19. [Troubleshooting](#troubleshooting)
 
@@ -36,7 +37,7 @@ its own server. It is licensed for [academic use only](../README.md#license).
 Your papers never leave your hardware, there are no subscriptions, and there
 are no artificial limits on collaborators, compile time, or history.
 
-The core loop is the same one you know from the hosted editor: source on the left,
+The core loop is simple: source on the left,
 PDF on the right, live collaboration in between.
 
 ---
@@ -148,17 +149,16 @@ with you (marked with a **Shared** badge).
 Pick a template — **Blank**, **Article**, **Report**, **Beamer
 Presentation**, or **CV / Resume** — enter a name, and click **New Project**.
 
-### Importing from the hosted editor
+### Importing from git
 
-In the hosted editor: Menu → **Source** under Download (this gives you the project
-`.zip`). In Quireloop: **Import from the hosted editor…**, select the zip. The whole
-project — folders, figures, `.bib` files — comes across as-is.
+**Import from Git…** clones any project from a git URL, with a token if it is
+private. The project keeps its remote, so you can push straight back.
 
 ### Uploading any zip
 
-**Upload Project (.zip)…** works for any zipped LaTeX project, not just
-the hosted editor exports. Quireloop looks for a main `.tex` file (one containing
-`\documentclass`) and builds the file tree from the archive.
+**Upload Project (.zip)…** works for any zipped LaTeX project. Quireloop looks
+for a main `.tex` file (one containing `\documentclass`) and builds the file
+tree from the archive.
 
 ### Downloading and deleting
 
@@ -346,7 +346,7 @@ viewers) can read and write.
 
 ## Track changes (suggest mode)
 
-the hosted editor's "Suggesting" mode, for supervised edits: propose changes without
+For supervised edits: propose changes without
 silently rewriting the document.
 
 ### Making suggestions
@@ -452,7 +452,7 @@ download, not in git pushes).
 Every project is quietly a git repository, exposed through the **Source
 Control** sidebar tab.
 
-- **Changes list** — files modified since the last commit, VS Code-style.
+- **Changes list** — files modified since the last commit.
 - **Commit** — write a message and commit everything pending.
 - **Remote** — connect the project to any HTTPS git remote (GitHub, GitLab,
   your institution's server). Provide the repo URL and an access token
@@ -474,32 +474,76 @@ a clean LaTeX repository containing only your paper.
 
 ---
 
-## Syncing with an the hosted editor project
+## Syncing with a git remote
 
-You can keep a Quireloop project and an the hosted editor project pointing at the
-same paper, using the hosted editor's official **git bridge** (available on paid
-the hosted editor plans, and on the hosted editor Server Pro):
+You can keep a project in step with any git host:
 
-1. In the hosted editor: **Account Settings → Git integration** — generate a git
-   authentication token. Note your project's git URL:
-   `https://git.hosted-editor.com/<project id>` (the id is in the project's URL).
+1. On the host, create an access token and note the repository's URL.
 2. In Quireloop: open the project's **Source Control** tab → **Set remote**,
-   paste the the hosted editor git URL and the token.
-3. **Pull** brings down the collaborators' the hosted editor edits; **Commit** +
-   **Push** sends your Quireloop edits to the hosted editor, where they appear in the
-   project (and in its history) like any other change.
+   paste the URL and the token.
+3. **Pull** brings down changes from the remote; **Commit** + **Push** sends
+   yours.
 
-This is *synchronized*, not live: the hosted editor does not offer a public realtime
-API, so their keystrokes appear when you Pull and yours when you Push —
-the same model as the hosted editor's own GitHub sync or the VS Code extension
-workflows. Pull before a work session, push after, and don't edit the same
-paragraph simultaneously on both sides (git will flag it as a conflict to
-resolve rather than merging character-by-character).
+This is not live: changes arrive when you Pull and leave when you Push. If the
+same paragraph changed on both sides, git flags a conflict for you to resolve.
 
-The natural workflow: use the hosted editor as the interchange point with co-authors
-who live there, and Quireloop for everything else — your lab collaborates
-in real time inside Quireloop, and the paper syncs to/from the hosted editor at
-whatever cadence you push and pull.
+---
+
+## Working offline with a server
+
+Install Quireloop on your own computer and link it to your lab's server. Your
+computer then keeps a full copy of every paper you can open on the server. You
+always work in that copy, so losing the internet changes nothing: edit, compile
+and save as usual, and everything catches up by itself when the connection
+returns.
+
+### Linking your computer
+
+1. Open Quireloop on your computer and sign in. Use the first account, which is
+   the admin.
+2. Under **Work with a server**, enter the server's address, such as
+   `https://your-server/quireloop`, and a name for this computer.
+3. If the server uses its own certificate, check that it is your server and
+   choose **Trust and continue**.
+4. Open the link it shows, sign in to the server, check that the code matches,
+   and choose **Approve**.
+
+Your password and two-factor code are typed only into the server's page. Your
+computer receives a token that works for syncing and nothing else. To remove a
+computer, for example a lost laptop, open your account menu on the server and
+use **Linked computers**.
+
+### What happens while you work
+
+- **Online:** the computer checks every paper every 30 seconds. A file you have
+  open is linked live, so you see co-authors' typing and cursors as they happen,
+  and they see yours.
+- **Offline:** you keep working. The toolbar shows that you are offline.
+- **Back online:** text edits made on both sides are merged, even in the same
+  paragraph. Nothing needs resolving.
+
+Figures and other files that are not text can't be merged. If one changed on both
+sides, the server's version keeps the name and yours is saved beside it, such as
+`figure.laptop-20261102-1430.png`, with a note on your projects page.
+
+If many files vanish from one side at once, Quireloop treats that as damage. It
+deletes nothing and brings the files back.
+
+### Good to know
+
+- Papers you can only view on the server are read-only on your computer.
+- **Put on server** on a project card uploads a paper you started on your computer.
+- **Delete** on a synced paper removes only your computer's copy. It stops being
+  copied there until you link the computer again.
+- If you lose access to a paper, your computer keeps its copy as a normal project.
+- Comments, chat, suggestions, version history and git commits are **not** synced.
+  Each copy has its own. Use the server when these need to be shared.
+- Files over 100 MB are not copied, and your projects page lists them.
+- Compiling on your computer needs LaTeX installed there. It also runs LaTeX
+  written by your co-authors, so install the
+  [compile sandbox](install-server.md#what-a-compile-may-touch) on Linux.
+- If the server's certificate changes, syncing stops until you link again. Your
+  work stays safe on your computer.
 
 ---
 

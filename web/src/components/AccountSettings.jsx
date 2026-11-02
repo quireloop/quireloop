@@ -1,5 +1,30 @@
 import { useEffect, useState } from 'react';
 import { authApi } from '../lib/auth.js';
+import { linkApi } from '../api.js';
+
+function LinkedComputersSection() {
+  const [devices, setDevices] = useState([]);
+  const refresh = () => linkApi.listDevices().then(setDevices).catch(() => setDevices([]));
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  if (devices.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <strong style={{ fontSize: 13 }}>Linked computers</strong>
+      {devices.map((d) => (
+        <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginTop: 6 }}>
+          <span title={d.lastSeenAt ? `Last seen ${new Date(d.lastSeenAt).toLocaleString()}` : undefined}>{d.name}</span>
+          <button style={{ fontSize: 12 }} onClick={() => linkApi.revokeDevice(d.id).then(refresh)}>
+            Remove
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function AssistantSettingsSection() {
   const [settings, setSettings] = useState(null);
@@ -374,6 +399,7 @@ export default function AccountSettings({ user, onClose, onUserUpdate }) {
       <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '12px 0' }} />
 
       <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>✨ AI Assistant</div>
+      <LinkedComputersSection />
       <AssistantSettingsSection />
     </div>
   );

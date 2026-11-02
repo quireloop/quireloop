@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { api } from '../api.js';
+import { api, linkApi } from '../api.js';
 import { BASE_PATH } from '../basePath.js';
 import FileTree from '../components/FileTree.jsx';
 import Editor from '../components/Editor.jsx';
@@ -47,6 +47,13 @@ const STATUS_LABEL = {
   disconnected: 'Offline — changes saved locally',
 };
 
+const SYNC_LABEL = {
+  online: 'Synced with server',
+  offline: 'Offline — will sync when the server is back',
+  error: 'Sync problem — see your projects page',
+  'reconnect-needed': 'Connect to the server again',
+};
+
 const SIDEBAR_TABS = [
   ['files', 'Files'],
   ['outline', 'Outline'],
@@ -66,6 +73,7 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [activePath, setActivePath] = useState(null);
   const [content, setContent] = useState('');
   const [collabStatus, setCollabStatus] = useState('connecting');
+  const [syncState, setSyncState] = useState(null);
   const [recentEditors, setRecentEditors] = useState([]);
   const [initialLine, setInitialLine] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
@@ -143,6 +151,19 @@ export default function ProjectView({ projectId, onBack, user }) {
       .then((cfg) => setAssistantEnabled(Boolean(cfg.enabled)))
       .catch(() => {});
   }, []);
+  // Only a copy of a server paper has a sync state to show.
+  useEffect(() => {
+    if (!manifest?.sync) return undefined;
+    const poll = () =>
+      linkApi
+        .status()
+        .then((status) => setSyncState(status.state))
+        .catch(() => setSyncState(null));
+    poll();
+    const timer = setInterval(poll, 5000);
+    return () => clearInterval(timer);
+  }, [manifest?.sync]);
+
   const [chatMessages, setChatMessages] = useState([]);
   const [unreadChat, setUnreadChat] = useState(0);
   const lastSeenChatIdRef = useRef(localStorage.getItem(`quireloop:chat-seen:${projectId}`) || null);
@@ -501,7 +522,7 @@ export default function ProjectView({ projectId, onBack, user }) {
   // Cmd+S (or Ctrl+S on Windows/Linux) compiles instead of triggering the
   // browser's "Save page" dialog — collaborative edits are already saved
   // continuously via Yjs, so "save" here means "give me a fresh PDF".
-  // Cmd/Ctrl+Enter does the same, matching the hosted editor's recompile shortcut.
+  // Cmd/Ctrl+Enter does the same.
   useEffect(() => {
     function onKeyDown(e) {
       const mod = e.metaKey || e.ctrlKey;
@@ -825,6 +846,12 @@ export default function ProjectView({ projectId, onBack, user }) {
           <i />
           <span>{STATUS_LABEL[collabStatus] ?? collabStatus}</span>
         </span>
+        {syncState && SYNC_LABEL[syncState] && (
+          <span className={`status-pill ${syncState === 'online' ? 'synced' : ''}`}>
+            <i />
+            <span>{SYNC_LABEL[syncState]}</span>
+          </span>
+        )}
         {isViewer && (
           <span className="status-pill" title="You have view-only access to this project">
             Read-only
@@ -1077,6 +1104,7 @@ export default function ProjectView({ projectId, onBack, user }) {
                     suggestMode={suggestMode && !isViewer}
                     onChange={handleEditorChange}
                     onStatus={setCollabStatus}
+                    onRoomReset={() => api.getProject(projectId).then(setManifest)}
                     onJumpToPdf={jumpToPdfAtLine}
                     bibEntries={bibEntries}
                     onCollabHandles={setCollabHandles}

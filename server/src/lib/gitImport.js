@@ -42,8 +42,8 @@ export async function importFromGit(ownerId, name, gitUrl, token) {
     // Deliberately keeps the cloned .git history/remote intact (unlike a
     // detached one-time import) — buildManifestFromDirectory's ensureGitRepo
     // call layers our own ignore rules on top without disturbing it, so the
-    // project stays connected to the hosted editor and can be pushed straight back.
-    manifest = await buildManifestFromDirectory(ownerId, id, name, dir, 'Imported from the hosted editor');
+    // project stays connected to its remote and can be pushed straight back.
+    manifest = await buildManifestFromDirectory(ownerId, id, name, dir, 'Imported project');
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });
     throw new Error(err.message === 'no files found' ? 'the cloned project has no files' : err.message);

@@ -132,7 +132,7 @@ export default function SourceControlPanel({ projectId, beforeAction, onPulled, 
         ) : (
           !readOnly && (
             <button onClick={() => setShowRemoteForm((v) => !v)} style={{ fontSize: 12, marginTop: 4 }}>
-              Set remote (GitHub, the hosted editor, …)
+              Set remote (GitHub, GitLab, …)
             </button>
           )
         )}
@@ -165,8 +165,7 @@ export default function SourceControlPanel({ projectId, beforeAction, onPulled, 
             style={{ padding: 6, fontSize: 12 }}
           />
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            A GitHub/GitLab personal access token, or an the hosted editor git token (the hosted editor: Account Settings → Git
-            integration; URL is https://git.hosted-editor.com/&lt;project id&gt;). Stored locally for this project only,
+            An access token from your git host. Stored locally for this project only,
             never committed.
           </div>
           <button type="submit" disabled={busy} style={{ fontSize: 12, justifySelf: 'start' }}>

@@ -24,6 +24,7 @@ const GITIGNORE_CONTENT = `# Quireloop bookkeeping — not part of your project
 .quireloop-comments.json
 .quireloop-suggestions.json
 .quireloop-chat.json
+.quireloop-sync.json
 .DS_Store
 `;
 
@@ -92,10 +93,10 @@ export async function hasGitRepo(dir) {
   }
 }
 
-// the hosted editor's git bridge only ever recognizes a `master` ref — but a plain
+// Some git hosts only ever recognize a `master` ref — but a plain
 // `git init` picks up whatever branch name the host's git defaults to
 // (`main` on any git 2.28+ with the now-common default), so pushes/pulls
-// against the hosted editor were silently talking to the wrong ref. Runs on every
+// against those hosts were silently talking to the wrong ref. Runs on every
 // ensureGitRepo call (cheap no-op once already on master) so it also
 // self-heals projects that were already created before this fix, without
 // needing a manual migration step.
@@ -269,17 +270,17 @@ function friendlyGitError(err) {
   if (/authentication|403/i.test(combined)) return withDetail('authentication failed — check the remote token and try again');
   if (/conflict/i.test(combined)) {
     return withDetail(
-      'pull created a merge conflict — open the hosted editor and this project side by side and resolve it there, or in the .tex file directly, then commit and push again'
+      'pull created a merge conflict — resolve it in the .tex file directly, then commit and push again'
     );
   }
   if (/rejected|non-fast-forward/i.test(combined)) return withDetail('rejected — pull first to bring in remote changes');
   if (/couldn't find remote ref/i.test(combined)) {
     return withDetail(
-      "the remote has no content to pull yet — for the hosted editor, make sure you've opened that project's own Menu → Git panel at least once (that's what provisions its git bridge) and that the URL is exactly https://git.hosted-editor.com/<project id> from that panel, not the regular hosted-editor.com project link"
+      "the remote has no content to pull yet — check that the repository has been set up and that the URL is its git clone URL, not the web page link"
     );
   }
   if (/repository not found|not found/i.test(combined)) {
-    return withDetail("remote repository not found — double check the URL (for the hosted editor: https://git.hosted-editor.com/<project id>, not the regular hosted-editor.com project link)");
+    return withDetail("remote repository not found — double check that the URL is the git clone URL, not the web page link");
   }
   if (err.timedOut) return 'timed out — check the remote URL and your connection';
   return detail || 'git command failed';
@@ -295,8 +296,8 @@ export async function pushProject(ownerId, projectId) {
   const authedUrl = withToken(creds.url, creds.token);
 
   // Push to whatever branch name the remote actually uses, not whatever
-  // the local repo happens to be on — some the hosted editor projects' git bridges
-  // are provisioned on "main" rather than "master" (this is what the
+  // the local repo happens to be on — some hosts
+  // provision projects on "main" rather than "master" (this is what the
   // "wrong branch ... Please use the main branch" rejection means), and
   // pull already resolves the same way. Falls back to the local branch
   // name only when the remote has nothing yet (a genuinely first push),
@@ -323,7 +324,7 @@ export async function pushProject(ownerId, projectId) {
 // `master:master` still works even if this is wrong (git creates the ref),
 // but a wrong assumption here is exactly "couldn't find remote ref X" —
 // so pull is worth the extra round trip to get right, and it also means a
-// remote that isn't the hosted editor (doesn't use `master`) just works.
+// remote that doesn't use `master` just works.
 async function resolveRemoteBranch(authedUrl, localBranch) {
   const { stdout } = await execa('git', [...GIT_SAFETY, 'ls-remote', '--heads', authedUrl], {
     timeout: PUSH_PULL_TIMEOUT_MS,
@@ -353,7 +354,7 @@ export async function pullProject(ownerId, projectId) {
     const resolved = await resolveRemoteBranch(authedUrl, localBranch);
     if (!resolved.branch) {
       throw new Error(
-        "the remote reports no branches at all — for the hosted editor, open that project's own Menu → Git panel on the hosted editor's site at least once first (that's what provisions its git bridge), and double check the URL is exactly https://git.hosted-editor.com/<project id>"
+        "the remote reports no branches at all — check that the repository has been set up and that the URL is its git clone URL"
       );
     }
     branch = resolved.branch;
@@ -364,12 +365,12 @@ export async function pullProject(ownerId, projectId) {
 
   try {
     // --allow-unrelated-histories: a project connected to an existing
-    // the hosted editor project after already having local commits (the normal
+    // remote after already having local commits (the normal
     // case — Quireloop auto-commits a new project's template files the
-    // first time git touches it) has no shared ancestry with the the hosted editor
+    // first time git touches it) has no shared ancestry with the remote
     // side, so a plain `git pull` refuses to merge at all. Safe to pass
     // unconditionally — it's a no-op when the histories *do* share an
-    // ancestor (e.g. after "Import from the hosted editor", a real `git clone`).
+    // ancestor (e.g. after "Import from Git", a real `git clone`).
     await git(dir, ['pull', '--no-rebase', '--allow-unrelated-histories', authedUrl, branch], {
       timeout: PUSH_PULL_TIMEOUT_MS,
     });

@@ -14,6 +14,28 @@ async function request(path, options = {}) {
   return res.text();
 }
 
+const postJson = (path, body) =>
+  request(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  });
+
+export const linkApi = {
+  status: () => request('/link/status'),
+  probe: (url) => postJson('/link/probe', { url }),
+  start: (url, deviceName, fingerprint) => postJson('/link/start', { url, deviceName, fingerprint }),
+  cancel: () => postJson('/link/cancel'),
+  disconnect: () => postJson('/link/disconnect'),
+  syncNow: () => postJson('/link/sync-now'),
+  publish: (id) => postJson(`/link/publish/${id}`),
+  // Asked of the server, in the browser that is signed in there.
+  describe: (code) => request(`/sync/pair/${encodeURIComponent(code)}`),
+  approve: (code) => postJson(`/sync/pair/${encodeURIComponent(code)}/approve`),
+  listDevices: () => request('/sync/devices'),
+  revokeDevice: (id) => request(`/sync/devices/${id}`, { method: 'DELETE' }),
+};
+
 export const api = {
   listTemplates: () => request('/templates'),
   listProjects: () => request('/projects'),

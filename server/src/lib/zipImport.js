@@ -8,7 +8,7 @@ import { buildManifestFromDirectory } from './manifest.js';
 
 const UNZIP_TIMEOUT_MS = 60_000;
 
-// Many zip exports (including the hosted editor's "Download .zip") wrap every file
+// Many zip exports wrap every file
 // inside one top-level folder. If that's all we find at the root, treat
 // that folder's contents as the project root instead of nesting the whole
 // project one level deeper than expected.

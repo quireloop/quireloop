@@ -83,7 +83,7 @@ const PdfViewer = forwardRef(function PdfViewer({ url, projectId, onJumpToSource
   // ---------------------------------------------------------------------
   // Forward sync: outline every box the source line produced, and the
   // double-clicked word inside them when it can be found, then fade out —
-  // the same cue the hosted editor gives.
+  // a familiar cue.
   function showSyncResult(result, word) {
     const entry = pagesRef.current.find((p) => p.pageNum === result.page);
     if (!entry) return;

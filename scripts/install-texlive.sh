@@ -10,7 +10,7 @@
 # install lean — add them yourself below if your lab needs either, or run
 # `sudo apt-get install texlive-full` instead for "everything".
 #
-# Even this is not a complete match for the hosted editor's near-full CTAN install
+# Even this is not a complete match for a near-full CTAN install
 # — if a specific template still hits a missing .sty, find the Debian
 # package that provides it (https://ctan.org/pkg/<name>, or
 # `apt-cache search <name>`) and add it to the list below.

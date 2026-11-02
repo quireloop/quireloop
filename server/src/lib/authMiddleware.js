@@ -1,8 +1,26 @@
 import * as projectIndex from './projectIndex.js';
 import { readManifest } from './manifest.js';
 import { findUserById } from './auth.js';
+import { findDeviceByToken } from './devices.js';
+
+// A laptop's token works only on routes that opt in with `config: { allowDevice:
+// true }`, so one left on a stolen laptop can sync papers but can't reach account
+// settings, sharing or the admin panel.
+async function authenticateDevice(req, reply, token) {
+  const device = await findDeviceByToken(token);
+  const user = device && (await findUserById(device.userId));
+  if (!user || user.disabled) {
+    return reply.code(401).send({ error: 'this computer is no longer connected' });
+  }
+  req.userId = user.id;
+  req.deviceId = device.id;
+}
 
 export async function requireAuth(req, reply) {
+  if (req.routeOptions.config?.allowDevice) {
+    const bearer = /^Bearer (\S+)$/.exec(req.headers.authorization ?? '');
+    if (bearer) return authenticateDevice(req, reply, bearer[1]);
+  }
   const userId = req.session.get('userId');
   if (!userId) {
     return reply.code(401).send({ error: 'not authenticated' });
@@ -35,7 +53,8 @@ export function normalizeCollabRole(collaborator) {
 
 // 'owner' | 'editor' | 'viewer' | null (no access at all).
 export function resolveRole(manifest, userId) {
-  if (manifest.ownerId === userId) return 'owner';
+  // A copy of a paper this person may only read on the server stays read-only.
+  if (manifest.ownerId === userId) return manifest.sync?.role === 'viewer' ? 'viewer' : 'owner';
   const collaborator = (manifest.collaborators ?? []).find((c) => c.userId === userId);
   if (!collaborator) return null;
   return normalizeCollabRole(collaborator);

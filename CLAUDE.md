@@ -4,9 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo location
 
-The git repository root is `ide/` (this directory), not its parent
-`~/quireloop/`. The parent holds an unrelated VS Code + git-sync setup and
-the `.claude/launch.json` used by preview tooling — `launch.json` must live at
+The git repository root is `ide/` (this directory), not its parent. The parent
+holds an unrelated setup and the `.claude/launch.json` used by preview tooling — `launch.json` must live at
 the parent because preview paths resolve from there, which is why its configs
 use `--prefix ide/server`.
 
@@ -52,7 +51,7 @@ holding the user's real `.tex`/`.bib`/image files plus a `manifest.json`.
 creation, entirely separate from this repo's history. Quireloop writes a
 `.gitignore` into each one excluding its own bookkeeping (`manifest.json`,
 `build/`, `versions/`, the stored remote token), so pushing a project to GitHub
-or the hosted editor sends only the paper.
+or another git host sends only the paper.
 
 **A project directory can be a symlink.** A member can open a folder that
 already exists on the host as a project, edited in place — their own home
@@ -140,8 +139,8 @@ can't resurrect pre-restore content.
 ### Compile
 
 `lib/latex.js` runs `latexmk` with `-g` (force rebuild) and no `-halt-on-error`,
-deliberately: LaTeX usually still emits a usable PDF alongside its errors, like
-the hosted editor. Success is therefore "did a PDF land on disk", never the exit code.
+deliberately: LaTeX usually still emits a usable PDF alongside its errors.
+Success is therefore "did a PDF land on disk", never the exit code.
 Concurrency is bounded by a global semaphore (half the cores) plus a per-project
 lock, since one `build/` directory is shared. Raw logs are parsed into structured
 diagnostics by `lib/latexLog.js`. A successful compile auto-snapshots into
@@ -187,3 +186,15 @@ Commits go under the repository owner's name only — no Claude co-author
 trailers. The codebase is densely commented with *why*, not *what*, especially
 around non-obvious workarounds; match that when editing. License is PolyForm
 Noncommercial, so new files should not carry OSI-license headers.
+
+### Offline sync
+
+A personal install can link to a server (`lib/syncClient.js`, `routes/link.js`)
+and mirror every paper. Browsers edit only the local copy. Text merges through
+Yjs (`POST /api/sync/projects/:id/doc`); other files use a three-way hash
+comparison against `.quireloop-sync.json`, and both versions are kept on
+conflict. Open files get a live bridge from the local room to the server's room.
+Device tokens work only on routes marked `config: { allowDevice: true }`. Two
+copies with no shared Yjs history must never be merged, since the text would
+double; `sharesHistory` guards this. `test/sync.test.js` runs two real instances
+through a relay it can cut.

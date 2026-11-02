@@ -1,6 +1,7 @@
 import { buildApp } from './index.js';
 import { PORT, HOST } from './config.js';
 import { sandboxStatus } from './lib/compileSandbox.js';
+import { startSyncClient, stopSyncClient } from './lib/syncClient.js';
 
 const app = await buildApp();
 
@@ -13,6 +14,8 @@ else app.log.warn(`compile sandbox: ${sandbox}. LaTeX runs with this server's fu
 // draining in-flight requests here is the normal restart path, not an edge
 // case. (Torn JSON state files are separately prevented by the atomic writes
 // in lib/jsonStore.js.)
+await startSyncClient(app.log);
+
 let shuttingDown = false;
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, async () => {
@@ -20,6 +23,7 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
     shuttingDown = true;
     app.log.info(`${signal} received, shutting down`);
     try {
+      stopSyncClient();
       await app.close();
       process.exit(0);
     } catch (err) {

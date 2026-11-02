@@ -39,7 +39,7 @@ export async function toSource(ownerId, projectId, mainFile, page, x, y) {
 //
 // One source line usually produces several boxes (a paragraph wrapped over
 // lines, or split across a page or column break). All of them are returned
-// so the viewer can outline the whole span, like the hosted editor does, instead of
+// so the viewer can outline the whole span, instead of
 // dropping a dot on the first word. `page`/`x`/`y` describe the first box,
 // for scrolling.
 export async function toPdf(ownerId, projectId, mainFile, file, line) {

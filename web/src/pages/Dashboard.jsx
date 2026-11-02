@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api.js';
+import { api, linkApi } from '../api.js';
 import { confirmDialog } from '../lib/dialog.js';
 import { authApi } from '../lib/auth.js';
 import { useDarkMode } from '../lib/theme.js';
@@ -8,8 +8,9 @@ import AccountSettings from '../components/AccountSettings.jsx';
 import AdminPanel from '../components/AdminPanel.jsx';
 import FolderBrowser from '../components/FolderBrowser.jsx';
 import CopyrightNotice from '../components/CopyrightNotice.jsx';
+import ServerLinkPanel from '../components/ServerLinkPanel.jsx';
 
-function ImportFromthe hosted editor({ onClose, onImported }) {
+function ImportFromGit({ onClose, onImported }) {
   const [name, setName] = useState('');
   const [gitUrl, setGitUrl] = useState('');
   const [token, setToken] = useState('');
@@ -42,15 +43,13 @@ function ImportFromthe hosted editor({ onClose, onImported }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <strong>Import from the hosted editor</strong>
+        <strong>Import from Git</strong>
         <button type="button" onClick={onClose} style={{ fontSize: 13 }}>
           Close
         </button>
       </div>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
-        In the hosted editor, open your project → Menu → Git → copy the clone URL (looks like{' '}
-        <code>https://git.hosted-editor.com/&lt;project-id&gt;</code>). Then, in the same panel, generate a Git token
-        and paste it below — that's your username, no password needed.
+        Paste the project's git clone URL. If it is private, add an access token from your git host.
       </p>
       <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 8 }}>
         <input
@@ -62,7 +61,7 @@ function ImportFromthe hosted editor({ onClose, onImported }) {
         <input
           value={gitUrl}
           onChange={(e) => setGitUrl(e.target.value)}
-          placeholder="https://git.hosted-editor.com/your-project-id"
+          placeholder="https://example.org/your-project.git"
           style={{ padding: 8 }}
           required
         />
@@ -95,8 +94,26 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
   const [uploadError, setUploadError] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [serverConnected, setServerConnected] = useState(false);
   const [dark, setDark] = useDarkMode();
   const uploadInputRef = useRef(null);
+
+  // A shared server has nothing to link to; only a personal install does.
+  const isOwnComputer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+  function handleLinkChange(status) {
+    setServerConnected(Boolean(status.url));
+    refresh();
+  }
+
+  async function handlePublish(project) {
+    try {
+      await linkApi.publish(project.id);
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   async function handleLogout() {
     await authApi.logout();
@@ -147,7 +164,9 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
           }
         : {
             title: `Delete "${project.name}"?`,
-            message: 'This cannot be undone.',
+            message: project.sync
+              ? 'This removes the copy on this computer. The paper stays on the server.'
+              : 'This cannot be undone.',
             confirmLabel: 'Delete',
             danger: true,
           }
@@ -208,6 +227,7 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
         </div>
       </div>
       {showAdmin && <AdminPanel user={user} onClose={() => setShowAdmin(false)} />}
+      {isOwnComputer && user?.role === 'admin' && <ServerLinkPanel onChange={handleLinkChange} />}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -237,7 +257,7 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
             </button>
           )}
           <button onClick={() => setShowImport(true)} style={{ fontSize: 13 }}>
-            Import from the hosted editor…
+            Import from Git…
           </button>
           <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ fontSize: 13 }}>
             {uploading ? 'Uploading…' : 'Upload Project (.zip)…'}
@@ -246,7 +266,7 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
           {uploadError && <span style={{ color: 'crimson', fontSize: 13 }}>{uploadError}</span>}
         </div>
       )}
-      {showImport && <ImportFromthe hosted editor onClose={() => setShowImport(false)} onImported={handleImported} />}
+      {showImport && <ImportFromGit onClose={() => setShowImport(false)} onImported={handleImported} />}
       {showFolders && (
         <FolderBrowser
           roots={libraryRoots}
@@ -292,11 +312,35 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
                   Folder
                 </span>
               )}
+              {p.sync && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: 11,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: 'var(--accent-bg)',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  On server{p.sync.role === 'viewer' ? ' · read-only' : ''}
+                </span>
+              )}
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Updated {new Date(p.updatedAt).toLocaleString()}
                 {p.linkedPath && ` · ${p.linkedPath}`}
               </div>
             </div>
+            {serverConnected && !p.sync && p.ownerId === user?.id && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePublish(p);
+                }}
+              >
+                Put on server
+              </button>
+            )}
             <a href={api.downloadUrl(p.id)} download className="link-button" onClick={(e) => e.stopPropagation()}>
               Download .zip
             </a>

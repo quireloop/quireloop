@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Dashboard from './pages/Dashboard.jsx';
 import ProjectView from './pages/ProjectView.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import LinkDevicePage from './pages/LinkDevicePage.jsx';
 import { authApi } from './lib/auth.js';
 import { api } from './api.js';
 import { withTransition } from './lib/motion.js';
@@ -11,6 +12,7 @@ export default function App() {
   const [openProjectId, setOpenProjectId] = useState(null);
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [linkCode, setLinkCode] = useState(() => new URLSearchParams(window.location.search).get('link'));
 
   useEffect(() => {
     authApi
@@ -52,6 +54,16 @@ export default function App() {
   let page;
   if (!user) {
     page = <LoginPage onAuthenticated={(u) => withTransition(() => setUser(u))} />;
+  } else if (linkCode) {
+    page = (
+      <LinkDevicePage
+        code={linkCode}
+        onDone={() => {
+          window.history.replaceState({}, '', window.location.pathname);
+          setLinkCode(null);
+        }}
+      />
+    );
   } else if (openProjectId) {
     page = <ProjectView projectId={openProjectId} onBack={() => openProject(null)} user={user} />;
   } else {

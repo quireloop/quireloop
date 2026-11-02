@@ -14,14 +14,16 @@ between them. Papers stay on your machine, with no per-seat subscription.
 ## Highlights
 
 - **Real-time collaboration** with comments, chat and suggested changes
+- **Work offline:** link a computer to a server, keep every paper on it, and
+  sync automatically when the internet returns
 - **Two-way SyncTeX:** double-click in the source or the PDF to find the same
   text in the other
 - **Equation and citation previews** on hover, and pasted images that become
   figures
 - **Version history** with side-by-side comparison, and a real git repository
   for every project
-- **Works with your files:** open a folder in place, import from the hosted editor, or
-  upload a `.zip`
+- **Works with your files:** open a folder in place, import from any git URL,
+  or upload a `.zip`
 - **Lab accounts:** invitations, roles, two-factor sign-in, or the server's own
   logins
 
@@ -54,7 +56,7 @@ Then open http://localhost:4173. The first account becomes the admin.
 |---|---|
 | [Install on your computer](docs/install-personal.md) | Setup, automatic start, updates |
 | [Install on a server](docs/install-server.md) | Docker, systemd, HTTPS, server logins, backups, settings |
-| [User guide](docs/user-guide.md) | Every feature, from first login to collaboration |
+| [User guide](docs/user-guide.md) | Every feature, from first login to collaboration and offline work |
 | [Features](docs/features.md) | The complete feature list |
 | [Where your data lives](docs/data.md) | Project files, git history, backups |
 | [Roadmap](docs/roadmap.md) | What is planned |

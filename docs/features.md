@@ -45,25 +45,26 @@ The full list of what Quireloop does. For how to use each one, see the
 - **PDF preview** — zoom, fit-width, page jump, selectable text, find in
   PDF, a dark reading mode, and two-way **SyncTeX**: double-click a word in
   the PDF to land on that word in the source, or double-click in the source
-  to outline it in the PDF, hosted-editor-style.
+  to outline it in the PDF.
 - **Hover previews** — typeset equations (with your own macros) and
-  `\cite` references, as in VS Code's LaTeX Workshop.
+  `\cite` references.
 - **Paste or drop images** — screenshots and image files go into `figures/`
   with a ready-made `figure` block inserted.
 - **Version history** — automatic snapshots on every successful compile,
   plus manual named snapshots, one-click restore, and a side-by-side diff
   view between any two snapshots.
-- **Import from the hosted editor** — paste an the hosted editor project's git URL (and a git
-  token, if it's private) to clone it in as a new local project. One-time
-  import, not a live sync — after that it's just a regular local project.
-- **Upload a project** — pick a `.zip` (e.g. the hosted editor's own "Download .zip",
-  or any folder of `.tex`/`.bib`/image files you zip up yourself) to bring
+- **Work offline with a server** — link your own computer to a server to keep a
+  full copy of your papers there. Edit with no internet and everything merges
+  automatically when you reconnect, with live typing and cursors while online.
+- **Import from git** — paste any project's git URL (and a token, if it's
+  private) to clone it in as a new project.
+- **Upload a project** — pick a `.zip` (any folder of `.tex`/`.bib`/image files you zip up yourself) to bring
   it in as a new project. Handles zips that wrap everything in one folder.
 - **Source Control** — every project is its own real git repository from the
-  moment you create it (not a Quireloop-specific format). A VS Code–style
+  moment you create it (not a Quireloop-specific format). A
   panel in the editor shows changed files, lets you write a commit message
   and commit, and push/pull to a remote you set per project — a GitHub repo,
-  a GitLab repo, or back to the hosted editor's own git bridge. Nothing is pushed
+  a GitLab repo, or any other git host. Nothing is pushed
   automatically; you're always in control of when.
 - **Download** — grab the compiled PDF or the whole project as a `.zip`.
 - **Outline panel** — jump between `\section`/`\chapter` headings; live

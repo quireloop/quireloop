@@ -1,8 +1,8 @@
-// Editor helpers borrowed from what other LaTeX editors do well:
-//   - hover an equation to see it typeset (VS Code LaTeX Workshop, TeXstudio)
-//   - hover \cite{key} to see the reference (LaTeX Workshop)
+// Editor helpers:
+//   - hover an equation to see it typeset
+//   - hover \cite{key} to see the reference
 //   - a brief line flash after a SyncTeX jump, and landing on the exact word
-//     that was double-clicked in the PDF rather than column 0 (the hosted editor)
+//     that was double-clicked in the PDF rather than column 0
 import { EditorView, Decoration, hoverTooltip } from '@codemirror/view';
 import { StateField, StateEffect } from '@codemirror/state';
 import katex from 'katex';

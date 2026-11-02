@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as Y from 'yjs';
@@ -6,6 +7,7 @@ import * as awarenessProtocol from 'y-protocols/awareness.js';
 import * as encoding from 'lib0/encoding.js';
 import * as decoding from 'lib0/decoding.js';
 import { projectDir, resolveUserPath } from './storage.js';
+import { updateManifest } from './manifest.js';
 
 // Hand-rolled y-websocket wire protocol — y-websocket v3 ships no
 // server-side utilities, only the browser client, so the sync/awareness
@@ -22,6 +24,10 @@ const RECENT_EDITORS_TTL_MS = 10 * 60 * 1000;
 // persisted to the real file on disk so compile/git/download keep working
 // exactly as before, just fed by whichever content is most current.
 const rooms = new Map();
+
+// 'join' and 'leave' fire for each editor connection, so a laptop's copy can
+// open and close its live link to the server (lib/syncClient.js).
+export const roomEvents = new EventEmitter();
 
 function roomKey(ownerId, projectId, filePath) {
   return `${ownerId}\u0000${projectId}\u0000${filePath}`;
@@ -75,6 +81,28 @@ function broadcast(room, message, excludeConn) {
     if (conn === excludeConn) continue;
     if (conn.readyState === 1) conn.send(message);
   }
+}
+
+// Turns a doc's text into `text` with the smallest single edit, so the doc
+// keeps its history and anyone connected sees a normal change.
+function applyTextDiff(doc, text) {
+  const ytext = doc.getText('content');
+  const current = ytext.toString();
+  if (current === text) return;
+  let start = 0;
+  const limit = Math.min(current.length, text.length);
+  while (start < limit && current[start] === text[start]) start += 1;
+  let end = 0;
+  while (
+    end < limit - start &&
+    current[current.length - 1 - end] === text[text.length - 1 - end]
+  ) {
+    end += 1;
+  }
+  doc.transact(() => {
+    ytext.delete(start, current.length - start - end);
+    ytext.insert(start, text.slice(start, text.length - end));
+  });
 }
 
 async function persistRoom(room) {
@@ -146,38 +174,37 @@ export async function getRoom(ownerId, projectId, filePath) {
   if (!room) {
     room = createRoom(ownerId, projectId, filePath);
     rooms.set(key, room);
-    const initial = await loadInitialContent(ownerId, projectId, filePath);
-    const savedState = await loadYdocState(ownerId, projectId, filePath);
-    let restored = false;
-    if (savedState) {
-      // Restore the previous Y.Doc only if it still reflects the file on
-      // disk — if the file was changed outside collab (git pull, zip
-      // upload, direct API write), the saved doc is stale and reviving it
-      // would resurrect the old content over the external change.
-      try {
-        const candidate = new Y.Doc();
-        Y.applyUpdate(candidate, savedState);
-        if (candidate.getText('content').toString() === initial) {
-          Y.applyUpdate(room.doc, savedState);
-          restored = true;
-        }
-      } catch {
-        // corrupt state file — fall through to a fresh seed
-      }
-      if (!restored) {
-        await dropYdocState(ownerId, projectId, filePath);
-      }
-    }
-    if (!restored && initial) {
-      room.doc.getText('content').insert(0, initial);
+    room.ready = loadRoom(room);
+  }
+  await room.ready;
+  return room;
+}
+
+async function loadRoom(room) {
+  const { ownerId, projectId, filePath } = room;
+  const initial = await loadInitialContent(ownerId, projectId, filePath);
+  const savedState = await loadYdocState(ownerId, projectId, filePath);
+  if (savedState) {
+    // A file changed outside collab (git pull, zip upload, an editor on the
+    // host) is applied on top of the saved doc rather than replacing it. A
+    // fresh doc would share no history with copies held elsewhere, and merging
+    // those two would duplicate the whole file.
+    try {
+      Y.applyUpdate(new Y.Doc(), savedState);
+      Y.applyUpdate(room.doc, savedState);
+      applyTextDiff(room.doc, initial);
+      return;
+    } catch {
+      await dropYdocState(ownerId, projectId, filePath);
     }
   }
-  return room;
+  if (initial) room.doc.getText('content').insert(0, initial);
 }
 
 export function addConnection(room, ws, userId, email, role = 'editor') {
   room.conns.set(ws, new Set());
   room.connMeta.set(ws, { userId, email, role });
+  roomEvents.emit('join', room);
 }
 
 export function removeConnection(room, ws) {
@@ -187,6 +214,7 @@ export function removeConnection(room, ws) {
   if (owned) {
     awarenessProtocol.removeAwarenessStates(room.awareness, Array.from(owned), null);
   }
+  roomEvents.emit('leave', room);
 }
 
 // Viewers can request the doc's state (syncStep1, so they still get the
@@ -274,6 +302,76 @@ export async function flushProject(ownerId, projectId) {
   await Promise.all(pending);
 }
 
+// Saves a room now and frees it if nobody is editing. Background sync touches
+// every text file in a project and shouldn't leave them all in memory.
+export async function releaseRoom(room) {
+  await persistRoom(room);
+  if (room.conns.size === 0 && rooms.get(roomKey(room.ownerId, room.projectId, room.filePath)) === room) {
+    rooms.delete(roomKey(room.ownerId, room.projectId, room.filePath));
+    room.doc.destroy();
+  }
+}
+
+// One round of the merge a laptop runs for a file: its changes go in, and what
+// it hasn't seen comes back. Works with the room rather than the file so people
+// editing right now see the result live.
+export async function exchangeDoc(ownerId, projectId, filePath, { stateVector, update }) {
+  const room = await getRoom(ownerId, projectId, filePath);
+  if (update) Y.applyUpdate(room.doc, update, 'sync');
+  const result = {
+    stateVector: Y.encodeStateVector(room.doc),
+    update: Y.encodeStateAsUpdate(room.doc, stateVector ?? undefined),
+  };
+  await releaseRoom(room);
+  return result;
+}
+
+// Replaces a file's text while keeping its history.
+export async function replaceText(ownerId, projectId, filePath, text) {
+  const room = await getRoom(ownerId, projectId, filePath);
+  applyTextDiff(room.doc, text);
+  await releaseRoom(room);
+}
+
+function closeRoom(key, room) {
+  clearTimeout(room.persistTimer);
+  for (const conn of room.conns.keys()) {
+    conn.close(4000, 'file replaced');
+  }
+  rooms.delete(key);
+  room.doc.destroy();
+}
+
+// Takes on another copy's history for a file, used when the two share none (a
+// version restore on the server starts a new one). Open editors are sent away
+// because their own saved doc belongs to the old history; the generation bump
+// gives them a new local store when they come back.
+export async function adoptDoc(ownerId, projectId, filePath, update) {
+  const key = roomKey(ownerId, projectId, filePath);
+  const room = rooms.get(key);
+  if (room) closeRoom(key, room);
+
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, update);
+  const target = ydocStatePath(ownerId, projectId, filePath);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(await resolveUserPath(ownerId, projectId, filePath), doc.getText('content').toString());
+  await fs.writeFile(target, Buffer.from(Y.encodeStateAsUpdate(doc)));
+  doc.destroy();
+  await updateManifest(ownerId, projectId, (manifest) => ({
+    ...manifest,
+    collabGeneration: (manifest.collabGeneration ?? 0) + 1,
+  }));
+}
+
+// A deleted file's room must not write it back on its next save.
+export async function forgetFile(ownerId, projectId, filePath) {
+  const key = roomKey(ownerId, projectId, filePath);
+  const room = rooms.get(key);
+  if (room) closeRoom(key, room);
+  await dropYdocState(ownerId, projectId, filePath);
+}
+
 // Called after a version restore, which overwrites files on disk out from
 // under any live Y.Doc. Disconnects every connection for the project (they
 // reconnect automatically and get a fresh room seeded from the restored
@@ -282,12 +380,7 @@ export async function flushProject(ownerId, projectId) {
 export function invalidateProject(ownerId, projectId) {
   const prefix = `${ownerId}\u0000${projectId}\u0000`;
   for (const [key, room] of rooms) {
-    if (!key.startsWith(prefix)) continue;
-    clearTimeout(room.persistTimer);
-    for (const conn of room.conns.keys()) {
-      conn.close(4000, 'project restored');
-    }
-    rooms.delete(key);
+    if (key.startsWith(prefix)) closeRoom(key, room);
   }
   // The saved doc binaries describe pre-restore content — the content
   // check in getRoom would reject them anyway, but clean them up now.

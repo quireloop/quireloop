@@ -18,7 +18,7 @@ optionally its own remote (configured per project in the **Source Control**
 panel). Quireloop's bookkeeping (`manifest.json`, `build/`, `versions/`,
 and the file that stores your remote's access token) is excluded from that
 inner repo too, via a `.gitignore` Quireloop writes into every project —
-so if you push a project to GitHub or back to the hosted editor, only your actual
+so if you push a project to a git host, only your actual
 paper goes with it, never Quireloop's internals or your token.
 
 `data/` also holds the plain-JSON account/session state (`users.json`,
@@ -28,3 +28,10 @@ syncing it to another drive, or (for the project files specifically)
 pushing each project to its own remote. Deleting this repo's folder
 deletes everything in it, `data/` included, so keep that backup separate
 from your clone of this repo.
+
+## Linked computers
+
+A computer linked to a server stores its token in `sync-connection.json` in its
+data folder, readable only by its own account. The server stores only a hash of
+each token, in `devices.json`. Each synced project also holds
+`.quireloop-sync.json`, the record of what both sides last agreed on.
