@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/arjunpogaku/quireloop/main/assets/png/logo-256.png" width="96" height="96" alt="Quireloop logo">
+  <img src="https://raw.githubusercontent.com/quireloop/quireloop/main/assets/png/logo-256.png" width="96" height="96" alt="Quireloop logo">
 </p>
 
 # Quireloop
@@ -28,10 +28,10 @@ folder. On Windows, install it inside WSL.
 
 ## Documentation
 
-- [Install on your computer](https://github.com/arjunpogaku/quireloop/blob/main/docs/install-personal.md)
-- [Install on a server](https://github.com/arjunpogaku/quireloop/blob/main/docs/install-server.md)
-- [User guide](https://github.com/arjunpogaku/quireloop/blob/main/docs/user-guide.md)
-- [Admin guide](https://github.com/arjunpogaku/quireloop/blob/main/docs/admin-guide.md)
+- [Install on your computer](https://github.com/quireloop/quireloop/blob/main/docs/install-personal.md)
+- [Install on a server](https://github.com/quireloop/quireloop/blob/main/docs/install-server.md)
+- [User guide](https://github.com/quireloop/quireloop/blob/main/docs/user-guide.md)
+- [Admin guide](https://github.com/quireloop/quireloop/blob/main/docs/admin-guide.md)
 
 ## License
 

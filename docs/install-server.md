@@ -31,7 +31,7 @@ of `localhost`.
 Node and TeX Live are both baked into the image.
 
 ```
-git clone https://github.com/arjunpogaku/quireloop.git
+git clone https://github.com/quireloop/quireloop.git
 cd quireloop
 docker compose up -d --build
 ```
@@ -94,7 +94,7 @@ exposing it directly.
 
 **Build and install:**
 ```
-git clone https://github.com/arjunpogaku/quireloop.git
+git clone https://github.com/quireloop/quireloop.git
 cd quireloop
 npm run setup:texlive   # Debian/Ubuntu: apt-get installs latexmk, biber, git, unzip — see below if you're on something else
 npm ci

@@ -53,7 +53,7 @@ quireloop start
 Or from the source code, with Node.js 22+:
 
 ```bash
-git clone https://github.com/arjunpogaku/quireloop.git
+git clone https://github.com/quireloop/quireloop.git
 cd quireloop
 npm install
 npm run build --workspace=web

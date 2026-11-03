@@ -47,7 +47,7 @@ synctex version
 ## 2. Download and build
 
 ```bash
-git clone https://github.com/arjunpogaku/quireloop.git
+git clone https://github.com/quireloop/quireloop.git
 cd quireloop
 npm install
 npm run build --workspace=web

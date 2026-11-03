@@ -7,7 +7,7 @@ import CopyrightNotice from '../components/CopyrightNotice.jsx';
 import EditorPreview from '../components/EditorPreview.jsx';
 import { useDarkMode } from '../lib/theme.js';
 
-const GITHUB_URL = 'https://github.com/arjunpogaku/quireloop';
+const GITHUB_URL = 'https://github.com/quireloop/quireloop';
 
 const CARD_STYLE = {
   maxWidth: 360,
