@@ -79,8 +79,11 @@ export function stopSyncClient() {
 }
 
 export async function connect(next) {
-  connection = { ...next, ignored: [] };
-  await saveConnection();
+  // Saved before it takes effect, so a status that says linked always has the
+  // saved connection behind it, and a failed save leaves nothing half-linked.
+  const linked = { ...next, ignored: [] };
+  await writeJsonAtomic(SYNC_CONNECTION_FILE, linked, { mode: 0o600 });
+  connection = linked;
   status.notices = [];
   schedule(0);
 }
