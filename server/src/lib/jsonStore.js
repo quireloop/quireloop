@@ -58,6 +58,21 @@ export async function readJson(file, fallback) {
   }
 }
 
+// On Windows, a rename over a file that antivirus or the search indexer has
+// open fails for a moment with EPERM, EACCES or EBUSY. Retrying for up to a
+// second rides that out, as npm's own graceful-fs does.
+async function renameWithRetry(from, to) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await fs.rename(from, to);
+    } catch (err) {
+      const busy = ['EPERM', 'EACCES', 'EBUSY'].includes(err.code);
+      if (process.platform !== 'win32' || !busy || attempt >= 10) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 // Durably replaces `file` with `value`. Never leaves a partially written file
 // at the target path, even if the process dies mid-write.
 export async function writeJsonAtomic(file, value, { mode } = {}) {
@@ -73,7 +88,7 @@ export async function writeJsonAtomic(file, value, { mode } = {}) {
     await handle.sync();
     await handle.close();
     handle = null;
-    await fs.rename(tmp, file);
+    await renameWithRetry(tmp, file);
 
     // The rename is atomic but not automatically durable — without this, a
     // power loss right after can leave the directory entry pointing nowhere.

@@ -10,8 +10,8 @@ your own machine.
 
 ## Install
 
-You need Python 3.9 or newer and a LaTeX installation (TeX Live or MacTeX).
-Node.js comes with the package.
+It runs on Windows, macOS and Linux. You need Python 3.9 or newer and a LaTeX
+installation (TeX Live, MacTeX or MiKTeX). Node.js comes with the package.
 
 ```bash
 pip install quireloop
@@ -22,9 +22,9 @@ quireloop start
 Then open http://localhost:4173. The first account becomes the admin.
 
 `quireloop start --host 0.0.0.0` lets other computers on your network connect.
-Papers and accounts are kept in `~/.local/share/quireloop` on Linux and
-`~/Library/Application Support/Quireloop` on macOS; `--data-dir` picks another
-folder. On Windows, install it inside WSL.
+Papers and accounts are kept in `~/.local/share/quireloop` on Linux,
+`~/Library/Application Support/Quireloop` on macOS and
+`%LOCALAPPDATA%\Quireloop` on Windows; `--data-dir` picks another folder.
 
 ## Documentation
 

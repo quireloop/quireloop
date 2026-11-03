@@ -7,6 +7,10 @@ import path from 'node:path';
 
 const SCRIPT = path.resolve(import.meta.dirname, '../../scripts/quireloop-backup.sh');
 
+// The backup job runs only on the Linux server (systemd timer) and leans on
+// GNU tools and bash 4, which macOS and Windows don't ship.
+const skip = process.platform !== 'linux' && 'the backup script is for the Linux server';
+
 async function setup() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'ql-backup-'));
   const data = path.join(root, 'data');
@@ -27,7 +31,7 @@ function run(env) {
   });
 }
 
-test('makes a restorable copy, leaves out the compile cache, and reports it', async () => {
+test('makes a restorable copy, leaves out the compile cache, and reports it', { skip }, async () => {
   const { data, dest } = await setup();
   const result = run({ QUIRELOOP_DATA_DIR: data, BACKUP_DIR: dest, ALLOW_SAME_DISK: '1' });
   assert.equal(result.status, 0, result.stderr);
@@ -41,7 +45,7 @@ test('makes a restorable copy, leaves out the compile cache, and reports it', as
   assert.equal(status.verified, true);
 });
 
-test('a project opened from a folder elsewhere is copied, not just its link', async () => {
+test('a project opened from a folder elsewhere is copied, not just its link', { skip }, async () => {
   const { root, data, dest } = await setup();
   const elsewhere = path.join(root, 'home/paper');
   await fs.mkdir(elsewhere, { recursive: true });
@@ -57,26 +61,30 @@ test('a project opened from a folder elsewhere is copied, not just its link', as
   assert.equal(await fs.readFile(path.join(copied, 'main.tex'), 'utf8'), 'in place');
 });
 
-test('refuses a target on the same disk', async () => {
+test('refuses a target on the same disk', { skip }, async () => {
   const { data, dest } = await setup();
   const result = run({ QUIRELOOP_DATA_DIR: data, BACKUP_DIR: dest });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /same disk/);
 });
 
-test('refuses a missing target rather than creating it', async () => {
+test('refuses a missing target rather than creating it', { skip }, async () => {
   const { data, root } = await setup();
   const result = run({ QUIRELOOP_DATA_DIR: data, BACKUP_DIR: path.join(root, 'nope'), ALLOW_SAME_DISK: '1' });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /mounted/);
 });
 
-test('shares unchanged files with the last copy and drops old copies', async () => {
+test('shares unchanged files with the last copy and drops old copies', { skip }, async () => {
   const { data, dest } = await setup();
   const old = ['2020-01-05', '2020-01-20', '2020-02-03', '2020-02-10'];
+  // rsync links a file only when its time matches to the second, and these
+  // are written a moment after the data, sometimes across a second boundary.
+  const { mtime } = await fs.stat(path.join(data, 'projects/u/p/main.tex'));
   for (const day of old) {
     await fs.mkdir(path.join(dest, day, 'projects/u/p'), { recursive: true });
     await fs.writeFile(path.join(dest, day, 'projects/u/p/main.tex'), 'hello');
+    await fs.utimes(path.join(dest, day, 'projects/u/p/main.tex'), mtime, mtime);
   }
   const result = run({ QUIRELOOP_DATA_DIR: data, BACKUP_DIR: dest, ALLOW_SAME_DISK: '1', KEEP_DAILY: '2', KEEP_MONTHLY: '2' });
   assert.equal(result.status, 0, result.stderr);
@@ -92,7 +100,7 @@ test('shares unchanged files with the last copy and drops old copies', async () 
   assert.equal(a.ino, b.ino);
 });
 
-test('every run makes its own copy, and recent copies are all kept', async () => {
+test('every run makes its own copy, and recent copies are all kept', { skip }, async () => {
   const { data, dest } = await setup();
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
@@ -114,7 +122,7 @@ test('every run makes its own copy, and recent copies are all kept', async () =>
   assert.equal(status.snapshots, 3);
 });
 
-test('older days keep only their last copy', async () => {
+test('older days keep only their last copy', { skip }, async () => {
   const { data, dest } = await setup();
   const old = ['2020-03-01_0900', '2020-03-01_1800', '2020-03-02_0900', '2020-03-02_0910'];
   for (const copy of old) {

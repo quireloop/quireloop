@@ -11,7 +11,8 @@ const MAX_PROBLEMS = 100;
 
 function normalizeFile(file, mainFile) {
   if (!file) return mainFile;
-  let f = file.trim();
+  // TeX on Windows may name files with backslashes; the editor uses '/'.
+  let f = file.trim().replaceAll('\\', '/');
   if (f.startsWith('./')) f = f.slice(2);
   return f;
 }
@@ -22,7 +23,7 @@ function pushProblem(list, problem) {
 
 // `./main.tex:12: Undefined control sequence.` — the primary error format
 // once -file-line-error is passed (already the case in lib/latex.js).
-const FILE_LINE_ERROR_LINE_RE = /^(\.\/)?([^\s:][^:\n]*\.(?:tex|sty|cls|bib)):(\d+):\s*(.+)$/;
+const FILE_LINE_ERROR_LINE_RE = /^(\.[\\/])?([^\s:][^:\n]*\.(?:tex|sty|cls|bib)):(\d+):\s*(.+)$/;
 
 // Lines that mark the end of an error message block (TeX's own follow-up
 // context, not a continuation of the message text).
@@ -195,6 +196,9 @@ function parseWarnings(log, mainFile) {
 
 export function parseLatexLog(log, mainFile) {
   if (!log) return [];
+  // Windows ends lines with \r\n, and '.' in the patterns below stops at \r,
+  // so no line would match.
+  log = log.replace(/\r\n?/g, '\n');
 
   const errors = parseErrors(log, mainFile);
   const warnings = parseWarnings(log, mainFile);

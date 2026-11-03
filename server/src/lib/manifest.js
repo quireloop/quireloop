@@ -134,7 +134,9 @@ export async function linkProject(ownerId, sourcePath, name, { initGit = false }
   const id = nanoid(10);
   const slot = projectDir(ownerId, id);
   await fs.mkdir(userDir(ownerId), { recursive: true });
-  await fs.symlink(sourcePath, slot, 'dir');
+  // A junction on Windows: a directory symlink there needs admin rights or
+  // Developer Mode, a junction doesn't, and Node reports both as links.
+  await fs.symlink(sourcePath, slot, process.platform === 'win32' ? 'junction' : 'dir');
 
   try {
     // A folder opened before, then removed from the dashboard, still has its

@@ -37,9 +37,9 @@ echo "==> Installing the server's production modules"
 (cd "$APP" && npm ci --omit=dev --workspace=quireloop-server --include-workspace-root=false --ignore-scripts --no-audit --no-fund)
 # Workspace links and manifests that only npm needed.
 rm -rf "$APP/web" "$APP/node_modules/quireloop-server" "$APP/node_modules/quireloop-web" "$APP/node_modules/.package-lock.json"
-# Quireloop runs on Linux and macOS (Windows through WSL), so native-module
-# builds for other systems are dead weight.
-find "$APP/node_modules" -type d -path '*/prebuilds/*' -prune ! -name 'linux-*' ! -name 'darwin-*' -exec rm -rf {} +
+# Quireloop runs on Linux, macOS and Windows, so native-module builds for
+# other systems (Android, iOS) are dead weight.
+find "$APP/node_modules" -type d -path '*/prebuilds/*' -prune ! -name 'linux-*' ! -name 'darwin-*' ! -name 'win32-*' -exec rm -rf {} +
 
 cp "$REPO/LICENSE" "$PKG/LICENSE"
 cp "$REPO/LICENSE" "$APP/LICENSE"

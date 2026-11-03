@@ -20,6 +20,9 @@ def default_data_dir() -> Path:
     Never inside the installed package: upgrading or uninstalling would delete it.
     """
     home = Path.home()
+    if os.name == "nt":
+        local = os.environ.get("LOCALAPPDATA")
+        return (Path(local) if local else home / "AppData" / "Local") / "Quireloop"
     if sys.platform == "darwin":
         return home / "Library" / "Application Support" / "Quireloop"
     xdg = os.environ.get("XDG_DATA_HOME")
@@ -84,7 +87,8 @@ def doctor(args: argparse.Namespace) -> int:
     except ImportError:
         check("Node.js", False, "pip install nodejs-wheel-binaries")
     for tool, advice in [
-        ("latexmk", "Install LaTeX: see docs/install-personal.md (TeX Live or MacTeX)."),
+        ("latexmk", "Install LaTeX: see docs/install-personal.md (TeX Live, MacTeX or MiKTeX)."),
+        ("synctex", "Comes with LaTeX; needed to jump between the PDF and the source."),
         ("git", "Install git; version history needs it."),
     ]:
         check(tool, shutil.which(tool) is not None, advice)
@@ -114,9 +118,6 @@ def main(argv: list[str] | None = None) -> int:
     d.set_defaults(func=doctor)
 
     args = parser.parse_args(argv)
-    if os.name == "nt":
-        print("Quireloop runs on Linux and macOS. On Windows, install it inside WSL.", file=sys.stderr)
-        return 1
     if not getattr(args, "func", None):
         parser.print_help()
         return 0

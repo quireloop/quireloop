@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,7 +49,7 @@ export const COMPILE_SANDBOX_MODE = SANDBOX_MODES.includes(process.env.QUIRELOOP
 
 // Extra read-only folders for a TeX install outside /usr, colon-separated.
 export const COMPILE_SANDBOX_PATHS = (process.env.QUIRELOOP_COMPILE_SANDBOX_PATHS || '')
-  .split(':')
+  .split(path.delimiter)
   .filter(Boolean);
 
 // Log in with the host's own UNIX accounts instead of Quireloop-managed ones.
@@ -77,15 +78,18 @@ export const PAM_EMAIL_DOMAIN = process.env.QUIRELOOP_PAM_EMAIL_DOMAIN || 'local
 // so opening a paper that already lives at /home/arjun/Thesis/paper needs
 // no configuration at all. Which directory that is, is resolved per user in
 // lib/library.js; this is only where the convention "<base>/<username>" starts
-// looking. macOS puts home directories somewhere else, hence the default.
+// looking. macOS and Windows put home directories somewhere else, hence the
+// defaults; on Windows it is the folder holding this account's own profile.
 export const USER_HOME_BASE = process.env.QUIRELOOP_USER_HOME_BASE
   ? path.resolve(process.env.QUIRELOOP_USER_HOME_BASE)
-  : process.platform === 'darwin'
-    ? '/Users'
-    : '/home';
+  : process.platform === 'win32'
+    ? path.dirname(os.homedir())
+    : process.platform === 'darwin'
+      ? '/Users'
+      : '/home';
 
 // Additional *shared* host directories, on top of each member's own home —
-// colon-separated, for a lab drive or a common templates folder. Unlike the
+// colon-separated (semicolons on Windows, where a path holds a colon), for a lab drive or a common templates folder. Unlike the
 // per-user home, a plain root here is browsable and writable by every member
 // with an account, so keep it narrow; the {userId} / {user} / {email}
 // placeholders expand per request if you want one entry to mean a different
@@ -93,7 +97,7 @@ export const USER_HOME_BASE = process.env.QUIRELOOP_USER_HOME_BASE
 //
 // A root may be written as "Label=/path".
 export const LIBRARY_DIRS = (process.env.QUIRELOOP_LIBRARY_DIRS || '')
-  .split(':')
+  .split(path.delimiter)
   .map((spec) => spec.trim())
   .filter(Boolean)
   .map((spec) => {

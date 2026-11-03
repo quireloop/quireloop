@@ -73,8 +73,9 @@ export async function compileProject(ownerId, projectId, mainFile, compiler = 'p
 // Papers are untrusted input: anyone who can edit a project decides what TeX
 // runs, as the service user that can read every project and the session key.
 // -norc ignores a project's .latexmkrc, which is Perl that latexmk would run.
-// That stops only latexmk: LuaTeX reads and writes anywhere the service user
-// can, whatever openin_any says, so the real wall is lib/compileSandbox.js.
+// That stops only latexmk: TeX reads anywhere the service user can (TeX Live
+// 2026 made openin_any a no-op, and LuaTeX never honoured it), and LuaTeX
+// writes anywhere too, so the real wall is lib/compileSandbox.js.
 const SANDBOX_FLAGS = ['-norc'];
 
 // The main file is passed to latexmk as an argument, where a name starting
@@ -82,7 +83,8 @@ const SANDBOX_FLAGS = ['-norc'];
 export function isSafeMainFile(mainFile) {
   if (typeof mainFile !== 'string' || !mainFile.endsWith('.tex')) return false;
   if (path.isAbsolute(mainFile)) return false;
-  return !mainFile.split('/').some((part) => part === '..' || part.startsWith('-'));
+  // Backslash too: Windows treats it as a folder separator.
+  return !mainFile.split(/[\\/]/).some((part) => part === '..' || part.startsWith('-'));
 }
 
 async function runLatexmk(cwd, mainFile, compiler) {

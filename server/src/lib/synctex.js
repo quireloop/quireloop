@@ -32,7 +32,9 @@ export async function toSource(ownerId, projectId, mainFile, page, x, y) {
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
 
   const column = columnMatch ? Number(columnMatch[1]) : -1;
-  return { file: relative, line: Number(lineMatch[1]), column: column >= 0 ? column : null };
+  // The editor names files with forward slashes on every system.
+  const file = relative.split(path.sep).join('/');
+  return { file, line: Number(lineMatch[1]), column: column >= 0 ? column : null };
 }
 
 // Forward sync: a source file/line -> where it landed on the PDF.
@@ -44,11 +46,21 @@ export async function toSource(ownerId, projectId, mainFile, page, x, y) {
 // for scrolling.
 export async function toPdf(ownerId, projectId, mainFile, file, line) {
   const cwd = projectDir(ownerId, projectId);
-  const result = await execa('synctex', ['view', '-i', `${line}:0:${file}`, '-o', pdfPathFor(mainFile)], {
-    cwd,
-    reject: false,
-  });
-  const boxes = parseViewRecords(result.stdout);
+  // synctex matches the name as TeX recorded it. On Windows that may be with
+  // backslashes or a full path, so those are tried after the editor's own.
+  const names = [file];
+  if (process.platform === 'win32') {
+    names.push(file.replaceAll('/', '\\'), path.join(await fs.realpath(cwd), file));
+  }
+  let boxes = [];
+  for (const name of names) {
+    const result = await execa('synctex', ['view', '-i', `${line}:0:${name}`, '-o', pdfPathFor(mainFile)], {
+      cwd,
+      reject: false,
+    });
+    boxes = parseViewRecords(result.stdout);
+    if (boxes.length > 0) break;
+  }
   if (boxes.length === 0) return null;
   const first = boxes[0];
   return { page: first.page, x: first.x, y: first.y, boxes };

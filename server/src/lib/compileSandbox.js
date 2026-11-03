@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execa } from 'execa';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { COMPILE_CACHE_DIR, COMPILE_SANDBOX_MODE, COMPILE_SANDBOX_PATHS } from '../config.js';
 
@@ -26,10 +27,17 @@ const USR_MERGED_LINKS = ['bin', 'sbin', 'lib', 'lib32', 'lib64'];
 // The environment is built from nothing: the server's own holds the assistant
 // API key, and LuaTeX can read any variable it is given.
 const CLEAN_ENV_NAMES = ['PATH', 'LANG', 'LC_ALL', 'TEXMFHOME', 'TEXINPUTS', 'BIBINPUTS', 'BSTINPUTS'];
+// Windows programs, latexmk's Perl among them, fail without the system ones,
+// and MiKTeX keeps its settings under the profile folders. None hold secrets.
+const WINDOWS_ENV_NAMES = [
+  'SystemRoot', 'windir', 'ComSpec', 'PATHEXT', 'TEMP', 'TMP',
+  'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'ProgramData', 'ProgramFiles',
+];
 
 function cleanEnv() {
   const env = { openin_any: 'p', openout_any: 'p' };
-  for (const name of CLEAN_ENV_NAMES) {
+  const names = process.platform === 'win32' ? [...CLEAN_ENV_NAMES, ...WINDOWS_ENV_NAMES] : CLEAN_ENV_NAMES;
+  for (const name of names) {
     if (process.env[name]) env[name] = process.env[name];
   }
   return env;
@@ -115,7 +123,7 @@ export async function sandboxCommand(projectPath, argv) {
   const options = { cwd, env, extendEnv: false, killSignal: 'SIGKILL' };
 
   if (!useSandbox) {
-    env.HOME = process.env.HOME ?? cwd;
+    env.HOME = process.env.HOME ?? os.homedir();
     const [file, ...args] = [...limit, ...argv];
     return { file, args, options, after: async () => {} };
   }

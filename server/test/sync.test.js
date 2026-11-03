@@ -206,8 +206,12 @@ test('a computer links only after approval on the server', async () => {
 
   await until(async () => (await call(laptop, 'GET', '/api/link/status')).url === url, 'link to finish');
   const stored = JSON.parse(await fs.readFile(path.join(laptop.dataDir, 'sync-connection.json'), 'utf8'));
-  const mode = (await fs.stat(path.join(laptop.dataDir, 'sync-connection.json'))).mode & 0o777;
-  assert.equal(mode, 0o600);
+  // Windows has no owner-only file mode; the data folder sits in the user's
+  // own profile, which Windows already keeps private.
+  if (process.platform !== 'win32') {
+    const mode = (await fs.stat(path.join(laptop.dataDir, 'sync-connection.json'))).mode & 0o777;
+    assert.equal(mode, 0o600);
+  }
   assert.ok(stored.token);
   assert.ok(!JSON.stringify(await call(laptop, 'GET', '/api/link/status')).includes(stored.token));
 });

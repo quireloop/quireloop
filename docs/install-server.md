@@ -181,7 +181,7 @@ unit, or just prefix the `node` command when running manually.
 | `QUIRELOOP_PAM_SERVICE` | `quireloop` | The PAM service name, i.e. which `/etc/pam.d/` file the login is checked against. Passed through to the helper. |
 | `QUIRELOOP_PAM_MIN_UID` | `1000` | Accounts below this uid can never log in, which keeps `root` and every system account out. Passed through to the helper. |
 | `QUIRELOOP_PAM_ALLOW_GROUP` | unset | If set, only members of this UNIX group may log in — the simplest way to give a subset of the machine's accounts access. Passed through to the helper. |
-| `QUIRELOOP_USER_HOME_BASE` | `/home` (`/Users` on macOS) | Where the "each member gets their own folder on this host" convention looks: a member with the email `arjun@…` is offered `<base>/arjun` if that directory exists. Only ever grants a member their *own* directory, never the base itself. Overridden per account in Admin panel → Users → Server folder. See [Opening folders already on the server](#opening-folders-already-on-the-server). |
+| `QUIRELOOP_USER_HOME_BASE` | `/home` (`/Users` on macOS, the folder holding your profile on Windows) | Where the "each member gets their own folder on this host" convention looks: a member with the email `arjun@…` is offered `<base>/arjun` if that directory exists. Only ever grants a member their *own* directory, never the base itself. Overridden per account in Admin panel → Users → Server folder. See [Opening folders already on the server](#opening-folders-already-on-the-server). |
 | `QUIRELOOP_LIBRARY_DIRS` | unset | **Shared** host directories, colon-separated, offered to every member on top of their own home — a lab drive, a templates folder. Write a root as `/mnt/latex` or `Label=/mnt/latex`; `{userId}` / `{user}` / `{email}` expand per request. Unlike a member's own home, a plain root here is readable *and writable* by everyone with an account, so keep it narrow. |
 | `QUIRELOOP_ANTHROPIC_API_KEY` | unset | Server-wide **fallback** Anthropic key, only used for members who haven't set their own key in Account settings → ✨ AI Assistant. Most installs don't need this — each lab member brings their own pay-as-you-go key (console.anthropic.com), billed to them individually, not to the server. When both this and a stored admin-panel key exist, the env var wins. Falls back to `ANTHROPIC_API_KEY` if set. |
 | `QUIRELOOP_ASSISTANT_MODEL` | `claude-opus-4-8` | Model used by the fallback key above; also settable in the Admin panel (env wins). Has no effect on members using their own key — they pick their own model in Account settings. |
@@ -328,8 +328,9 @@ Environment=QUIRELOOP_COMPILE_SANDBOX=required
 | `required` | Refuses to compile if the sandbox can't run |
 | `off` | Never uses it |
 
-**Without the sandbox, LuaLaTeX can read and write any file the service user
-can**, including every project. Only run that way when you trust everyone who
+**Without the sandbox, any LaTeX engine can read any file the service user can,
+and LuaLaTeX can also write to them**, including every project. (TeX Live
+2026 stopped honouring the old `openin_any` setting, so nothing else blocks it.) Only run that way when you trust everyone who
 can edit. The sandbox usually can't start inside Docker, so a Docker install has
 only the container around it, which still holds all the projects.
 
