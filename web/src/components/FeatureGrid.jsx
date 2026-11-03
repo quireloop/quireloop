@@ -26,8 +26,8 @@ const FEATURES = [
   },
   {
     icon: '📖',
-    title: 'Open source',
-    body: 'Apache 2.0-licensed. Read the code, self-host it, or send a pull request.',
+    title: 'Source-available',
+    body: 'Licensed for academic use. Read the code and run it on your own server.',
   },
 ];
 
