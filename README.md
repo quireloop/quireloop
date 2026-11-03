@@ -43,7 +43,14 @@ See the [full feature list](docs/features.md).
 | **Accounts** | Just yours | Invitations, roles, optional server logins |
 | **Guide** | **[Install on your computer](docs/install-personal.md)** | **[Install on a server](docs/install-server.md)** |
 
-The quickest personal setup, once Node.js 22+ and LaTeX are installed:
+The quickest personal setup, once LaTeX is installed:
+
+```bash
+pip install quireloop
+quireloop start
+```
+
+Or from the source code, with Node.js 22+:
 
 ```bash
 git clone https://github.com/arjunpogaku/quireloop.git
@@ -65,6 +72,7 @@ Then open http://localhost:4173. The first account becomes the admin.
 | [User guide](docs/user-guide.md) | Illustrated quick start, then every feature |
 | [Features](docs/features.md) | The complete feature list |
 | [Where your data lives](docs/data.md) | Project files, git history, backups |
+| [Releasing](docs/releasing.md) | Publishing a new version to PyPI |
 | [Roadmap](docs/roadmap.md) | What is planned |
 
 ## Repository layout
@@ -73,8 +81,9 @@ Then open http://localhost:4173. The first account becomes the admin.
 server/    API, collaboration, LaTeX compile and SyncTeX (Fastify)
 web/       Interface (React, CodeMirror 6, Vite)
 deploy/    Example nginx, systemd, PAM and sudo files
-scripts/   LaTeX and macOS service installers
+scripts/   Installers, backups and the pip package build
 docs/      Guides
+packaging/ The pip package (built by scripts/build-pypi.sh)
 assets/    Logo
 data/      Accounts and projects (created on first run, never committed)
 ```

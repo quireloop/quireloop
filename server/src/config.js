@@ -34,7 +34,9 @@ export const LANGUAGETOOL_URL = (process.env.QUIRELOOP_LANGUAGETOOL_URL || '').r
 
 export const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 export const PORT = process.env.PORT ? Number(process.env.PORT) : 4173;
-export const HOST = '0.0.0.0';
+// Which network address to listen on. The default accepts connections from
+// other machines; 127.0.0.1 keeps a personal install to this computer only.
+export const HOST = process.env.QUIRELOOP_HOST || '0.0.0.0';
 
 // How compiles are isolated (lib/compileSandbox.js). "auto" uses bubblewrap
 // where it can run, which suits a laptop; a shared server should say "required"

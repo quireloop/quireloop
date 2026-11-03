@@ -8,3 +8,9 @@ __pycache__/
 
 # Your papers never live in this repo — see README "Where your data lives".
 data/
+
+# Made by scripts/build-pypi.sh.
+packaging/pypi/src/quireloop/app/
+packaging/pypi/LICENSE
+packaging/pypi/dist/
+packaging/pypi/build/

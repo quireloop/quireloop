@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quireloop"
+dynamic = ["version"]
+description = "A self-hosted, collaborative LaTeX editor for academic research"
+readme = "README.md"
+license-files = ["LICENSE"]
+authors = [{ name = "Arjun Pogaku" }]
+requires-python = ">=3.9"
+# Node.js itself, so nobody has to install it separately.
+dependencies = ["nodejs-wheel-binaries>=22.12"]
+keywords = ["latex", "editor", "collaboration", "academic", "self-hosted"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Web Environment",
+  "Intended Audience :: Education",
+  "Intended Audience :: Science/Research",
+  "License :: Other/Proprietary License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Topic :: Text Editors",
+  "Topic :: Text Processing :: Markup :: LaTeX",
+]
+
+[project.urls]
+Homepage = "https://github.com/arjunpogaku/quireloop"
+Documentation = "https://github.com/arjunpogaku/quireloop/tree/main/docs"
+Source = "https://github.com/arjunpogaku/quireloop"
+Issues = "https://github.com/arjunpogaku/quireloop/issues"
+
+[project.scripts]
+quireloop = "quireloop.cli:main"
+
+[tool.hatch.version]
+path = "src/quireloop/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quireloop"]
+# Made by scripts/build-pypi.sh and kept out of git, so list it explicitly.
+artifacts = ["src/quireloop/app/**"]

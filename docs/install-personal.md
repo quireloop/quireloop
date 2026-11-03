@@ -6,6 +6,26 @@ already installed. To set Quireloop up for a lab, see
 
 Quireloop is licensed for [academic use only](../README.md#license).
 
+## Quickest: install with pip
+
+You need Python 3.9 or newer and LaTeX (step 1 below says how). Node.js comes
+with the package.
+
+```bash
+pip install quireloop
+quireloop doctor
+quireloop start
+```
+
+Open http://localhost:4173; the first account becomes the admin. `quireloop
+doctor` lists anything missing. By default only this computer can connect;
+`quireloop start --host 0.0.0.0` lets others on your network in. Papers and
+accounts are kept in `~/.local/share/quireloop` on Linux and
+`~/Library/Application Support/Quireloop` on macOS, or wherever `--data-dir`
+points. `pip install --upgrade quireloop` updates it and leaves them alone.
+
+The rest of this page installs from the source code instead.
+
 ## 1. Install what it needs
 
 You need **Node.js 22 or newer**, **git**, **unzip**, and a **LaTeX

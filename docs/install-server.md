@@ -171,6 +171,7 @@ unit, or just prefix the `node` command when running manually.
 | Variable | Default | What it does |
 |---|---|---|
 | `PORT` | `4173` | TCP port the server listens on. |
+| `QUIRELOOP_HOST` | `0.0.0.0` | Address the server listens on. `127.0.0.1` accepts connections from this machine only, which suits a server behind nginx on the same machine. `quireloop start` from pip defaults to `127.0.0.1`. |
 | `QUIRELOOP_DATA_DIR` | `<repo>/data` | Where all persistent state lives — accounts, invites, the session-signing key, and every project (with its git history and version snapshots). Docker's image sets this to `/data` and expects a volume mounted there; leave it as the image default rather than overriding it unless you know why you're changing it. |
 | `QUIRELOOP_OPEN_SIGNUP` | unset (`false`) | When `true`, signup stays open to anyone who can reach the server, even after the first account exists. Default behavior (unset) is: the very first account can always sign up freely (bootstrapping), and every account after that requires an admin-issued invite code/link. |
 | `QUIRELOOP_SECURE_COOKIES` | unset (`false`) | When `true`, the session cookie is set with the `secure` flag, so browsers will only send it over HTTPS. Set this once TLS (e.g. the nginx config above) is actually in front of the server — turning it on without TLS in place will lock everyone out, since the cookie won't be sent back over plain HTTP. |
