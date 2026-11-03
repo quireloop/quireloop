@@ -78,9 +78,13 @@ test('refuses a missing target rather than creating it', { skip }, async () => {
 test('shares unchanged files with the last copy and drops old copies', { skip }, async () => {
   const { data, dest } = await setup();
   const old = ['2020-01-05', '2020-01-20', '2020-02-03', '2020-02-10'];
+  // rsync links a file only when its time matches to the second, and these
+  // are written a moment after the data, sometimes across a second boundary.
+  const { mtime } = await fs.stat(path.join(data, 'projects/u/p/main.tex'));
   for (const day of old) {
     await fs.mkdir(path.join(dest, day, 'projects/u/p'), { recursive: true });
     await fs.writeFile(path.join(dest, day, 'projects/u/p/main.tex'), 'hello');
+    await fs.utimes(path.join(dest, day, 'projects/u/p/main.tex'), mtime, mtime);
   }
   const result = run({ QUIRELOOP_DATA_DIR: data, BACKUP_DIR: dest, ALLOW_SAME_DISK: '1', KEEP_DAILY: '2', KEEP_MONTHLY: '2' });
   assert.equal(result.status, 0, result.stderr);
