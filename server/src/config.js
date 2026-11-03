@@ -21,6 +21,17 @@ export const SHARE_LINKS_FILE = path.join(DATA_DIR, 'share-links.json');
 export const DEVICES_FILE = path.join(DATA_DIR, 'devices.json');
 export const SYNC_CONNECTION_FILE = path.join(DATA_DIR, 'sync-connection.json');
 export const COMPILE_CACHE_DIR = path.join(DATA_DIR, 'compile-cache');
+// How long a browser stays signed in without being used. Any use renews it, so
+// someone who opens Quireloop at least this often stays signed in.
+export const SESSION_DAYS = Number(process.env.QUIRELOOP_SESSION_DAYS) > 0
+  ? Number(process.env.QUIRELOOP_SESSION_DAYS)
+  : 30;
+
+// A LanguageTool server for grammar checking (scripts/install-languagetool.sh
+// runs one privately on this machine). Unset turns grammar checking off, so
+// nobody's text ever leaves for a checker the operator didn't choose.
+export const LANGUAGETOOL_URL = (process.env.QUIRELOOP_LANGUAGETOOL_URL || '').replace(/\/+$/, '');
+
 export const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 export const PORT = process.env.PORT ? Number(process.env.PORT) : 4173;
 export const HOST = '0.0.0.0';

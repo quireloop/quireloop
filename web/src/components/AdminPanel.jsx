@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminApi } from '../lib/auth.js';
+import { backupApi } from '../api.js';
 
 // The folder on this host a member may browse and open projects from. Left
 // blank, Quireloop works it out from their email (<home base>/<username>) —
@@ -286,6 +287,33 @@ function InvitesSection() {
   );
 }
 
+function BackupSection() {
+  const [status, setStatus] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    backupApi.status().then(setStatus).catch((err) => setError(err.message));
+  }, []);
+
+  if (error) return <p style={{ fontSize: 12, color: 'crimson' }}>{error}</p>;
+  if (!status) return <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</p>;
+  const when = status.lastRun && new Date(status.lastRun).toLocaleString();
+  return (
+    <div style={{ display: 'grid', gap: 8, fontSize: 13 }}>
+      {!status.lastRun && <p style={{ margin: 0, color: 'crimson' }}>⚠ No backup has ever finished on this server.</p>}
+      {status.lastRun && status.stale && (
+        <p style={{ margin: 0, color: 'crimson' }}>⚠ The last backup is more than an hour old ({when}).</p>
+      )}
+      {status.lastRun && !status.stale && <p style={{ margin: 0 }}>✅ Last backup: {when}</p>}
+      {status.snapshots != null && <p style={{ margin: 0 }}>Copies kept: {status.snapshots}</p>}
+      {status.cloud && <p style={{ margin: 0 }}>Off-site copy: {status.cloud}</p>}
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+        Set up by scripts/quireloop-backup.sh; see the admin guide. This page only reports what that job last did.
+      </p>
+    </div>
+  );
+}
+
 function AssistantSection() {
   const [settings, setSettings] = useState(null);
   const [key, setKey] = useState('');
@@ -419,7 +447,7 @@ function AssistantSection() {
         <input
           value={ollamaModel}
           onChange={(e) => setOllamaModel(e.target.value)}
-          placeholder="llama3.1"
+          placeholder="Default model (optional; members choose from a list)"
           style={{ padding: 6, fontSize: 12 }}
         />
         <button type="submit" disabled={busy} style={{ fontSize: 12 }}>
@@ -490,10 +518,17 @@ export default function AdminPanel({ user, onClose }) {
           >
             ✨ Assistant
           </button>
+          <button
+            onClick={() => setTab('backups')}
+            style={{ flex: 1, background: tab === 'backups' ? 'var(--accent-bg)' : undefined }}
+          >
+            Backups
+          </button>
         </div>
         {tab === 'users' && <UsersSection currentUserId={user?.id} />}
         {tab === 'invites' && <InvitesSection />}
         {tab === 'assistant' && <AssistantSection />}
+        {tab === 'backups' && <BackupSection />}
       </div>
     </div>
   );

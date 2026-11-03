@@ -36,6 +36,7 @@ const CHAT_CLOSED_POLL_MS = 15000;
 const AUTO_COMPILE_IDLE_MS = 2500;
 const AUTO_COMPILE_STORAGE_KEY = 'quireloop:autoCompile';
 const SPELLCHECK_STORAGE_KEY = 'quireloop:spellcheck';
+const GRAMMAR_STORAGE_KEY = 'quireloop:grammar';
 const VIM_MODE_STORAGE_KEY = 'quireloop:vimMode';
 const SUGGEST_MODE_STORAGE_KEY = 'quireloop:suggestMode';
 
@@ -141,15 +142,12 @@ export default function ProjectView({ projectId, onBack, user }) {
   // id" kept in localStorage so it survives a page reload.
   const [showChat, setShowChat] = useState(false);
   const [showAssistant, setShowAssistant] = useState(false);
-  const [assistantEnabled, setAssistantEnabled] = useState(false);
+  const [grammarAvailable, setGrammarAvailable] = useState(false);
+  const [grammar, setGrammar] = useState(() => localStorage.getItem(GRAMMAR_STORAGE_KEY) === 'true');
+  const [textCopied, setTextCopied] = useState(false);
 
-  // The AI assistant only exists when the current user (or the server's
-  // fallback) has a provider configured — hide the button entirely otherwise.
   useEffect(() => {
-    fetch(`${BASE_PATH}/api/assistant/config`)
-      .then((r) => (r.ok ? r.json() : { enabled: false }))
-      .then((cfg) => setAssistantEnabled(Boolean(cfg.enabled)))
-      .catch(() => {});
+    api.grammarConfig().then((cfg) => setGrammarAvailable(cfg.enabled)).catch(() => {});
   }, []);
   // Only a copy of a server paper has a sync state to show.
   useEffect(() => {
@@ -185,6 +183,20 @@ export default function ProjectView({ projectId, onBack, user }) {
     localStorage.setItem(SPELLCHECK_STORAGE_KEY, String(spellcheck));
     editorRef.current?.setSpellcheck(spellcheck);
   }, [spellcheck]);
+  useEffect(() => {
+    localStorage.setItem(GRAMMAR_STORAGE_KEY, String(grammar));
+    editorRef.current?.setGrammar(grammar && grammarAvailable);
+  }, [grammar, grammarAvailable]);
+
+  // For pasting into a writing tool outside Quireloop, which would otherwise
+  // trip over every LaTeX command.
+  async function copyPlainText() {
+    const source = editorRef.current?.getText?.() ?? '';
+    const { text } = await api.plainText(projectId, source);
+    await navigator.clipboard.writeText(text);
+    setTextCopied(true);
+    setTimeout(() => setTextCopied(false), 1500);
+  }
 
   useEffect(() => {
     localStorage.setItem(VIM_MODE_STORAGE_KEY, String(vimMode));
@@ -925,6 +937,18 @@ export default function ProjectView({ projectId, onBack, user }) {
             >
               Spell check
             </MenuItem>
+            {grammarAvailable && (
+              <MenuItem
+                onClick={() => setGrammar((v) => !v)}
+                active={grammar}
+                title="Underlines grammar and spelling mistakes in your writing, using this server's own checker"
+              >
+                Grammar check
+              </MenuItem>
+            )}
+            <MenuItem onClick={copyPlainText} title="Copies this file's text with the LaTeX removed, ready to paste into another writing tool">
+              {textCopied ? 'Copied' : 'Copy text without LaTeX'}
+            </MenuItem>
             <MenuItem onClick={() => setVimMode((v) => !v)} active={vimMode}>
               Vim keybindings
             </MenuItem>
@@ -958,11 +982,9 @@ export default function ProjectView({ projectId, onBack, user }) {
             <MenuItem onClick={() => setShowChat((v) => !v)} active={showChat}>
               Chat{unreadChat > 0 ? ` (${unreadChat})` : ''}
             </MenuItem>
-            {assistantEnabled && (
-              <MenuItem onClick={() => setShowAssistant((v) => !v)} active={showAssistant} title="Ask about your paper, fix LaTeX, draft passages">
-                ✨ Assistant
-              </MenuItem>
-            )}
+            <MenuItem onClick={() => setShowAssistant((v) => !v)} active={showAssistant} title="Ask about your paper, fix LaTeX, draft passages">
+              ✨ Assistant
+            </MenuItem>
           </ToolbarMenu>
           {showSymbols && <SymbolPalette onInsert={handleInsertSnippet} onClose={() => setShowSymbols(false)} />}
 
@@ -1100,6 +1122,7 @@ export default function ProjectView({ projectId, onBack, user }) {
                     user={user}
                     readOnly={isViewer}
                     spellcheck={spellcheck}
+                    grammar={grammar && grammarAvailable}
                     vimMode={vimMode}
                     suggestMode={suggestMode && !isViewer}
                     onChange={handleEditorChange}

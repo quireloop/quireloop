@@ -1,0 +1,13 @@
+# Copy to /etc/systemd/system/quireloop-backup.service, and copy
+# quireloop-backup.timer.example beside it as quireloop-backup.timer. Then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now quireloop-backup.timer
+[Unit]
+Description=Back up Quireloop data
+
+[Service]
+Type=oneshot
+# CHANGE-ME: wherever the repo is. Installs to /usr/local/sbin work too.
+ExecStart=/bin/bash /opt/quireloop/scripts/quireloop-backup.sh
+Nice=15
+IOSchedulingClass=idle

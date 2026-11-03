@@ -5,26 +5,49 @@ import { getSettings } from '../lib/settings.js';
 import { findUserById } from '../lib/auth.js';
 import * as anthropicProvider from '../lib/assistantProviders/anthropic.js';
 import * as ollamaProvider from '../lib/assistantProviders/ollama.js';
+import * as openaiProvider from '../lib/assistantProviders/openai.js';
+import * as geminiProvider from '../lib/assistantProviders/gemini.js';
 
 // The AI writing assistant is per-user and opt-in: each member brings their
-// own Anthropic API key or points at an Ollama server from their own
+// own API key or points at an Ollama server from their own
 // Account settings — never a single account shared/billed across the lab.
 // An admin can still set a server-wide default (env var or Admin panel) as
 // a fallback for members who haven't configured anything of their own —
 // resolveAssistantConfig() below tries the user's own config first.
 export const DEFAULT_ASSISTANT_MODEL = 'claude-opus-4-8';
 
-const PROVIDERS = { anthropic: anthropicProvider, ollama: ollamaProvider };
+const PROVIDERS = {
+  anthropic: anthropicProvider,
+  ollama: ollamaProvider,
+  openai: openaiProvider,
+  gemini: geminiProvider,
+};
+export const PROVIDER_IDS = Object.keys(PROVIDERS);
+
+export function isValidModelId(id) {
+  return typeof id === 'string' && id.length <= 200 && /^[\w.:/-]+$/.test(id);
+}
+
+function fromUser(ua) {
+  if (ua?.provider === 'anthropic' && ua.anthropicApiKey) {
+    return { provider: 'anthropic', anthropicApiKey: ua.anthropicApiKey, model: ua.anthropicModel || DEFAULT_ASSISTANT_MODEL };
+  }
+  if (ua?.provider === 'ollama' && ua.ollamaBaseUrl) {
+    return { provider: 'ollama', ollamaBaseUrl: ua.ollamaBaseUrl, model: ua.ollamaModel || '' };
+  }
+  if (ua?.provider === 'openai' && ua.openaiApiKey) {
+    return { provider: 'openai', openaiApiKey: ua.openaiApiKey, model: ua.openaiModel || '' };
+  }
+  if (ua?.provider === 'gemini' && ua.geminiApiKey) {
+    return { provider: 'gemini', geminiApiKey: ua.geminiApiKey, model: ua.geminiModel || '' };
+  }
+  return null;
+}
 
 async function resolveAssistantConfig(userId) {
   const user = await findUserById(userId);
-  const ua = user?.assistant;
-  if (ua?.provider === 'anthropic' && ua.anthropicApiKey) {
-    return { provider: 'anthropic', anthropicApiKey: ua.anthropicApiKey, anthropicModel: ua.anthropicModel || DEFAULT_ASSISTANT_MODEL };
-  }
-  if (ua?.provider === 'ollama' && ua.ollamaBaseUrl && ua.ollamaModel) {
-    return { provider: 'ollama', ollamaBaseUrl: ua.ollamaBaseUrl, ollamaModel: ua.ollamaModel };
-  }
+  const own = fromUser(user?.assistant);
+  if (own) return own;
 
   // Fall back to a server-wide default the admin configured, if any.
   const settings = await getSettings();
@@ -34,15 +57,28 @@ async function resolveAssistantConfig(userId) {
     return {
       provider: 'anthropic',
       anthropicApiKey: adminAnthropicKey,
-      anthropicModel: process.env.QUIRELOOP_ASSISTANT_MODEL || settings.assistantModel || DEFAULT_ASSISTANT_MODEL,
+      model: process.env.QUIRELOOP_ASSISTANT_MODEL || settings.assistantModel || DEFAULT_ASSISTANT_MODEL,
     };
   }
   const ollamaBaseUrl = process.env.QUIRELOOP_OLLAMA_BASE_URL || settings.ollamaBaseUrl || '';
-  const ollamaModel = process.env.QUIRELOOP_OLLAMA_MODEL || settings.ollamaModel || '';
-  if (ollamaBaseUrl && ollamaModel) {
-    return { provider: 'ollama', ollamaBaseUrl, ollamaModel };
+  if (ollamaBaseUrl) {
+    return { provider: 'ollama', ollamaBaseUrl, model: process.env.QUIRELOOP_OLLAMA_MODEL || settings.ollamaModel || '' };
   }
   return null;
+}
+
+// What this person can pick from, read live so a newly installed model simply
+// appears. An unreachable provider isn't an error here: the panel still shows
+// the saved model, and the real reason surfaces when they ask something.
+async function listModels(config) {
+  let models = [];
+  try {
+    models = await PROVIDERS[config.provider].listModels(config);
+  } catch {
+    // fall through to whatever was saved
+  }
+  if (config.model && !models.includes(config.model)) models = [config.model, ...models];
+  return models;
 }
 
 // Deliberate cost cap for a chat panel — long enough for a rewritten
@@ -85,8 +121,31 @@ export default async function assistantRoutes(app) {
     return {
       enabled: Boolean(config),
       provider: config?.provider ?? null,
-      model: config ? (config.provider === 'ollama' ? config.ollamaModel : config.anthropicModel) : null,
+      model: config?.model || null,
     };
+  });
+
+  app.get('/api/assistant/models', { preHandler: requireAuth }, async (req) => {
+    const config = await resolveAssistantConfig(req.userId);
+    if (!config) return { provider: null, model: null, models: [] };
+    const models = await listModels(config);
+    return { provider: config.provider, model: config.model || models[0] || null, models };
+  });
+
+  // Fills the model list in Account settings before anything is saved.
+  app.post('/api/assistant/ollama-models', { preHandler: requireAuth }, async (req, reply) => {
+    const settings = await getSettings();
+    const baseUrl = req.body?.baseUrl || process.env.QUIRELOOP_OLLAMA_BASE_URL || settings.ollamaBaseUrl || '';
+    try {
+      if (!/^https?:$/.test(new URL(baseUrl).protocol)) throw new Error('bad scheme');
+    } catch {
+      return reply.code(400).send({ error: 'enter the address of an Ollama server' });
+    }
+    try {
+      return { models: await ollamaProvider.listModels({ ollamaBaseUrl: baseUrl }) };
+    } catch {
+      return reply.code(502).send({ error: `no Ollama server answered at ${baseUrl}` });
+    }
   });
 
   // Viewers can use the assistant too — asking questions about a paper
@@ -99,7 +158,15 @@ export default async function assistantRoutes(app) {
     }
     const provider = PROVIDERS[config.provider];
 
-    const { messages, file, selection } = req.body ?? {};
+    const { messages, file, selection, model } = req.body ?? {};
+    if (model !== undefined && !isValidModelId(model)) {
+      return reply.code(400).send({ error: 'invalid model id' });
+    }
+    // The dropdown in the panel, then the saved choice, then the first available.
+    config.model = model || config.model || (await listModels(config))[0];
+    if (!config.model) {
+      return reply.code(503).send({ error: 'no model is available — choose one in your account settings' });
+    }
     if (!Array.isArray(messages) || messages.length === 0) {
       return reply.code(400).send({ error: 'messages required' });
     }

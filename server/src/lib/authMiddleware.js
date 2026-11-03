@@ -3,6 +3,8 @@ import { readManifest } from './manifest.js';
 import { findUserById } from './auth.js';
 import { findDeviceByToken } from './devices.js';
 
+const RENEW_AFTER_SECONDS = 60 * 60;
+
 // A laptop's token works only on routes that opt in with `config: { allowDevice:
 // true }`, so one left on a stolen laptop can sync papers but can't reach account
 // settings, sharing or the admin panel.
@@ -33,6 +35,14 @@ export async function requireAuth(req, reply) {
     return reply.code(401).send({ error: 'not authenticated' });
   }
   req.userId = userId;
+  renewSession(req);
+}
+
+// The session's clock starts at sign-in and doesn't move by itself, so a person
+// who uses Quireloop every day would still be signed out when it ran out.
+function renewSession(req) {
+  const now = Math.round(Date.now() / 1000);
+  if (now - req.session.get('__ts') > RENEW_AFTER_SECONDS) req.session.set('__ts', now);
 }
 
 export async function requireAdmin(req, reply) {

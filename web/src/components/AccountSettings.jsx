@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { authApi } from '../lib/auth.js';
-import { linkApi } from '../api.js';
+import { assistantApi, linkApi } from '../api.js';
 
 function LinkedComputersSection() {
   const [devices, setDevices] = useState([]);
@@ -33,6 +33,9 @@ function AssistantSettingsSection() {
   const [anthropicModel, setAnthropicModel] = useState('claude-opus-4-8');
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState('http://localhost:11434');
   const [ollamaModel, setOllamaModel] = useState('');
+  const [ollamaModels, setOllamaModels] = useState(null);
+  const [keyDraft, setKeyDraft] = useState('');
+  const [keyModels, setKeyModels] = useState([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -54,6 +57,25 @@ function AssistantSettingsSection() {
     refresh();
   }, []);
 
+  async function findOllamaModels(baseUrl) {
+    setError('');
+    setOllamaModels(null);
+    try {
+      const { models } = await assistantApi.findOllamaModels(baseUrl.trim());
+      setOllamaModels(models);
+      setOllamaModel((current) => (models.includes(current) ? current : models[0] || ''));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  useEffect(() => {
+    if (provider === 'ollama' && settings) findOllamaModels(ollamaBaseUrl);
+    if (provider === 'openai' || provider === 'gemini') {
+      assistantApi.models().then((next) => setKeyModels(next.provider === provider ? next.models : [])).catch(() => {});
+    }
+  }, [provider, settings?.openaiKeySet, settings?.geminiKeySet]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function save(patch) {
     setError('');
     setStatus('');
@@ -61,6 +83,7 @@ function AssistantSettingsSection() {
     try {
       await authApi.saveAssistantSettings(patch);
       setAnthropicKey('');
+      setKeyDraft('');
       setStatus('Saved.');
       await refresh();
     } catch (err) {
@@ -80,13 +103,10 @@ function AssistantSettingsSection() {
   return (
     <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
       <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-        Your own AI assistant — billed or run by you, not shared with other members. Claude Pro/Max
-        subscriptions can&apos;t be used here (that login is restricted to Anthropic&apos;s own apps); use a
-        pay-as-you-go{' '}
-        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
-          API key
-        </a>{' '}
-        instead, or point at an Ollama server if your lab runs one.
+        Your own AI assistant, paid for or run by you and not shared with other members. A ChatGPT, Claude or Gemini
+        subscription can&apos;t be connected here, because those companies keep subscriptions to their own apps. Instead
+        the Assistant panel has buttons that copy your question and open the subscription in a new tab. To use the
+        panel itself, add a pay-as-you-go API key below, or use the lab&apos;s local models.
       </p>
 
       <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -153,7 +173,7 @@ function AssistantSettingsSection() {
 
       <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <input type="radio" checked={provider === 'ollama'} onChange={() => handleProviderChange('ollama')} disabled={busy} />
-        Ollama (self-hosted, free)
+        Local models on a server (Ollama, free and private)
       </label>
       {provider === 'ollama' && (
         <form
@@ -172,19 +192,149 @@ function AssistantSettingsSection() {
               style={{ width: '100%', padding: 6, fontSize: 12, marginTop: 2 }}
             />
           </label>
+          <button type="button" style={{ fontSize: 12 }} onClick={() => findOllamaModels(ollamaBaseUrl)}>
+            Find models on this server
+          </button>
           <label>
             Model
-            <input
+            <select
               value={ollamaModel}
               onChange={(e) => setOllamaModel(e.target.value)}
-              placeholder="llama3.1"
+              disabled={!ollamaModels?.length}
               style={{ width: '100%', padding: 6, fontSize: 12, marginTop: 2 }}
-            />
+            >
+              {!ollamaModels?.length && <option value="">{ollamaModels ? 'No models installed there' : 'Looking…'}</option>}
+              {ollamaModels?.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
           </label>
           <button type="submit" disabled={busy} style={{ fontSize: 12, padding: 6 }}>
             Save
           </button>
         </form>
+      )}
+
+      <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input type="radio" checked={provider === 'openai'} onChange={() => handleProviderChange('openai')} disabled={busy} />
+        OpenAI API key
+      </label>
+      {provider === 'openai' && (
+        <div style={{ display: 'grid', gap: 6, marginLeft: 20 }}>
+          {settings.openaiKeySet ? (
+            <span>
+              ✅ Key set: <code>{settings.openaiKeyMasked}</code>{' '}
+              <button style={{ fontSize: 11, color: 'crimson' }} disabled={busy} onClick={() => save({ openaiApiKey: '' })}>
+                Remove
+              </button>
+            </span>
+          ) : (
+            <span style={{ color: 'var(--text-muted)' }}>
+              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">
+                Get a key
+              </a>
+              . This is separate from any subscription.
+            </span>
+          )}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (keyDraft.trim()) save({ openaiApiKey: keyDraft.trim() });
+            }}
+            style={{ display: 'flex', gap: 6 }}
+          >
+            <input
+              type="password"
+              value={keyDraft}
+              onChange={(e) => setKeyDraft(e.target.value)}
+              placeholder="sk-…"
+              style={{ flex: 1, padding: 6, fontSize: 12 }}
+            />
+            <button type="submit" disabled={busy || !keyDraft.trim()} style={{ fontSize: 12 }}>
+              Save
+            </button>
+          </form>
+          {settings.openaiKeySet && (
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              Model
+              <select
+                value={settings.openaiModel || keyModels[0] || ''}
+                disabled={busy}
+                onChange={(e) => save({ openaiModel: e.target.value })}
+                style={{ fontSize: 12, flex: 1, minWidth: 0 }}
+              >
+                {keyModels.length === 0 && <option value="">Checking your key…</option>}
+                {keyModels.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
+
+      <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input type="radio" checked={provider === 'gemini'} onChange={() => handleProviderChange('gemini')} disabled={busy} />
+        Google Gemini API key
+      </label>
+      {provider === 'gemini' && (
+        <div style={{ display: 'grid', gap: 6, marginLeft: 20 }}>
+          {settings.geminiKeySet ? (
+            <span>
+              ✅ Key set: <code>{settings.geminiKeyMasked}</code>{' '}
+              <button style={{ fontSize: 11, color: 'crimson' }} disabled={busy} onClick={() => save({ geminiApiKey: '' })}>
+                Remove
+              </button>
+            </span>
+          ) : (
+            <span style={{ color: 'var(--text-muted)' }}>
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">
+                Get a key
+              </a>
+              . This is separate from any subscription.
+            </span>
+          )}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (keyDraft.trim()) save({ geminiApiKey: keyDraft.trim() });
+            }}
+            style={{ display: 'flex', gap: 6 }}
+          >
+            <input
+              type="password"
+              value={keyDraft}
+              onChange={(e) => setKeyDraft(e.target.value)}
+              placeholder="Paste your key"
+              style={{ flex: 1, padding: 6, fontSize: 12 }}
+            />
+            <button type="submit" disabled={busy || !keyDraft.trim()} style={{ fontSize: 12 }}>
+              Save
+            </button>
+          </form>
+          {settings.geminiKeySet && (
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              Model
+              <select
+                value={settings.geminiModel || keyModels[0] || ''}
+                disabled={busy}
+                onChange={(e) => save({ geminiModel: e.target.value })}
+                style={{ fontSize: 12, flex: 1, minWidth: 0 }}
+              >
+                {keyModels.length === 0 && <option value="">Checking your key…</option>}
+                {keyModels.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
       )}
 
       {status && <p style={{ margin: 0, color: 'var(--text-muted)' }}>{status}</p>}

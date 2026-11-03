@@ -11,6 +11,7 @@ import { isSafeMainFile } from '../lib/latex.js';
 import { projectDir } from '../lib/storage.js';
 import { importFromGit } from '../lib/gitImport.js';
 import { importFromZip } from '../lib/zipImport.js';
+import { uniqueFolderName } from '../lib/folderCopy.js';
 import {
   requireAuth,
   requireProjectAccess,
@@ -22,6 +23,8 @@ import { findUserByEmail, findUserById } from '../lib/auth.js';
 import * as sharedIndex from '../lib/sharedIndex.js';
 import * as shareLinks from '../lib/shareLinks.js';
 import { ignoreRemoteProject } from '../lib/syncClient.js';
+
+const EXPORT_IGNORE = ['build/**', 'versions/**', 'manifest.json', '.git/**', '.quireloop*', '.quireloop*/**'];
 
 export default async function projectsRoutes(app) {
   app.get('/api/templates', { preHandler: requireAuth }, async () => {
@@ -97,7 +100,23 @@ export default async function projectsRoutes(app) {
     reply.header('content-type', 'application/zip');
     reply.header('content-disposition', `attachment; filename="${manifest.name.replace(/[^\w.-]/g, '_')}.zip"`);
     reply.send(archive);
-    archive.glob('**/*', { cwd: dir, ignore: ['build/**', 'versions/**', 'manifest.json', '.git/**', '.quireloop*', '.quireloop*/**'] });
+    archive.glob('**/*', { cwd: dir, ignore: EXPORT_IGNORE });
+    await archive.finalize();
+  });
+
+  // Everything this person can see, in one file: their way out if the server is
+  // ever lost, without needing the admin.
+  app.get('/api/export/all', { preHandler: requireAuth }, async (req, reply) => {
+    const projects = await listProjectsForUser(req.userId);
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    reply.header('content-type', 'application/zip');
+    reply.header('content-disposition', 'attachment; filename="quireloop-papers.zip"');
+    reply.send(archive);
+    const used = new Set();
+    for (const manifest of projects) {
+      const folder = uniqueFolderName(manifest, used);
+      archive.glob('**/*', { cwd: projectDir(manifest.ownerId, manifest.id), ignore: EXPORT_IGNORE }, { prefix: folder });
+    }
     await archive.finalize();
   });
 

@@ -234,6 +234,12 @@ export function maskedAssistantSettings(user) {
     anthropicModel: a.anthropicModel || 'claude-opus-4-8',
     ollamaBaseUrl: a.ollamaBaseUrl || '',
     ollamaModel: a.ollamaModel || '',
+    openaiKeySet: Boolean(a.openaiApiKey),
+    openaiKeyMasked: maskKey(a.openaiApiKey),
+    openaiModel: a.openaiModel || '',
+    geminiKeySet: Boolean(a.geminiApiKey),
+    geminiKeyMasked: maskKey(a.geminiApiKey),
+    geminiModel: a.geminiModel || '',
   };
 }
 

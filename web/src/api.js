@@ -36,7 +36,22 @@ export const linkApi = {
   revokeDevice: (id) => request(`/sync/devices/${id}`, { method: 'DELETE' }),
 };
 
+export const backupApi = {
+  status: () => request('/admin/backup-status'),
+  folder: () => request('/link/backup-folder'),
+  setFolder: (path) => postJson('/link/backup-folder', { path }),
+  copyNow: () => postJson('/link/backup-folder/run'),
+};
+
+export const assistantApi = {
+  models: () => request('/assistant/models'),
+  findOllamaModels: (baseUrl) => postJson('/assistant/ollama-models', { baseUrl }),
+};
+
 export const api = {
+  checkGrammar: (id, text) => postJson(`/projects/${id}/grammar`, { text }),
+  plainText: (id, text) => postJson(`/projects/${id}/plain-text`, { text }),
+  grammarConfig: () => request('/grammar/config'),
   listTemplates: () => request('/templates'),
   listProjects: () => request('/projects'),
   createProject: (name, templateId) =>

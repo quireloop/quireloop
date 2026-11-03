@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { linkApi } from '../api.js';
+import { backupApi, linkApi } from '../api.js';
 
 const STATE_LABEL = {
   online: 'Connected and syncing',
@@ -7,6 +7,70 @@ const STATE_LABEL = {
   error: 'Sync problem',
   'reconnect-needed': 'Needs connecting again',
 };
+
+// Plain files in a folder of the person's choosing. Put it inside their OneDrive
+// or Dropbox folder and those apps carry the copy off this computer.
+function BackupFolder() {
+  const [info, setInfo] = useState(null);
+  const [path, setPath] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    backupApi
+      .folder()
+      .then((next) => {
+        setInfo(next);
+        setPath(next.path);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function run(action) {
+    setError('');
+    try {
+      setInfo(await action());
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  if (!info) return null;
+  return (
+    <form
+      style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => backupApi.setFolder(path.trim()));
+      }}
+    >
+      <strong>Keep a backup copy in a folder</strong>
+      <p style={{ margin: '4px 0', color: 'var(--text-muted)', fontSize: 12 }}>
+        Your papers are copied here as ordinary files every few minutes. Choose a folder inside OneDrive or Dropbox to
+        keep a copy in the cloud too.
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+          placeholder="/home/you/OneDrive/Quireloop backup"
+          style={{ flex: 1, padding: 6 }}
+        />
+        <button type="submit">Save</button>
+        {info.path && (
+          <button type="button" onClick={() => run(backupApi.copyNow)}>
+            Copy now
+          </button>
+        )}
+      </div>
+      {info.lastCopyAt && (
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
+          Last copied {new Date(info.lastCopyAt).toLocaleString()}
+        </div>
+      )}
+      {(error || info.lastError) && <p style={{ color: 'crimson', margin: '6px 0 0' }}>{error || info.lastError}</p>}
+    </form>
+  );
+}
 
 const panelStyle = {
   padding: 12,
@@ -98,6 +162,7 @@ export default function ServerLinkPanel({ onChange }) {
           </p>
         ))}
         {error && <p style={{ color: 'crimson', margin: '8px 0 0' }}>{error}</p>}
+        <BackupFolder />
       </div>
     );
   }
@@ -165,6 +230,7 @@ export default function ServerLinkPanel({ onChange }) {
         )}
       </form>
       {error && <p style={{ color: 'crimson', margin: '8px 0 0' }}>{error}</p>}
+      <BackupFolder />
     </div>
   );
 }

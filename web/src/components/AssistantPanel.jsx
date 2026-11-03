@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { BASE_PATH } from '../basePath.js';
+import { assistantApi } from '../api.js';
+
+const MODEL_STORAGE_KEY = 'quireloop:assistant-model';
+
+// Subscriptions can't be plugged in, but the person's own browser is already
+// signed in to them: the question goes there on the clipboard.
+const SUBSCRIPTION_SITES = [
+  { name: 'ChatGPT', url: 'https://chatgpt.com/' },
+  { name: 'Claude', url: 'https://claude.ai/new' },
+  { name: 'Gemini', url: 'https://gemini.google.com/app' },
+];
 
 // Splits assistant markdown into text and fenced-code segments so code
 // blocks get their own styling and an insert-at-cursor button. Not a full
@@ -68,14 +79,58 @@ function CodeBlock({ segment, onInsert, readOnly }) {
   );
 }
 
+function readSavedModel() {
+  try {
+    return localStorage.getItem(MODEL_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export default function AssistantPanel({ projectId, activePath, editorRef, readOnly, onClose }) {
   // [{role: 'user'|'assistant', content}] — kept per panel session, not persisted.
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [catalog, setCatalog] = useState({ provider: null, models: [] });
+  const [model, setModel] = useState('');
+  const [handedOff, setHandedOff] = useState('');
   const scrollRef = useRef(null);
   const abortRef = useRef(null);
+
+  useEffect(() => {
+    assistantApi
+      .models()
+      .then((next) => {
+        setCatalog(next);
+        const saved = readSavedModel();
+        setModel(next.models.includes(saved) ? saved : next.model || '');
+      })
+      .catch(() => {});
+  }, []);
+
+  function chooseModel(next) {
+    setModel(next);
+    try {
+      localStorage.setItem(MODEL_STORAGE_KEY, next);
+    } catch {
+      // only a convenience; the choice still applies until the panel closes
+    }
+  }
+
+  async function askElsewhere(site) {
+    const selection = editorRef.current?.getSelectedText?.() ?? '';
+    const passage = selection || editorRef.current?.getText?.() || '';
+    const prompt = [input.trim(), passage && `Here is the LaTeX:\n\n${passage}`].filter(Boolean).join('\n\n');
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setHandedOff(`Copied. Paste it into ${site.name} with Ctrl+V.`);
+    } catch {
+      setHandedOff('Your browser blocked copying. Copy the text by hand.');
+    }
+    window.open(site.url, '_blank', 'noopener,noreferrer');
+  }
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -102,7 +157,7 @@ export default function AssistantPanel({ projectId, activePath, editorRef, readO
       const res = await fetch(`${BASE_PATH}/api/projects/${projectId}/assistant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, file: activePath, selection }),
+        body: JSON.stringify({ messages: history, file: activePath, selection, ...(model ? { model } : {}) }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -192,8 +247,32 @@ export default function AssistantPanel({ projectId, activePath, editorRef, readO
           </button>
         </span>
       </div>
+      {catalog.provider && (
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '6px 8px', fontSize: 12, borderBottom: '1px solid var(--border)' }}>
+          Model
+          <select
+            value={model}
+            disabled={busy || catalog.models.length === 0}
+            onChange={(e) => chooseModel(e.target.value)}
+            style={{ flex: 1, minWidth: 0, fontSize: 12 }}
+          >
+            {catalog.models.length === 0 && <option value="">No models found</option>}
+            {catalog.models.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {messages.length === 0 && (
+        {messages.length === 0 && !catalog.provider && (
+          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            No assistant is set up in Quireloop yet. You can add one in Account settings, or use the buttons below with
+            a subscription you already have.
+          </p>
+        )}
+        {messages.length === 0 && catalog.provider && (
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             Ask about your paper — rewrite a paragraph, fix a LaTeX error, draft a table, tighten an abstract. The
             assistant sees the file you have open{readOnly ? '' : ', and code blocks insert at your cursor'}. Select
@@ -231,6 +310,23 @@ export default function AssistantPanel({ projectId, activePath, editorRef, readO
           </div>
         ))}
         {error && <p style={{ fontSize: 12, color: 'var(--error, #c00)' }}>{error}</p>}
+      </div>
+      <div style={{ padding: '6px 8px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+          Use my subscription:
+          {SUBSCRIPTION_SITES.map((site) => (
+            <button
+              key={site.name}
+              type="button"
+              style={{ fontSize: 11, padding: '1px 6px' }}
+              title={`Copy your question and the selected text (or the whole file), then open ${site.name}`}
+              onClick={() => askElsewhere(site)}
+            >
+              {site.name}
+            </button>
+          ))}
+        </div>
+        {handedOff && <div style={{ marginTop: 4 }}>{handedOff}</div>}
       </div>
       <form onSubmit={send} style={{ display: 'flex', gap: 4, padding: 8, borderTop: '1px solid var(--border)' }}>
         <textarea

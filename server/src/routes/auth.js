@@ -18,6 +18,7 @@ import { pamEnabled, authenticate as pamAuthenticate } from '../lib/pam.js';
 import { PAM_EMAIL_DOMAIN } from '../config.js';
 import { createSecret, checkCode, enrollmentDetails } from '../lib/twoFactor.js';
 import { requireAuth } from '../lib/authMiddleware.js';
+import { PROVIDER_IDS, isValidModelId } from './assistant.js';
 import { consumeInvite, isInviteValid } from '../lib/invites.js';
 import { registerFailure, isBlocked, clear } from '../lib/rateLimit.js';
 
@@ -291,14 +292,24 @@ export default async function authRoutes(app) {
   });
 
   app.post('/api/auth/assistant-settings', { preHandler: requireAuth }, async (req, reply) => {
-    const { provider, anthropicApiKey, anthropicModel, ollamaBaseUrl, ollamaModel } = req.body ?? {};
+    const {
+      provider,
+      anthropicApiKey,
+      anthropicModel,
+      ollamaBaseUrl,
+      ollamaModel,
+      openaiApiKey,
+      openaiModel,
+      geminiApiKey,
+      geminiModel,
+    } = req.body ?? {};
     const user = await findUserById(req.userId);
     const current = user.assistant || { provider: null };
     const next = { ...current };
 
     if (provider !== undefined) {
-      if (provider !== null && provider !== 'anthropic' && provider !== 'ollama') {
-        return reply.code(400).send({ error: 'provider must be "anthropic", "ollama", or null' });
+      if (provider !== null && !PROVIDER_IDS.includes(provider)) {
+        return reply.code(400).send({ error: `provider must be one of ${PROVIDER_IDS.join(', ')}, or null` });
       }
       next.provider = provider;
     }
@@ -326,6 +337,21 @@ export default async function authRoutes(app) {
     }
     if (ollamaModel !== undefined) {
       next.ollamaModel = ollamaModel || undefined;
+    }
+    for (const [field, value, check, label] of [
+      ['openaiApiKey', openaiApiKey, /^sk-\S{10,}$/, 'an OpenAI API key (they start with sk-)'],
+      ['geminiApiKey', geminiApiKey, /^\S{20,}$/, 'a Google AI Studio API key'],
+    ]) {
+      if (value === undefined) continue;
+      if (value && !check.test(value)) {
+        return reply.code(400).send({ error: `that does not look like ${label}` });
+      }
+      next[field] = value || undefined;
+    }
+    for (const [field, value] of [['openaiModel', openaiModel], ['geminiModel', geminiModel]]) {
+      if (value === undefined) continue;
+      if (value && !isValidModelId(value)) return reply.code(400).send({ error: 'invalid model id' });
+      next[field] = value || undefined;
     }
 
     await updateUser(req.userId, { assistant: next });

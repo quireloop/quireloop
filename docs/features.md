@@ -73,3 +73,19 @@ The full list of what Quireloop does. For how to use each one, see the
   system's light/dark setting on first visit.
 - **Command search** — Ctrl/Cmd+K finds any command or project file from one
   box.
+
+## Writing help
+
+- **Grammar check** with suggestions you accept with a click, using a private
+  LanguageTool server. LaTeX commands, maths and citations are skipped
+- **Copy text without LaTeX**, for pasting into another writing tool
+- **AI assistant** with a model list read live from Ollama, Anthropic, OpenAI or
+  Google, plus buttons that hand a question to a subscription in a new tab
+
+## Keeping your work safe
+
+- **Server backups every 10 minutes** with hourly, daily and monthly copies, an off-site option,
+  and a warning in the admin panel if they stop
+- **Download all my papers** as one `.zip`
+- **Backup folder** on your own computer that never deletes anything and keeps
+  earlier versions for 30 days

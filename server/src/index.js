@@ -5,7 +5,7 @@ import fastifySecureSession from '@fastify/secure-session';
 import fastifyWebsocket from '@fastify/websocket';
 import fastifyHelmet from '@fastify/helmet';
 import fs from 'node:fs';
-import { PUBLIC_DIR, BASE_PATH } from './config.js';
+import { PUBLIC_DIR, BASE_PATH, SESSION_DAYS } from './config.js';
 import { loadOrCreateSessionKey, migrateUserRoles } from './lib/auth.js';
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
@@ -25,12 +25,15 @@ import chatRoutes from './routes/chat.js';
 import syncRoutes from './routes/sync.js';
 import linkRoutes from './routes/link.js';
 import assistantRoutes from './routes/assistant.js';
+import grammarRoutes from './routes/grammar.js';
 import registerMultipart from './plugins/multipart.js';
 
 // Building the app is separated from starting it so the test suite can drive
 // the real route stack in-process via app.inject(), with no port to bind and
 // no ordering race between server startup and the first request. src/start.js
 // is the entry point that actually listens.
+const SESSION_SECONDS = SESSION_DAYS * 24 * 60 * 60;
+
 export async function buildApp({ logger = true } = {}) {
   const app = Fastify({ logger });
 
@@ -59,6 +62,9 @@ export async function buildApp({ logger = true } = {}) {
   await app.register(fastifyCookie);
   await app.register(fastifySecureSession, {
     key: await loadOrCreateSessionKey(),
+    // The library has its own limit inside the encrypted session, 24 hours
+    // unless set here. It overrides the cookie's maxAge, so both must agree.
+    expiry: SESSION_SECONDS,
     cookie: {
       // Scoped to BASE_PATH when mounted under a subpath (default '/')  so a
       // deployment sharing a domain with sibling apps (e.g. example.org's
@@ -67,7 +73,7 @@ export async function buildApp({ logger = true } = {}) {
       path: BASE_PATH || '/',
       httpOnly: true,
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: SESSION_SECONDS,
       secure: process.env.QUIRELOOP_SECURE_COOKIES === 'true',
     },
   });
@@ -95,6 +101,7 @@ export async function buildApp({ logger = true } = {}) {
     suggestionsRoutes,
     chatRoutes,
     assistantRoutes,
+    grammarRoutes,
     syncRoutes,
     linkRoutes,
   ]) {

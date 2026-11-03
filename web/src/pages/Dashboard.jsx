@@ -1,3 +1,4 @@
+import { BASE_PATH } from '../basePath.js';
 import { useEffect, useRef, useState } from 'react';
 import { api, linkApi } from '../api.js';
 import { confirmDialog } from '../lib/dialog.js';
@@ -261,6 +262,15 @@ export default function Dashboard({ onOpen, user, onLogout, onUserUpdate }) {
           </button>
           <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ fontSize: 13 }}>
             {uploading ? 'Uploading…' : 'Upload Project (.zip)…'}
+          </button>
+          <button
+            onClick={() => {
+              window.location.href = `${BASE_PATH}/api/export/all`;
+            }}
+            title="Download every paper you own or share, as one .zip. Keep it somewhere safe."
+            style={{ fontSize: 13 }}
+          >
+            Download all my papers
           </button>
           <input ref={uploadInputRef} type="file" accept=".zip" onChange={handleUploadZip} style={{ display: 'none' }} />
           {uploadError && <span style={{ color: 'crimson', fontSize: 13 }}>{uploadError}</span>}

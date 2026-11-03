@@ -24,6 +24,11 @@ between them. Papers stay on your machine, with no per-seat subscription.
   for every project
 - **Works with your files:** open a folder in place, import from any git URL,
   or upload a `.zip`
+- **Grammar check** in the editor, run privately on your own server
+- **AI assistant** with a list of available models: your lab's local models or
+  your own API key
+- **Backups:** copies on the server every 10 minutes, and automatic copies on your own
+  computer that can reach OneDrive or Dropbox
 - **Lab accounts:** invitations, roles, two-factor sign-in, or the server's own
   logins
 
@@ -56,7 +61,8 @@ Then open http://localhost:4173. The first account becomes the admin.
 |---|---|
 | [Install on your computer](docs/install-personal.md) | Setup, automatic start, updates |
 | [Install on a server](docs/install-server.md) | Docker, systemd, HTTPS, server logins, backups, settings |
-| [User guide](docs/user-guide.md) | Every feature, from first login to collaboration and offline work |
+| [Admin guide](docs/admin-guide.md) | Running a server: users, AI models, grammar, backups, recovery |
+| [User guide](docs/user-guide.md) | Illustrated quick start, then every feature |
 | [Features](docs/features.md) | The complete feature list |
 | [Where your data lives](docs/data.md) | Project files, git history, backups |
 | [Roadmap](docs/roadmap.md) | What is planned |

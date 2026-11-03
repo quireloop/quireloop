@@ -2,6 +2,7 @@ import { buildApp } from './index.js';
 import { PORT, HOST } from './config.js';
 import { sandboxStatus } from './lib/compileSandbox.js';
 import { startSyncClient, stopSyncClient } from './lib/syncClient.js';
+import { startFolderCopy, stopFolderCopy } from './lib/folderCopy.js';
 
 const app = await buildApp();
 
@@ -15,6 +16,7 @@ else app.log.warn(`compile sandbox: ${sandbox}. LaTeX runs with this server's fu
 // case. (Torn JSON state files are separately prevented by the atomic writes
 // in lib/jsonStore.js.)
 await startSyncClient(app.log);
+await startFolderCopy(app.log);
 
 let shuttingDown = false;
 for (const signal of ['SIGTERM', 'SIGINT']) {
@@ -24,6 +26,7 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
     app.log.info(`${signal} received, shutting down`);
     try {
       stopSyncClient();
+      stopFolderCopy();
       await app.close();
       process.exit(0);
     } catch (err) {

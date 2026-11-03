@@ -1,0 +1,12 @@
+[Unit]
+Description=Back up Quireloop every 10 minutes
+
+[Timer]
+# Every 10 minutes, whether or not anything changed: each run is a full copy
+# that shares unchanged files with the one before, so a quiet run costs little.
+OnCalendar=*:0/10
+# A server that was off backs up as soon as it's back.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

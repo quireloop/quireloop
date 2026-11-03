@@ -10,13 +10,21 @@ class OllamaError extends Error {
   }
 }
 
+export async function listModels(config) {
+  const baseUrl = config.ollamaBaseUrl.replace(/\/+$/, '');
+  const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw new OllamaError(res.status, '');
+  const body = await res.json();
+  return (body.models ?? []).map((m) => m.name).filter(Boolean).sort();
+}
+
 export async function streamChat({ config, system, messages, maxTokens, onDelta, signal }) {
   const baseUrl = config.ollamaBaseUrl.replace(/\/+$/, '');
   const res = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: config.ollamaModel,
+      model: config.model,
       stream: true,
       messages: [{ role: 'system', content: system }, ...messages],
       options: { num_predict: maxTokens },
@@ -63,7 +71,7 @@ export function friendlyError(err, config) {
   }
   if (err instanceof OllamaError) {
     if (err.status === 404) {
-      return `model "${config?.ollamaModel}" isn't pulled on that Ollama server — run "ollama pull ${config?.ollamaModel}" on the host`;
+      return `model "${config?.model}" isn't pulled on that Ollama server — run "ollama pull ${config?.model}" on the host`;
     }
     return `Ollama returned an error (${err.status})`;
   }

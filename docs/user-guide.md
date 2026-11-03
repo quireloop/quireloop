@@ -25,8 +25,55 @@ and come back here.
 16. [Git integration](#git-integration)
 17. [Syncing with a git remote](#syncing-with-a-git-remote)
 18. [Working offline with a server](#working-offline-with-a-server)
-18. [Where your data lives, and backups](#where-your-data-lives-and-backups)
+18. [Keeping your own copy of your work](#keeping-your-own-copy-of-your-work)
 19. [Troubleshooting](#troubleshooting)
+
+---
+
+## Quick start
+
+**1. Sign in** with the address your admin gave you.
+
+![Sign in](images/01-sign-in.png)
+
+Enter your email or server account (1) and your password (2), then press the
+button (3). You stay signed in for 30 days after you last used Quireloop, on
+that browser.
+
+**2. Open or start a paper** from the dashboard.
+
+![The dashboard](images/02-dashboard.png)
+
+1. Name a new project.
+2. Open a paper you already have.
+3. Download every paper as one `.zip`.
+4. Sign out, on a shared computer.
+5. Only on your own computer: link to a server.
+
+**3. Write and compile.**
+
+![The project page](images/03-project.png)
+
+1. Type your LaTeX here. It saves by itself.
+2. **Compile** builds the PDF.
+3. The PDF appears here.
+4. **Menu** holds sharing, downloads and project settings.
+5. **Edit** holds writing tools.
+
+**4. Check your writing.** Turn on the tools in the **Edit** menu.
+
+![The Edit menu](images/04-menu.png)
+
+1. **Grammar check** underlines mistakes in your prose as you pause, skipping
+   commands, maths and citations. It appears when your admin has set it up.
+2. **Copy text without LaTeX** copies clean prose, ready to paste into any
+   grammar app you already pay for.
+3. **Assistant** opens the [AI assistant](#the-ai-writing-assistant).
+
+![A grammar suggestion](images/05-grammar.png)
+
+Point at an underline (1) to read the problem, and press a suggestion (2) to
+accept it. Red is spelling, yellow is grammar.
 
 ---
 
@@ -197,7 +244,7 @@ Four tabs at the top:
 - **Symbol palette** — the **Insert** button opens a categorized palette of
   math symbols, Greek letters, arrows, and operators; click one to insert
   its LaTeX at the cursor.
-- **Spell check** — the **Aa** toggle turns on the browser's native spell
+- **Spell check** — **Edit → Spell check** turns on the browser's native spell
   checker. It's off by default because browsers also underline LaTeX
   commands; it's most useful for prose-heavy passes.
 - **Vim mode** — the **Vim** toggle enables Vim keybindings. Vim's `u` /
@@ -385,47 +432,51 @@ both.
 
 ## The AI writing assistant
 
-Enable it from inside the app: **Admin panel → ✨ Assistant tab**, paste an
-Anthropic API key (from [console.anthropic.com](https://console.anthropic.com/settings/keys)),
-pick a model — it takes effect immediately, no restart, no terminal.
-(Ops-managed servers can set `QUIRELOOP_ANTHROPIC_API_KEY` in the
-environment instead; the env var wins. See [the server guide](install-server.md).)
+Open it from **Edit → ✨ Assistant** in any project.
 
-> **API key, not a Claude subscription.** Claude Pro/Max plans cover
-> claude.ai and Claude Code but do not include API access — the assistant
-> needs a pay-as-you-go API key from the Anthropic console. Typical
-> paper-writing questions cost fractions of a cent to a few cents each.
+![The assistant panel](images/06-assistant.png)
 
-Once a key is set, a **✨ Assistant** button appears in the editor toolbar.
-It opens a Claude-powered side panel that helps you write the paper you
-have open:
+1. **Model:** choose which model answers. The list shows what is really
+   available, so you never need to know a model's name.
+2. **Ask** here. It sees the file you have open. Select text first to ask about
+   one passage.
+3. **Insert** puts a suggested passage at your cursor.
+4. **Use my subscription:** see below.
 
-- **It sees your open file** — ask "why doesn't this compile?", "tighten my
-  abstract", "turn this list into a table", or "rewrite this paragraph in a
-  more formal register" without pasting anything.
-- **Select text first** to ask about a specific passage — the selection is
-  sent along with your question.
-- **Code blocks are one-click**: any LaTeX the assistant produces appears in
-  a code block with **Copy** and **Insert** buttons; Insert drops it at your
-  cursor (and plays nicely with track changes — insert while Suggest mode is
-  on and it becomes a reviewable suggestion).
-- **Stop** cancels a response mid-stream; **Clear** starts a fresh
-  conversation. Conversations are per-panel-session and are not stored on
-  the server.
+The assistant never changes your paper by itself. Nothing is added until you
+press **Insert**, and Ctrl+Z takes it back. It reads the file as last saved,
+so a line typed a moment ago may be missing.
 
-Everyone with access to the project can use it, including viewers (they just
-don't get the Insert button). The assistant reads the file as saved on disk —
-in a live collaboration it may lag your unsynced keystrokes by a second or
-two.
+### Choosing where answers come from
 
-> **Costs**: assistant usage is billed to the server's API key. Be
-> reasonable; your admin can see the aggregate usage in the Anthropic
-> console.
+Open your email address at the top of the dashboard and scroll to **AI
+Assistant**.
 
-> **It never edits on its own.** The assistant only produces text in the
-> panel — nothing touches your document until you click Insert.
+![Choosing an assistant](images/07-ai-settings.png)
 
----
+1. Choose one option. **Local models on a server** is free, and your text stays
+   on that server.
+2. **Find models on this server** lists what is installed. If your admin has set
+   up shared local models, you can skip this page.
+3. Choose a model, then press **Save**.
+
+The other options are pay-as-you-go API keys from Anthropic, OpenAI or Google.
+Only you can use your key, and it is never shown in full again.
+
+### Using a ChatGPT, Claude or Gemini subscription
+
+A subscription can't be connected to Quireloop. Those companies keep
+subscriptions to their own apps, and an API key is a separate product. Quireloop
+uses your subscription the other way round:
+
+1. Type your question in the assistant box, and select a passage if you like.
+2. Press **ChatGPT**, **Claude** or **Gemini** under **Use my subscription**.
+3. Your question and the text are copied, and that site opens in a new tab.
+   Paste with Ctrl+V (Cmd+V on a Mac).
+
+With nothing selected, the whole file is copied. This sends your text to that
+company, under your own account's terms, so think before doing it with
+unpublished work.
 
 ## Version history
 
@@ -547,21 +598,37 @@ deletes nothing and brings the files back.
 
 ---
 
-## Where your data lives, and backups
+## Keeping your own copy of your work
 
-Everything — accounts, invites, projects, version snapshots, git history —
-lives in one directory on the server (`QUIRELOOP_DATA_DIR`, `/data` in the
-Docker image). **Backing up Quireloop = backing up that one directory.**
-See [the server guide](install-server.md) for the backup/restore and upgrade
-procedures.
+The server is backed up, but keep a copy of your own as well. If the server is
+ever lost, hacked or down, this is what lets you carry on.
 
-As a user, your personal escape hatches are:
+**Any time, from any browser:** press **Download all my papers** on the
+dashboard. You get one `.zip` of every paper you own or share. Comments, chat
+and version history are not included.
 
-- **Download .zip** on the dashboard — the complete current source of any
-  project you can access.
-- **Git push** to a remote you control — full history, standard format.
+**Automatically, on your laptop:** install Quireloop on your computer, link it
+to the server ([Working offline with a server](#working-offline-with-a-server)),
+then fill in **Keep a backup copy in a folder**.
 
----
+![Backup folder](images/08-backup-folder.png)
+
+1. This box is on the dashboard of Quireloop on your own computer.
+2. Enter a folder. To reach the cloud as well, choose one inside the OneDrive or
+   Dropbox folder on your computer. Their apps then upload it for you.
+3. Press **Save**. Your papers are copied at once, then every five minutes
+   while Quireloop is running.
+
+The folder holds ordinary files you can open without Quireloop. Nothing in it is
+ever deleted, so a mistake or an attack on the server can't empty it. When a file
+changes, the earlier version moves to `_older-versions/<date>/` for 30 days.
+Files over 100 MB are skipped.
+
+To get back to work after losing the server, compile from those files with any
+LaTeX install, or upload the `.zip` to a new Quireloop with **Upload Project**.
+
+For how the server's own backups work, see the
+[admin guide](admin-guide.md#backups).
 
 ## Troubleshooting
 

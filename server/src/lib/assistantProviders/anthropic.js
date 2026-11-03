@@ -2,10 +2,16 @@ import Anthropic from '@anthropic-ai/sdk';
 
 // System prompt is tagged ephemeral-cacheable and kept byte-stable by the
 // caller (assistant.js) so Anthropic's prompt caching holds across requests.
+export async function listModels(config) {
+  const client = new Anthropic({ apiKey: config.anthropicApiKey, timeout: 5000 });
+  const page = await client.models.list({ limit: 50 });
+  return page.data.map((m) => m.id);
+}
+
 export async function streamChat({ config, system, messages, maxTokens, onDelta, signal }) {
   const client = new Anthropic({ apiKey: config.anthropicApiKey });
   const stream = client.messages.stream({
-    model: config.anthropicModel,
+    model: config.model,
     max_tokens: maxTokens,
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     messages,

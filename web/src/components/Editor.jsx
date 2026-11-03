@@ -4,6 +4,7 @@ import { EditorState, StateField, StateEffect, Compartment, Transaction, EditorS
 import { defaultKeymap } from '@codemirror/commands';
 import { defaultHighlightStyle, syntaxHighlighting, foldGutter, foldKeymap, HighlightStyle } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
+import { linter, lintGutter } from '@codemirror/lint';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { tags as t } from '@lezer/highlight';
 import { latex, latexCompletionSource, autocompletion, completionKeymap } from 'codemirror-lang-latex';
@@ -13,6 +14,7 @@ import { IndexeddbPersistence } from 'y-indexeddb';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import { vim, CodeMirror as VimCodeMirror } from '@replit/codemirror-vim';
 import { BASE_PATH } from '../basePath.js';
+import { api } from '../api.js';
 import { syncFlashField, revealSyncTarget, latexHoverPreviews, editorExtrasTheme } from '../lib/editorExtras.js';
 
 // @replit/codemirror-vim's normal-mode 'u' / Ctrl-r drive its own internal
@@ -315,6 +317,39 @@ const diagnosticGutter = gutter({
 // attributes ask for it. Off by default: it happily underlines LaTeX
 // commands and math as "misspelled" too, which is noisy enough that it
 // needs to be an opt-in toggle rather than always-on.
+// Checks when typing pauses. Works on a copy of the text at that moment, and
+// CodeMirror drops the answer if the document has moved on since.
+function grammarExtension(projectId) {
+  return [
+    lintGutter(),
+    linter(
+      async (view) => {
+        const text = view.state.doc.toString();
+        if (!text.trim()) return [];
+        let matches;
+        try {
+          ({ matches } = await api.checkGrammar(projectId, text));
+        } catch {
+          return [];
+        }
+        return matches
+          .filter((m) => m.to <= view.state.doc.length)
+          .map((m) => ({
+            from: m.from,
+            to: m.to,
+            severity: m.kind === 'spelling' ? 'error' : 'warning',
+            message: m.message,
+            actions: m.replacements.map((replacement) => ({
+              name: replacement,
+              apply: (v, from, to) => v.dispatch({ changes: { from, to, insert: replacement } }),
+            })),
+          }));
+      },
+      { delay: 2500 },
+    ),
+  ];
+}
+
 function spellcheckAttrs(enabled) {
   return enabled
     ? { spellcheck: 'true', autocorrect: 'off', autocapitalize: 'off' }
@@ -390,6 +425,7 @@ const Editor = forwardRef(function Editor(
     user,
     readOnly,
     spellcheck,
+    grammar,
     vimMode,
     suggestMode,
     onChange,
@@ -408,6 +444,7 @@ const Editor = forwardRef(function Editor(
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const spellcheckCompartmentRef = useRef(null);
+  const grammarCompartmentRef = useRef(null);
   const suggestModeCompartmentRef = useRef(null);
   const pendingSuggestionsRef = useRef([]);
   const onChangeRef = useRef(onChange);
@@ -524,6 +561,14 @@ const Editor = forwardRef(function Editor(
         });
       }
     },
+    setGrammar: (enabled) => {
+      const view = viewRef.current;
+      const compartment = grammarCompartmentRef.current;
+      if (view && compartment) {
+        view.dispatch({ effects: compartment.reconfigure(enabled ? grammarExtension(projectId) : []) });
+      }
+    },
+    getText: () => viewRef.current?.state.doc.toString() ?? '',
   }));
 
   useEffect(() => {
@@ -562,6 +607,7 @@ const Editor = forwardRef(function Editor(
     ytext.observe(reportChange);
 
     spellcheckCompartmentRef.current = new Compartment();
+    grammarCompartmentRef.current = new Compartment();
     suggestModeCompartmentRef.current = new Compartment();
     pendingSuggestionsRef.current = [];
 
@@ -579,6 +625,7 @@ const Editor = forwardRef(function Editor(
         EditorView.lineWrapping,
         yCollab(ytext, provider.awareness),
         spellcheckCompartmentRef.current.of(EditorView.contentAttributes.of(spellcheckAttrs(spellcheck))),
+        grammarCompartmentRef.current.of(grammar ? grammarExtension(projectId) : []),
         suggestModeCompartmentRef.current.of(suggestMode ? suggestModeFilter(pendingSuggestionsRef) : []),
         // enableAutocomplete disabled here so we can fold in our own
         // \cite{} source alongside the built-in command/environment

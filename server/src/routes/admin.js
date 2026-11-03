@@ -5,6 +5,8 @@ import { homeForUser } from '../lib/library.js';
 import { createInvite, listInvites, revokeInvite } from '../lib/invites.js';
 import { requireAdmin } from '../lib/authMiddleware.js';
 import { getSettings, updateSettings } from '../lib/settings.js';
+import { readJson } from '../lib/jsonStore.js';
+import { DATA_DIR } from '../config.js';
 import { DEFAULT_ASSISTANT_MODEL } from './assistant.js';
 
 // The API key is a secret — never echo it back in full. The masked form is
@@ -13,6 +15,9 @@ function maskKey(key) {
   if (!key) return null;
   return key.length > 8 ? `${key.slice(0, 7)}…${key.slice(-4)}` : '••••';
 }
+
+// The timer runs every 10 minutes, so an hour is six missed runs.
+const BACKUP_STALE_MS = 60 * 60 * 1000;
 
 export default async function adminRoutes(app) {
   app.get('/api/admin/settings', { preHandler: requireAdmin }, async () => {
@@ -61,6 +66,14 @@ export default async function adminRoutes(app) {
     }
     await updateSettings(patch);
     return { ok: true };
+  });
+
+  // Written by scripts/quireloop-backup.sh after each finished run. The age is
+  // judged here, so a job that silently stopped still shows up as a warning.
+  app.get('/api/admin/backup-status', { preHandler: requireAdmin }, async () => {
+    const status = await readJson(path.join(DATA_DIR, 'backup-status.json'), {});
+    const age = status.lastRun ? Date.now() - new Date(status.lastRun).getTime() : Infinity;
+    return { ...status, stale: age > BACKUP_STALE_MS };
   });
 
   app.get('/api/admin/users', { preHandler: requireAdmin }, async () => {

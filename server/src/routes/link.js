@@ -2,6 +2,7 @@ import { requireAdmin } from '../lib/authMiddleware.js';
 import { readManifest } from '../lib/manifest.js';
 import * as projectIndex from '../lib/projectIndex.js';
 import * as syncClient from '../lib/syncClient.js';
+import * as folderCopy from '../lib/folderCopy.js';
 import { normalizeServerUrl, probeServer, request } from '../lib/syncTransport.js';
 
 // The local side of linking this computer to a server, used by this computer's
@@ -98,6 +99,21 @@ export default async function linkRoutes(app) {
   app.post('/api/link/sync-now', { preHandler: requireAdmin }, async () => {
     await syncClient.syncOnce();
     return syncClient.getStatus();
+  });
+
+  app.get('/api/link/backup-folder', { preHandler: requireAdmin }, async () => folderCopy.getStatus());
+
+  app.post('/api/link/backup-folder', { preHandler: requireAdmin }, async (req, reply) => {
+    try {
+      return await folderCopy.setFolder(req.body?.path);
+    } catch (err) {
+      return reply.code(400).send({ error: err.message });
+    }
+  });
+
+  app.post('/api/link/backup-folder/run', { preHandler: requireAdmin }, async () => {
+    await folderCopy.copyOnce();
+    return folderCopy.getStatus();
   });
 
   app.post('/api/link/publish/:id', { preHandler: requireAdmin }, async (req, reply) => {

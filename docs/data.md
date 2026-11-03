@@ -23,9 +23,8 @@ paper goes with it, never Quireloop's internals or your token.
 
 `data/` also holds the plain-JSON account/session state (`users.json`,
 `invites.json`, the session-signing key) alongside `data/projects/`. There
-is no database anywhere. Back up `data/` however you like — Time Machine,
-syncing it to another drive, or (for the project files specifically)
-pushing each project to its own remote. Deleting this repo's folder
+is no database anywhere. See [Backups](admin-guide.md#backups) for a 10-minute
+copy, or back up `data/` however you like. Deleting this repo's folder
 deletes everything in it, `data/` included, so keep that backup separate
 from your clone of this repo.
 
