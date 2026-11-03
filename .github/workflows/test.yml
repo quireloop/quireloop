@@ -22,13 +22,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # A small TeX Live with latexmk, so the compile and SyncTeX tests run
-      # rather than skip. Its Windows build carries the Perl latexmk needs.
-      - uses: teatimeguest/setup-texlive-action@v3
-        with:
-          packages: |
-            scheme-basic
-            latexmk
+      # LaTeX, so the compile and SyncTeX tests run rather than skip. macOS
+      # goes without: a Mac install takes longest, and the compile tests skip
+      # themselves when latexmk is missing.
+      - name: Install LaTeX (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends latexmk texlive-latex-base texlive-latex-recommended
+      # MiKTeX fetches packages on first use once AutoInstall is on; its
+      # latexmk needs Perl, which the Windows runner already has.
+      - name: Install LaTeX (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install miktex --no-progress -y
+          $bin = "C:\Program Files\MiKTeX\miktex\bin\x64"
+          & "$bin\initexmf.exe" --admin --set-config-value "[MPM]AutoInstall=1"
+          & "$bin\miktex.exe" --admin packages update-package-database
+          Add-Content $env:GITHUB_PATH $bin
       - run: npm ci
       - run: npm run build --workspace=web
       - run: npm test
