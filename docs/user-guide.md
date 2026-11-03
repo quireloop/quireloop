@@ -338,10 +338,13 @@ email.
 
 The **Share** button (project owner only) opens the sharing modal.
 
-### Inviting by email
+### Adding people
 
-Enter the email of another account **on the same server**, pick a role, and
-add them:
+**Add people** lists every other account on the server, so you don't need to
+know anyone's username or email first. Tick the people to add, pick a role
+next to each one, and press **Share with N people**. With more than a few
+accounts, a search box narrows the list. Disabled accounts and people who
+already have access are not listed.
 
 - **Editor** — can open, edit, compile, comment, chat, and suggest.
 - **Viewer** — read-only: can open the project, read the source, view the
@@ -352,16 +355,19 @@ add them:
 You can change a collaborator's role or remove them at any time from the
 same modal. Only the owner can delete the project or manage sharing.
 
+Anyone who owns a project can see the list of accounts on the server: their
+usernames, or email addresses for accounts made by signing up.
+
 ### Share links
 
 Also in the Share modal: create a **share link** with a role (editor or
 viewer). Anyone with an account on the server who opens the link joins the
-project at that role — handy for adding a whole group without typing each
-email. Links can be revoked at any time; joining is idempotent (opening the
+project at that role — handy for someone who has no account yet: they sign
+up, then open the link. Links can be revoked at any time; joining is idempotent (opening the
 link twice doesn't duplicate or downgrade anyone).
 
 > Share links grant access to anyone on the server who has the URL. For
-> sensitive projects, prefer per-email invites.
+> sensitive projects, prefer adding people from the list.
 
 ---
 

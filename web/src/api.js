@@ -103,6 +103,13 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email, role }),
     }),
+  shareWithMembers: (id, members) =>
+    request(`/projects/${id}/share`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ members }),
+    }),
+  shareableUsers: (id) => request(`/projects/${id}/shareable-users`),
   unshareProject: (id, userId) =>
     request(`/projects/${id}/unshare`, {
       method: 'POST',

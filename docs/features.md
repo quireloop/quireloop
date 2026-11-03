@@ -16,8 +16,9 @@ The full list of what Quireloop does. For how to use each one, see the
 - **Real-time collaboration** — multiple people editing the same file at
   once (Yjs CRDT), with each collaborator's cursor and attribution visible
   live, backed by server-side persistence so edits survive a restart.
-- **Roles & sharing** — collaborators are `editor` or `viewer` per project;
-  revocable, tokenized share links carry a role with them.
+- **Roles & sharing** — collaborators are `editor` or `viewer` per project,
+  picked from a list of the server's accounts; revocable, tokenized share
+  links carry a role with them.
 - **Comments & chat** — comments anchored to text ranges (survive
   concurrent edits), threaded and resolvable; a project chat sidebar
   alongside the editor.
