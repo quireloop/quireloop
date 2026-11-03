@@ -76,7 +76,8 @@ test('both directions resolve for a project opened in place from a server folder
     y: box.v - Math.max(1, box.H / 2),
   });
   assert.equal(back.statusCode, 200, back.body);
-  assert.equal(back.json().file, path.join('sec', 'intro.tex'));
+  // The editor names files with forward slashes on every system.
+  assert.equal(back.json().file, 'sec/intro.tex');
   assert.equal(back.json().line, 1);
 });
 
