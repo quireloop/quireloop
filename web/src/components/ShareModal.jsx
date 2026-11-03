@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { BASE_PATH } from '../basePath.js';
 
 function roleOf(c) {
   return c.role === 'viewer' ? 'viewer' : 'editor';
 }
 
 export default function ShareModal({ manifest, isOwner, onClose, onUpdated }) {
-  const [email, setEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('editor');
+  const [people, setPeople] = useState([]);
+  const [filter, setFilter] = useState('');
+  // userId -> role, for the people ticked but not yet shared with.
+  const [picked, setPicked] = useState({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -23,17 +26,38 @@ export default function ShareModal({ manifest, isOwner, onClose, onUpdated }) {
       .listShareLinks(manifest.id)
       .then(setLinks)
       .catch(() => {});
+    api
+      .shareableUsers(manifest.id)
+      .then(setPeople)
+      .catch((err) => setError(err.message));
   }, [isOwner, manifest.id]);
 
-  async function handleAdd(e) {
-    e.preventDefault();
-    if (!email.trim()) return;
+  const sharedIds = new Set((manifest.collaborators ?? []).map((c) => c.userId));
+  const query = filter.trim().toLowerCase();
+  const candidates = people.filter(
+    (p) => !sharedIds.has(p.id) && (!query || p.name.toLowerCase().includes(query) || p.email.toLowerCase().includes(query))
+  );
+  const pickedCount = Object.keys(picked).length;
+
+  function togglePick(userId) {
+    setPicked((current) => {
+      const next = { ...current };
+      if (next[userId]) delete next[userId];
+      else next[userId] = 'editor';
+      return next;
+    });
+  }
+
+  async function handleShare() {
+    if (pickedCount === 0) return;
     setError('');
     setBusy(true);
     try {
-      const updated = await api.shareProject(manifest.id, email.trim(), inviteRole);
+      const members = Object.entries(picked).map(([userId, role]) => ({ userId, role }));
+      const updated = await api.shareWithMembers(manifest.id, members);
       onUpdated(updated);
-      setEmail('');
+      setPicked({});
+      setFilter('');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -94,7 +118,8 @@ export default function ShareModal({ manifest, isOwner, onClose, onUpdated }) {
   }
 
   function linkUrl(token) {
-    return `${window.location.origin}/?join=${token}`;
+    // BASE_PATH: a server mounted under a subpath serves the app there, not at /.
+    return `${window.location.origin}${BASE_PATH}/?join=${token}`;
   }
 
   async function copyLink(token) {
@@ -132,22 +157,69 @@ export default function ShareModal({ manifest, isOwner, onClose, onUpdated }) {
       </div>
 
       {isOwner && (
-        <form onSubmit={handleAdd} style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Collaborator's email"
-            type="email"
-            style={{ flex: 1, padding: 6, fontSize: 13, minWidth: 0 }}
-          />
-          <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} style={{ fontSize: 13 }}>
-            <option value="editor">Editor</option>
-            <option value="viewer">Viewer</option>
-          </select>
-          <button type="submit" disabled={busy} style={{ fontSize: 13, padding: '6px 10px' }}>
-            Add
+        <div style={{ marginBottom: 10 }}>
+          <strong style={{ fontSize: 13 }}>Add people</strong>
+          {people.length > 6 && (
+            <input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Search by name or email"
+              aria-label="Search people"
+              style={{ width: '100%', boxSizing: 'border-box', padding: 6, fontSize: 13, marginTop: 6 }}
+            />
+          )}
+          <div
+            style={{
+              display: 'grid',
+              gap: 2,
+              marginTop: 6,
+              maxHeight: 180,
+              overflowY: 'auto',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: 4,
+            }}
+          >
+            {candidates.length === 0 && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 4 }}>
+                {people.length === 0
+                  ? 'No one else has an account on this server yet. Send them a share link instead.'
+                  : query
+                    ? 'No one matches that search.'
+                    : 'Everyone on this server already has access.'}
+              </p>
+            )}
+            {candidates.map((p) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '2px 4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={Boolean(picked[p.id])} onChange={() => togglePick(p.id)} disabled={busy} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.email}>
+                    {p.name}
+                  </span>
+                </label>
+                {picked[p.id] && (
+                  <select
+                    value={picked[p.id]}
+                    onChange={(e) => setPicked((current) => ({ ...current, [p.id]: e.target.value }))}
+                    disabled={busy}
+                    aria-label={`Role for ${p.name}`}
+                    style={{ fontSize: 12, flexShrink: 0 }}
+                  >
+                    <option value="editor">Editor</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={handleShare}
+            disabled={busy || pickedCount === 0}
+            style={{ fontSize: 13, padding: '6px 10px', marginTop: 6, width: '100%' }}
+          >
+            {pickedCount === 0 ? 'Tick the people to share with' : `Share with ${pickedCount} ${pickedCount === 1 ? 'person' : 'people'}`}
           </button>
-        </form>
+        </div>
       )}
 
       {error && <p style={{ color: 'crimson', fontSize: 13, margin: '0 0 8px' }}>{error}</p>}
@@ -186,6 +258,9 @@ export default function ShareModal({ manifest, isOwner, onClose, onUpdated }) {
       {isOwner && (
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
           <strong style={{ fontSize: 13 }}>Share link</strong>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+            Anyone with an account who opens the link joins with the role you pick.
+          </p>
           <div style={{ display: 'flex', gap: 6, marginTop: 6, marginBottom: 8 }}>
             <select value={linkRole} onChange={(e) => setLinkRole(e.target.value)} style={{ fontSize: 13, flex: 1 }}>
               <option value="editor">Editor</option>

@@ -19,7 +19,7 @@ import {
   requireProjectWrite,
   resolveRole,
 } from '../lib/authMiddleware.js';
-import { findUserByEmail, findUserById } from '../lib/auth.js';
+import { findUserByEmail, findUserById, listUsers } from '../lib/auth.js';
 import * as sharedIndex from '../lib/sharedIndex.js';
 import * as shareLinks from '../lib/shareLinks.js';
 import { ignoreRemoteProject } from '../lib/syncClient.js';
@@ -120,29 +120,56 @@ export default async function projectsRoutes(app) {
     await archive.finalize();
   });
 
+  // The other accounts on this server, so an owner can pick people to share
+  // with instead of having to be told their username or email first.
+  // Disabled accounts are left out: sharing with one would grant nothing.
+  app.get('/api/projects/:id/shareable-users', { preHandler: requireProjectOwner }, async (req) => {
+    const users = await listUsers();
+    return users
+      .filter((u) => u.id !== req.ownerId && !u.disabled)
+      .map((u) => ({ id: u.id, name: u.unixUser || u.email, email: u.email }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  // Shares with several people at once, picked from the list above
+  // ({ members: [{ userId, role }] }), or with one person by email
+  // ({ email, role }). Already sharing with someone changes nothing; their
+  // role is changed through the role route instead.
   app.post('/api/projects/:id/share', { preHandler: requireProjectOwner }, async (req, reply) => {
-    const { email, role } = req.body ?? {};
-    if (!email || typeof email !== 'string') {
-      return reply.code(400).send({ error: 'email is required' });
+    const { email, role, members } = req.body ?? {};
+    let picks;
+    if (Array.isArray(members)) {
+      if (members.length === 0 || members.length > 200) {
+        return reply.code(400).send({ error: 'pick between 1 and 200 people' });
+      }
+      picks = [];
+      for (const member of members) {
+        const user = typeof member?.userId === 'string' ? await findUserById(member.userId) : null;
+        if (!user || user.disabled) return reply.code(404).send({ error: 'one of those accounts no longer exists' });
+        picks.push({ user, role: member.role });
+      }
+    } else if (email && typeof email === 'string') {
+      const user = await findUserByEmail(email.trim());
+      if (!user) return reply.code(404).send({ error: 'no account with that email' });
+      picks = [{ user, role }];
+    } else {
+      return reply.code(400).send({ error: 'email or members is required' });
     }
-    const user = await findUserByEmail(email.trim());
-    if (!user) return reply.code(404).send({ error: 'no account with that email' });
-    if (user.id === req.userId) {
+    if (picks.some(({ user }) => user.id === req.userId)) {
       return reply.code(400).send({ error: "can't share a project with yourself" });
     }
 
+    const added = [];
     const manifest = await updateManifest(req.ownerId, req.params.id, (current) => {
-      const collaborators = current.collaborators ?? [];
-      if (collaborators.some((c) => c.userId === user.id)) return current;
-      return {
-        ...current,
-        collaborators: [
-          ...collaborators,
-          { userId: user.id, email: user.email, role: role === 'viewer' ? 'viewer' : 'editor' },
-        ],
-      };
+      const collaborators = [...(current.collaborators ?? [])];
+      for (const { user, role: pickedRole } of picks) {
+        if (collaborators.some((c) => c.userId === user.id)) continue;
+        collaborators.push({ userId: user.id, email: user.email, role: pickedRole === 'viewer' ? 'viewer' : 'editor' });
+        added.push(user.id);
+      }
+      return added.length ? { ...current, collaborators } : current;
     });
-    await sharedIndex.addShare(user.id, req.params.id, req.ownerId);
+    for (const userId of added) await sharedIndex.addShare(userId, req.params.id, req.ownerId);
     return manifest;
   });
 
