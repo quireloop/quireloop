@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import { nanoid } from 'nanoid';
 import { USERS_FILE, SESSION_KEY_FILE } from '../config.js';
@@ -274,7 +275,7 @@ export async function loadOrCreateSessionKey() {
     return await fs.readFile(SESSION_KEY_FILE);
   } catch {
     const key = crypto.randomBytes(32);
-    await fs.mkdir(SESSION_KEY_FILE.replace(/\/[^/]+$/, ''), { recursive: true });
+    await fs.mkdir(path.dirname(SESSION_KEY_FILE), { recursive: true });
     await fs.writeFile(SESSION_KEY_FILE, key, { mode: 0o600 });
     return key;
   }
