@@ -20,7 +20,7 @@ import { listUsers, updateUser } from './auth.js';
 // inside a root that points at /etc.
 
 function expand(spec, user) {
-  const withHome = spec.startsWith('~/') ? path.join(os.homedir(), spec.slice(2)) : spec;
+  const withHome = /^~[\\/]/.test(spec) ? path.join(os.homedir(), spec.slice(2)) : spec;
   return withHome
     .replaceAll('{userId}', user.id)
     // Emails contain characters that are legal in a path but awkward in one;

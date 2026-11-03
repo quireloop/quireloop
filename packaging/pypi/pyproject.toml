@@ -20,6 +20,7 @@ classifiers = [
   "Intended Audience :: Science/Research",
   "License :: Other/Proprietary License",
   "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
   "Operating System :: POSIX :: Linux",
   "Topic :: Text Editors",
   "Topic :: Text Processing :: Markup :: LaTeX",

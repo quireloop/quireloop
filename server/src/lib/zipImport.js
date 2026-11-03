@@ -12,7 +12,7 @@ const UNZIP_TIMEOUT_MS = 60_000;
 // inside one top-level folder. If that's all we find at the root, treat
 // that folder's contents as the project root instead of nesting the whole
 // project one level deeper than expected.
-// Belt-and-suspenders on top of the system `unzip` binary's own zip-slip
+// Belt-and-suspenders on top of the extractor's own zip-slip
 // protection: walk the extracted tree and confirm nothing symlinks or
 // resolves outside the project directory before we treat it as real content.
 async function assertExtractionContained(dir) {
@@ -28,6 +28,17 @@ async function assertExtractionContained(dir) {
     }
   }
   await walk(base);
+}
+
+// Windows has no unzip, but 10 and later ship bsdtar, which reads zip files
+// and refuses entries naming ".." or an absolute path. Named by full path:
+// the tar that comes with Git for Windows comes first on PATH and can't.
+function unzipCommand(zip, dir) {
+  if (process.platform === 'win32') {
+    const tar = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+    return [tar, ['-xf', zip, '-C', dir]];
+  }
+  return ['unzip', ['-q', '-o', zip, '-d', dir]];
 }
 
 async function flattenSingleWrapperFolder(dir) {
@@ -49,7 +60,8 @@ export async function importFromZip(ownerId, name, buffer) {
   await fs.writeFile(tmpZip, buffer);
 
   try {
-    await execa('unzip', ['-q', '-o', tmpZip, '-d', dir], { timeout: UNZIP_TIMEOUT_MS });
+    const [file, args] = unzipCommand(tmpZip, dir);
+    await execa(file, args, { timeout: UNZIP_TIMEOUT_MS });
     await assertExtractionContained(dir);
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });

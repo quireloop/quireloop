@@ -1,0 +1,46 @@
+# Runs the tests on the three systems a personal install supports. The server
+# itself runs on Ubuntu; Windows and macOS are checked as local installs.
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # A small TeX Live with latexmk, so the compile and SyncTeX tests run
+      # rather than skip. Its Windows build carries the Perl latexmk needs.
+      - uses: teatimeguest/setup-texlive-action@v3
+        with:
+          packages: |
+            scheme-basic
+            latexmk
+      - run: npm ci
+      - run: npm run build --workspace=web
+      - run: npm test
+        working-directory: server
+      - name: Start the server and load the page
+        shell: bash
+        run: |
+          cd server
+          QUIRELOOP_DATA_DIR="$RUNNER_TEMP/ql-data" node src/start.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:4173/ > /dev/null && { echo "server is up"; exit 0; }
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/server.log"
+          exit 1

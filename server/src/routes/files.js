@@ -95,7 +95,8 @@ export default async function filesRoutes(app) {
     const data = await req.file();
     if (!data) return reply.code(400).send({ error: 'no file uploaded' });
 
-    const relPath = path.join('figures', data.filename);
+    // posix: the path is stored and shown with forward slashes on every system.
+    const relPath = path.posix.join('figures', data.filename);
     const filePath = await resolveUserPath(req.ownerId, req.params.id, relPath);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     const buffer = await data.toBuffer();

@@ -33,6 +33,9 @@ DEST=${BACKUP_DIR%/}
 
 fail() { echo "backup failed: $*" >&2; exit 1; }
 
+# Written for the Linux server: GNU stat, find and date, flock, and bash 4.
+[ "$(uname)" = Linux ] || fail "this script runs on the Linux server only; on your own computer, copy the data folder with your usual backup tool"
+
 [ -f "$DATA/users.json" ] || [ -d "$DATA/projects" ] || fail "$DATA does not look like Quireloop data"
 # An unmounted disk leaves an empty folder behind, and writing there would fill
 # the system disk while looking like success.

@@ -24,7 +24,7 @@ if [[ -z "$NODE_BIN" ]]; then
   exit 1
 fi
 
-if [[ ! -d "$SERVER_DIR/node_modules" ]]; then
+if [[ ! -d "$REPO_ROOT/node_modules" ]]; then
   echo "Dependencies aren't installed yet — run 'npm install' from the repo root first." >&2
   exit 1
 fi
@@ -77,7 +77,7 @@ launchctl unload "$PLIST_PATH" 2>/dev/null || true
 launchctl load -w "$PLIST_PATH"
 
 sleep 1
-if curl -sf "http://localhost:$PORT/api/projects" >/dev/null 2>&1; then
+if curl -sf "http://localhost:$PORT/" >/dev/null 2>&1; then
   echo "Quireloop is running in the background and will start automatically at login."
   echo "Open http://localhost:$PORT"
 else

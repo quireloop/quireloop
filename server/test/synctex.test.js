@@ -140,13 +140,34 @@ test('synctex view output is parsed into de-duplicated boxes', () => {
   assert.deepEqual(boxes[1], { page: 2, x: 90, y: 100, h: 90, v: 100, W: 200, H: 7 });
 });
 
-test('a compile cannot read outside its project or run a project .latexmkrc', { skip }, async () => {
-  const secret = path.join(libraryRoot, 'secret.txt');
+const { sandboxAvailable } = await import('../src/lib/compileSandbox.js');
+const sandboxSkip = skip || (!(await sandboxAvailable()) && 'bubblewrap cannot run here');
+
+test('a project .latexmkrc never runs', { skip }, async () => {
   const ran = path.join(libraryRoot, 'rc-ran');
+  const paper = path.join(libraryRoot, 'with-rc');
+  await fs.mkdir(paper);
+  await fs.writeFile(path.join(paper, '.latexmkrc'), `system("touch ${ran}");\n`);
+  await fs.writeFile(path.join(paper, 'main.tex'), '\\documentclass{article}\n\\begin{document}\nBody.\n\\end{document}\n');
+
+  const { app } = await getTestApp();
+  const { cookie } = await signup(app, 'latexmkrc@example.com');
+  const opened = await post(app, cookie, '/api/projects/open-folder', { path: paper, name: 'With rc' });
+  assert.equal(opened.statusCode, 201, opened.body);
+  await compile(app, cookie, opened.json().id);
+
+  await fs.access(path.join(paper, 'build', 'main.pdf'));
+  await assert.rejects(fs.access(ran), 'the project .latexmkrc must not run');
+});
+
+// Only the sandbox keeps a compile from reading outside its project: since
+// TeX Live 2026, openin_any is ignored, so without bubblewrap TeX reads any
+// file the server can.
+test('a compile cannot read outside its project', { skip: sandboxSkip }, async () => {
+  const secret = path.join(libraryRoot, 'secret.txt');
   await fs.writeFile(secret, 'OUTSIDE-THE-PROJECT\n');
   const paper = path.join(libraryRoot, 'sandboxed');
   await fs.mkdir(paper);
-  await fs.writeFile(path.join(paper, '.latexmkrc'), `system("touch ${ran}");\n`);
   await fs.writeFile(
     path.join(paper, 'main.tex'),
     `\\documentclass{article}\n\\begin{document}\n\\newread\\f\\openin\\f=${secret}\n` +
@@ -162,7 +183,6 @@ test('a compile cannot read outside its project or run a project .latexmkrc', { 
   const log = await fs.readFile(path.join(paper, 'build', 'main.log'), 'utf8');
   assert.match(log, /NOREAD/);
   assert.doesNotMatch(log, /LEAKED/);
-  await assert.rejects(fs.access(ran), 'the project .latexmkrc must not run');
 });
 
 test('a compile gets a clean environment and leaves no symlinks in build', { skip }, async () => {
@@ -186,9 +206,6 @@ test('a compile gets a clean environment and leaves no symlinks in build', { ski
   assert.deepEqual((await fs.readdir(build)).sort(), ['main.log', 'nested']);
   assert.deepEqual(await fs.readdir(path.join(build, 'nested')), []);
 });
-
-const { sandboxAvailable } = await import('../src/lib/compileSandbox.js');
-const sandboxSkip = skip || (!(await sandboxAvailable()) && 'bubblewrap cannot run here');
 
 test('LuaLaTeX cannot reach anything outside the sandbox', { skip: sandboxSkip }, async () => {
   const secret = path.join(libraryRoot, 'lua-secret.txt');

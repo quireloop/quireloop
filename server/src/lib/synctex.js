@@ -32,7 +32,9 @@ export async function toSource(ownerId, projectId, mainFile, page, x, y) {
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
 
   const column = columnMatch ? Number(columnMatch[1]) : -1;
-  return { file: relative, line: Number(lineMatch[1]), column: column >= 0 ? column : null };
+  // The editor names files with forward slashes on every system.
+  const file = relative.split(path.sep).join('/');
+  return { file, line: Number(lineMatch[1]), column: column >= 0 ? column : null };
 }
 
 // Forward sync: a source file/line -> where it landed on the PDF.
