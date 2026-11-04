@@ -17,6 +17,9 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 
 const PERSIST_DEBOUNCE_MS = 2000;
+// How often a file someone has open is checked for changes made outside
+// Quireloop: another editor, a script, an assistant writing the file.
+const DISK_CHECK_MS = 1500;
 const RECENT_EDITORS_TTL_MS = 10 * 60 * 1000;
 
 // One Y.Doc per (ownerId, projectId, filePath) — the "room" that every
@@ -39,6 +42,66 @@ async function loadInitialContent(ownerId, projectId, filePath) {
   } catch {
     return '';
   }
+}
+
+async function statFile(room) {
+  try {
+    const stat = await fs.stat(await resolveUserPath(room.ownerId, room.projectId, room.filePath));
+    return { mtimeMs: stat.mtimeMs, size: stat.size };
+  } catch {
+    return null;
+  }
+}
+
+// Records that the file on disk holds `text`, and that the doc's current state
+// is the one that text came from: the common ancestor for the next merge.
+function markInSync(room, text, stat) {
+  room.disk = { text, mtimeMs: stat?.mtimeMs ?? null, size: stat?.size ?? null };
+  room.baseState = Y.encodeStateAsUpdate(room.doc);
+}
+
+// Brings in a change made to the file outside Quireloop. A room stays loaded
+// after its editors leave, and without this its text, older than the file,
+// was written straight back over the outside edit on the next save.
+//
+// The outside text is applied to a copy of the doc as it was when it last
+// matched the file, then merged in, so edits typed in the browser since then
+// are kept alongside it rather than either one replacing the other.
+async function checkDisk(room, { settled = false } = {}) {
+  const stat = await statFile(room);
+  // A missing file is left alone: the next save writes it back, as before.
+  if (!stat || !room.disk) return;
+  if (stat.mtimeMs === room.disk.mtimeMs && stat.size === room.disk.size) return;
+  // While polling, wait until the file stops changing, so a write still in
+  // progress isn't read halfway through.
+  if (settled) {
+    const last = room.pendingStat;
+    room.pendingStat = stat;
+    if (!last || last.mtimeMs !== stat.mtimeMs || last.size !== stat.size) return;
+  }
+  room.pendingStat = null;
+  const text = await loadInitialContent(room.ownerId, room.projectId, room.filePath);
+  if (text === room.disk.text) {
+    room.disk = { ...room.disk, ...stat };
+    return;
+  }
+  const fork = new Y.Doc();
+  Y.applyUpdate(fork, room.baseState);
+  applyTextDiff(fork, text);
+  const outside = Y.encodeStateAsUpdate(fork, Y.encodeStateVector(room.doc));
+  // The fork now matches the file, so it is the ancestor for the next merge.
+  room.disk = { text, ...stat };
+  room.baseState = Y.encodeStateAsUpdate(fork);
+  fork.destroy();
+  Y.applyUpdate(room.doc, outside, 'disk');
+}
+
+// Disk checks and saves for one room run one at a time, so a check can't read
+// the file while a save is writing it, or merge the same change twice.
+function serialize(room, fn) {
+  const run = room.diskQueue.then(fn, fn);
+  room.diskQueue = run.catch(() => {});
+  return run;
 }
 
 // The Y.Doc binary is persisted alongside the plain-text file so a room
@@ -105,16 +168,25 @@ function applyTextDiff(doc, text) {
   });
 }
 
-async function persistRoom(room) {
+function persistRoom(room) {
   clearTimeout(room.persistTimer);
   room.persistTimer = null;
-  const text = room.doc.getText('content').toString();
-  try {
-    await fs.writeFile(await resolveUserPath(room.ownerId, room.projectId, room.filePath), text);
-  } catch {
-    // file/project gone (deleted, restored, renamed mid-session) — nothing to persist to
-  }
-  await persistYdocState(room);
+  return serialize(room, async () => {
+    // An outside edit made since the last check is merged in, not overwritten.
+    await checkDisk(room);
+    const text = room.doc.getText('content').toString();
+    try {
+      // Rewriting identical text would only bump the file's time, which makes
+      // other programs watching it think it changed.
+      if (text !== room.disk?.text) {
+        await fs.writeFile(await resolveUserPath(room.ownerId, room.projectId, room.filePath), text);
+      }
+      markInSync(room, text, await statFile(room));
+    } catch {
+      // file/project gone (deleted, restored, renamed mid-session) — nothing to persist to
+    }
+    await persistYdocState(room);
+  });
 }
 
 function schedulePersist(room) {
@@ -136,7 +208,19 @@ function createRoom(ownerId, projectId, filePath) {
     connMeta: new Map(), // ws -> { userId, email }
     recentEditors: new Map(), // userId -> { email, at }
     persistTimer: null,
+    disk: null, // { text, mtimeMs, size } as last read from or written to the file
+    baseState: null, // the doc's state when its text last matched the file
+    pendingStat: null,
+    diskQueue: Promise.resolve(),
+    diskTimer: null,
   };
+
+  // Only while someone has the file open: an idle room is checked when it is
+  // next used, in getRoom and before every save.
+  room.diskTimer = setInterval(() => {
+    if (room.conns.size > 0) serialize(room, () => checkDisk(room, { settled: true }));
+  }, DISK_CHECK_MS);
+  room.diskTimer.unref();
 
   awareness.on('update', ({ added, updated, removed }, origin) => {
     const changedClients = added.concat(updated, removed);
@@ -175,8 +259,11 @@ export async function getRoom(ownerId, projectId, filePath) {
     room = createRoom(ownerId, projectId, filePath);
     rooms.set(key, room);
     room.ready = loadRoom(room);
+    await room.ready;
+    return room;
   }
   await room.ready;
+  await serialize(room, () => checkDisk(room));
   return room;
 }
 
@@ -193,12 +280,14 @@ async function loadRoom(room) {
       Y.applyUpdate(new Y.Doc(), savedState);
       Y.applyUpdate(room.doc, savedState);
       applyTextDiff(room.doc, initial);
+      markInSync(room, initial, await statFile(room));
       return;
     } catch {
       await dropYdocState(ownerId, projectId, filePath);
     }
   }
   if (initial) room.doc.getText('content').insert(0, initial);
+  markInSync(room, initial, await statFile(room));
 }
 
 export function addConnection(room, ws, userId, email, role = 'editor') {
@@ -308,6 +397,7 @@ export async function releaseRoom(room) {
   await persistRoom(room);
   if (room.conns.size === 0 && rooms.get(roomKey(room.ownerId, room.projectId, room.filePath)) === room) {
     rooms.delete(roomKey(room.ownerId, room.projectId, room.filePath));
+    clearInterval(room.diskTimer);
     room.doc.destroy();
   }
 }
@@ -335,6 +425,7 @@ export async function replaceText(ownerId, projectId, filePath, text) {
 
 function closeRoom(key, room) {
   clearTimeout(room.persistTimer);
+  clearInterval(room.diskTimer);
   for (const conn of room.conns.keys()) {
     conn.close(4000, 'file replaced');
   }

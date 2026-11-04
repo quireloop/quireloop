@@ -498,9 +498,30 @@ The **History** button opens the version panel.
 - **Diff** — compare any snapshot against the current state of the project,
   file by file, in a unified view with unchanged runs collapsed.
 
-Snapshots are full copies stored server-side with the project — they're
-included in server backups and in nothing else (not in your project zip
-download, not in git pushes).
+Quireloop also saves versions on its own:
+
+- **Auto (compile)** — a full copy after every successful compile. The last
+  20 are kept.
+- **Autosave (writing only)** — every minute in which the writing changed,
+  compiled or not, and whether the change was made in Quireloop or by another
+  program. It holds the project's text files (`.tex`, `.bib` and the like,
+  up to 1 MB each), not figures or the `build` folder, so each is only a few
+  kilobytes. The last 200 are kept. Restoring one puts the writing back as it
+  was and leaves figures and newer files as they are.
+
+Snapshots are stored server-side with the project — they're included in
+server backups and in nothing else (not in your project zip download, not in
+git pushes).
+
+### Editing files with other programs
+
+You can edit a project's files with any other program — a text editor, a
+script, an AI assistant — while Quireloop is running, even with the file open
+in a browser. Quireloop checks open files every couple of seconds and merges an
+outside change into the open document, so everyone viewing it sees the change
+and nothing is written back over it. If someone types in the browser at the
+same moment, both edits are kept. A file that isn't open is read fresh the
+next time it is opened.
 
 ---
 

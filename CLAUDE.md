@@ -136,6 +136,15 @@ duplicates content for clients holding stale IndexedDB state. `manifest.collabGe
 is the room's identity and is bumped on version restore so an in-flight session
 can't resurrect pre-restore content.
 
+**A room never writes over an outside edit.** Rooms stay loaded after their
+editors leave, so a room's text can be older than its file. Each room remembers
+the file's text, time and size as last read or written, and the doc state that
+matched it (`room.disk`, `room.baseState`). Before every save, on every
+`getRoom`, and every 1.5 s while someone is connected, `checkDisk` compares the
+file; an outside change is applied to a fork of `baseState` and merged in, so
+browser edits made meanwhile survive alongside it. Disk checks and saves for a
+room run one at a time through `serialize`.
+
 ### Compile
 
 `lib/latex.js` runs `latexmk` with `-g` (force rebuild) and no `-halt-on-error`,

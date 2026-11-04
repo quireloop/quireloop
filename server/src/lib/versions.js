@@ -1,11 +1,18 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
+import { PROJECTS_INDEX_FILE } from '../config.js';
 import { assertInsideRoot, isPrivatePath, projectDir } from './storage.js';
 import { updateManifest } from './manifest.js';
 import { readJson, updateJson } from './jsonStore.js';
 
 const MAX_AUTO_SNAPSHOTS = 20;
+// Autosaves hold only the writing, so many are cheap: a few kilobytes each.
+const MAX_AUTOSAVES = 200;
+const AUTOSAVE_INTERVAL_MS = 60_000;
+// Larger files are data or media, not writing, and stay out of autosaves.
+const MAX_AUTOSAVE_FILE_BYTES = 1024 * 1024;
 const SKIP_ENTRIES = new Set(['build', 'versions']);
 
 // Same idea as manifest.js's BOOKKEEPING_ENTRIES/walkFiles — a snapshot is a
@@ -137,6 +144,107 @@ export async function createSnapshot(ownerId, projectId, { label, trigger }) {
   return { id, label, trigger };
 }
 
+// The project's writing: its text files, leaving out Quireloop's own folders,
+// hidden files and anything large. Paths use '/' on every system.
+async function walkWriting(root, base = '') {
+  const entries = await fs.readdir(path.join(root, base), { withFileTypes: true });
+  let files = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') || entry.name === '__MACOSX') continue;
+    if (!base && (SKIP_ENTRIES.has(entry.name) || SNAPSHOT_BOOKKEEPING_ENTRIES.has(entry.name))) continue;
+    const relPath = base ? `${base}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      files = files.concat(await walkWriting(root, relPath));
+    } else if (entry.isFile() && !isBinaryPath(relPath)) {
+      files.push(relPath);
+    }
+  }
+  return files;
+}
+
+// What each project's writing looked like at the last check, by file times
+// and sizes, so an unchanged project costs a directory listing, not a read.
+const lastSeen = new Map(); // projectId -> stat key
+
+// Saves a text-only version if the writing changed since the last autosave,
+// whether it was edited in Quireloop or by any other program, compiled or not.
+export async function autosaveIfChanged(ownerId, projectId) {
+  const dir = projectDir(ownerId, projectId);
+  const files = [];
+  for (const relPath of (await walkWriting(dir)).sort()) {
+    const stat = await fs.stat(path.join(dir, relPath)).catch(() => null);
+    if (stat && stat.size <= MAX_AUTOSAVE_FILE_BYTES) files.push({ relPath, stat });
+  }
+  const statKey = files.map(({ relPath, stat }) => `${relPath}\0${stat.size}\0${stat.mtimeMs}`).join('\n');
+  if (lastSeen.get(projectId) === statKey) return null;
+
+  const hash = crypto.createHash('sha256');
+  const contents = [];
+  for (const { relPath } of files) {
+    const content = await fs.readFile(path.join(dir, relPath)).catch(() => null);
+    if (!content) continue;
+    contents.push({ relPath, content });
+    hash.update(relPath).update('\0').update(content).update('\0');
+  }
+  const digest = hash.digest('hex');
+  const index = await readIndex(ownerId, projectId);
+  const previous = index.filter((v) => v.trigger === 'autosave').at(-1);
+  lastSeen.set(projectId, statKey);
+  // Times can change with no change in content (a save of the same text, a
+  // git checkout), and a restart forgets lastSeen; the content decides.
+  if (previous?.hash === digest || contents.length === 0) return null;
+
+  const id = nanoid(10);
+  const target = path.join(versionsDir(ownerId, projectId), id);
+  for (const { relPath, content } of contents) {
+    await fs.mkdir(path.dirname(path.join(target, relPath)), { recursive: true });
+    await fs.writeFile(path.join(target, relPath), content);
+  }
+  await updateJson(indexPath(ownerId, projectId), [], async (current) => {
+    const next = [...current, { id, label: null, trigger: 'autosave', textOnly: true, hash: digest, createdAt: new Date().toISOString() }];
+    const autos = next.filter((v) => v.trigger === 'autosave');
+    if (autos.length <= MAX_AUTOSAVES) return next;
+    const toRemove = autos.slice(0, autos.length - MAX_AUTOSAVES);
+    for (const v of toRemove) {
+      await fs.rm(path.join(versionsDir(ownerId, projectId), v.id), { recursive: true, force: true });
+    }
+    const removeIds = new Set(toRemove.map((v) => v.id));
+    return next.filter((v) => !removeIds.has(v.id));
+  });
+  return { id, trigger: 'autosave' };
+}
+
+let autosaveTimer = null;
+let autosaving = false;
+
+async function autosaveAll(log) {
+  if (autosaving) return;
+  autosaving = true;
+  try {
+    const owners = await readJson(PROJECTS_INDEX_FILE, {});
+    for (const [projectId, ownerId] of Object.entries(owners)) {
+      try {
+        await autosaveIfChanged(ownerId, projectId);
+      } catch (err) {
+        // A project deleted or unreadable mid-scan; the others still get saved.
+        if (err.code !== 'ENOENT') log.warn({ err, projectId }, 'autosave failed');
+      }
+    }
+  } finally {
+    autosaving = false;
+  }
+}
+
+export function startAutosave(log) {
+  autosaveTimer = setInterval(() => autosaveAll(log), AUTOSAVE_INTERVAL_MS);
+  autosaveTimer.unref();
+}
+
+export function stopAutosave() {
+  clearInterval(autosaveTimer);
+  autosaveTimer = null;
+}
+
 export async function listVersions(ownerId, projectId) {
   const index = await readIndex(ownerId, projectId);
   return index.slice().reverse();
@@ -154,12 +262,23 @@ export async function restoreVersion(ownerId, projectId, versionId) {
   const dir = projectDir(ownerId, projectId);
   const src = path.join(versionsDir(ownerId, projectId), versionId);
 
-  const currentEntries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of currentEntries) {
-    if (SKIP_ENTRIES.has(entry.name)) continue;
-    await fs.rm(path.join(dir, entry.name), { recursive: true, force: true });
+  if (target.textOnly) {
+    // An autosave holds only the writing: those files go back as they were,
+    // and figures, data and files added since are left as they are.
+    for (const relPath of await walkWriting(src)) {
+      const to = path.join(dir, relPath);
+      await assertInsideRoot(dir, to);
+      await fs.mkdir(path.dirname(to), { recursive: true });
+      await fs.copyFile(path.join(src, relPath), to);
+    }
+  } else {
+    const currentEntries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of currentEntries) {
+      if (SKIP_ENTRIES.has(entry.name)) continue;
+      await fs.rm(path.join(dir, entry.name), { recursive: true, force: true });
+    }
+    await copyProjectContents(src, dir);
   }
-  await copyProjectContents(src, dir);
 
   // Bump updatedAt (dashboard) and collabGeneration — the latter changes the
   // room identity every live editor uses, so a restore can't be silently

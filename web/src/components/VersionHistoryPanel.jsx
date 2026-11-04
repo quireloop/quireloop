@@ -4,6 +4,7 @@ import VersionDiffModal from './VersionDiffModal.jsx';
 
 const TRIGGER_LABELS = {
   compile: 'Auto (compile)',
+  autosave: 'Autosave (writing only)',
   manual: 'Saved',
   restore: 'Before restore',
 };
@@ -24,7 +25,9 @@ export default function VersionHistoryPanel({ projectId, versions, files, readOn
   async function handleRestore(v) {
     const confirmed = await confirmDialog({
       title: 'Restore this version?',
-      message: `${new Date(v.createdAt).toLocaleString()}. Your current state will be saved first.`,
+      message:
+        `${new Date(v.createdAt).toLocaleString()}. Your current state will be saved first.` +
+        (v.textOnly ? ' This autosave holds your writing only, so figures and other files stay as they are.' : ''),
       confirmLabel: 'Restore',
     });
     if (confirmed) onRestore(v.id);

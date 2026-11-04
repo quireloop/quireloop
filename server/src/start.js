@@ -3,6 +3,7 @@ import { PORT, HOST } from './config.js';
 import { sandboxStatus } from './lib/compileSandbox.js';
 import { startSyncClient, stopSyncClient } from './lib/syncClient.js';
 import { startFolderCopy, stopFolderCopy } from './lib/folderCopy.js';
+import { startAutosave, stopAutosave } from './lib/versions.js';
 
 const app = await buildApp();
 
@@ -17,6 +18,7 @@ else app.log.warn(`compile sandbox: ${sandbox}. LaTeX runs with this server's fu
 // in lib/jsonStore.js.)
 await startSyncClient(app.log);
 await startFolderCopy(app.log);
+startAutosave(app.log);
 
 let shuttingDown = false;
 for (const signal of ['SIGTERM', 'SIGINT']) {
@@ -27,6 +29,7 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
     try {
       stopSyncClient();
       stopFolderCopy();
+      stopAutosave();
       await app.close();
       process.exit(0);
     } catch (err) {
