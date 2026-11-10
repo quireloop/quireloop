@@ -107,11 +107,11 @@ async function readIndex(ownerId, projectId) {
   return readJson(indexPath(ownerId, projectId), []);
 }
 
-async function copyProjectContents(fromDir, toDir) {
+async function copyProjectContents(fromDir, toDir, { keep = new Set() } = {}) {
   await fs.mkdir(toDir, { recursive: true });
   const entries = await fs.readdir(fromDir, { withFileTypes: true });
   for (const entry of entries) {
-    if (SKIP_ENTRIES.has(entry.name)) continue;
+    if (SKIP_ENTRIES.has(entry.name) || keep.has(entry.name)) continue;
     await fs.cp(path.join(fromDir, entry.name), path.join(toDir, entry.name), { recursive: true });
   }
 }
@@ -245,6 +245,21 @@ export function stopAutosave() {
   autosaveTimer = null;
 }
 
+// Names (or renames) a version. An empty name goes back to the default label
+// for its kind ("Autosave", "Auto (compile)").
+export async function renameVersion(ownerId, projectId, versionId, label) {
+  assertSafeVersionId(versionId);
+  let found = false;
+  await updateJson(indexPath(ownerId, projectId), [], (current) =>
+    current.map((v) => {
+      if (v.id !== versionId) return v;
+      found = true;
+      return { ...v, label: label || null };
+    })
+  );
+  if (!found) throw new Error('version not found');
+}
+
 export async function listVersions(ownerId, projectId) {
   const index = await readIndex(ownerId, projectId);
   return index.slice().reverse();
@@ -261,6 +276,13 @@ export async function restoreVersion(ownerId, projectId, versionId) {
 
   const dir = projectDir(ownerId, projectId);
   const src = path.join(versionsDir(ownerId, projectId), versionId);
+  // The project's settings stay as they are now; only the file list, main
+  // file and compiler come from the snapshot. Copying the snapshot's own
+  // manifest.json back used to return who the project was shared with to that
+  // day's list, and the generation to that day's number: the +1 below then
+  // often landed on the number open editors already had, so they never
+  // reloaded and went on showing the text from before.
+  const restored = target.textOnly ? null : await readJson(path.join(src, 'manifest.json'), null);
 
   if (target.textOnly) {
     // An autosave holds only the writing: those files go back as they were,
@@ -274,19 +296,20 @@ export async function restoreVersion(ownerId, projectId, versionId) {
   } else {
     const currentEntries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of currentEntries) {
-      if (SKIP_ENTRIES.has(entry.name)) continue;
+      if (SKIP_ENTRIES.has(entry.name) || SNAPSHOT_BOOKKEEPING_ENTRIES.has(entry.name)) continue;
       await fs.rm(path.join(dir, entry.name), { recursive: true, force: true });
     }
-    await copyProjectContents(src, dir);
+    await copyProjectContents(src, dir, { keep: SNAPSHOT_BOOKKEEPING_ENTRIES });
   }
 
   // Bump updatedAt (dashboard) and collabGeneration — the latter changes the
   // room identity every live editor uses, so a restore can't be silently
   // undone by an in-flight collaborative session resurrecting pre-restore
   // content (see collab.invalidateProject, called by the route after this).
-  await updateManifest(ownerId, projectId, (manifest) => ({
-    ...manifest,
-    collabGeneration: (manifest.collabGeneration ?? 0) + 1,
+  await updateManifest(ownerId, projectId, (current) => ({
+    ...current,
+    ...(restored ? { files: restored.files, mainFile: restored.mainFile, compiler: restored.compiler } : {}),
+    collabGeneration: (current.collabGeneration ?? 0) + 1,
   }));
   return { ok: true };
 }

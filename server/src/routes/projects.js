@@ -76,7 +76,7 @@ export default async function projectsRoutes(app) {
 
   app.patch('/api/projects/:id', { preHandler: requireProjectWrite }, async (req, reply) => {
     const { name, mainFile, compiler } = req.body ?? {};
-    if (mainFile && !isSafeMainFile(mainFile)) {
+    if (mainFile && (!isSafeMainFile(mainFile) || !(req.manifest.files ?? []).some((f) => f.path === mainFile))) {
       return reply.code(400).send({ error: 'the main file must be a .tex file inside the project' });
     }
     return updateManifest(req.ownerId, req.params.id, (manifest) => ({

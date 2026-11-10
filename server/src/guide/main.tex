@@ -1,0 +1,530 @@
+% The Quireloop guide. Every account gets its own copy as a project, made by
+% server/src/lib/guide.js. Lines between %%%% PERSONAL and %%%% END are kept
+% only on a personal install, lines between %%%% SERVER and %%%% END only on
+% a lab server; the markers themselves are removed.
+\documentclass[11pt]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+% A screenshot, full width, with its caption.
+\newcommand{\shot}[3][\linewidth]{%
+  \begin{figure}[htbp]
+    \centering
+    \fbox{\includegraphics[width=\dimexpr#1-2\fboxsep-2\fboxrule\relax]{figures/#2}}
+    \caption{#3}
+  \end{figure}}
+% A numbered marker, matching the red circles in the screenshots.
+\newcommand{\mk}[1]{\textcolor{white}{\colorbox{red!75!black}{\textbf{#1}}}}
+\newcommand{\key}[1]{\fbox{\footnotesize\texttt{#1}}}
+\newcommand{\ui}[1]{\textbf{#1}}
+
+\title{\textbf{Quireloop guide}\\[4pt]\large Everything Quireloop can do, step by step}
+%%%% PERSONAL
+\author{For Quireloop running on your own computer}
+%%%% END
+%%%% SERVER
+\author{For Quireloop on your lab's server}
+%%%% END
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+\fbox{\begin{minipage}{0.9\linewidth}
+\textbf{This project is yours to keep or delete.} It is an ordinary Quireloop
+project, made for you when you first signed in. Read it here as a PDF, or open
+\texttt{main.tex} to see how each page was written. Change anything you like:
+it is a safe place to try every button. Deleting it does not bring it back.
+\end{minipage}}
+\end{center}
+
+\tableofcontents
+\newpage
+
+%% ---------------------------------------------------------------------------
+\section{What Quireloop is}
+
+Quireloop is a LaTeX editor that runs in your web browser. You write LaTeX on
+the left and see the PDF on the right. It saves every keystroke by itself, keeps
+versions of your work, and lets several people edit the same paper at the same
+time, each seeing the others' cursors.
+
+%%%% PERSONAL
+\textbf{You are using Quireloop on your own computer.} Your papers are files on
+this computer, and nothing is sent anywhere unless you link it to a server
+(Section~\ref{sec:server-link}). Quireloop compiles with the LaTeX installed on
+this computer.
+%%%% END
+%%%% SERVER
+\textbf{You are using Quireloop on your lab's server.} Your papers are stored on
+the server, which keeps backups, and you can reach them from any browser.
+Quireloop compiles with the LaTeX installed on the server, so you do not need
+LaTeX on your own computer.
+%%%% END
+
+%% ---------------------------------------------------------------------------
+\section{The dashboard: your papers}
+
+After signing in you see the dashboard: every paper you own, and every paper
+someone has shared with you.
+
+%%%% PERSONAL
+\shot{dashboard-personal.jpg}{The dashboard on your own computer.}
+
+\begin{enumerate}
+  \item[\mk{1}] Type a name for a new paper.
+  \item[\mk{2}] Choose what it starts from: blank, an article, a report, slides,
+    or a CV.
+  \item[\mk{3}] \ui{New Project} creates it and opens it.
+  \item[\mk{4}] \ui{Open a Folder} opens a folder that is already on this
+    computer as a project. Quireloop edits the files where they are, so other
+    programs keep seeing the same files.
+  \item[\mk{5}] \ui{Import from Git} copies a paper from a git address.
+  \item[\mk{6}] \ui{Upload Project (.zip)} opens a zipped LaTeX project. Quireloop
+    finds the main file by itself.
+  \item[\mk{7}] \ui{Download all my papers} saves one \texttt{.zip} of everything.
+  \item[\mk{8}] \ui{Work with a server} links this computer to a lab server, so
+    your server papers are copied here and kept in step
+    (Section~\ref{sec:server-link}).
+  \item[\mk{9}] \ui{Keep a backup copy in a folder} copies your papers as
+    ordinary files to a folder you choose, every few minutes
+    (Section~\ref{sec:backup}).
+  \item[\mk{10}] Your account: password, two-step sign-in and the assistant's
+    settings (Section~\ref{sec:account}).
+\end{enumerate}
+%%%% END
+%%%% SERVER
+\shot{dashboard-server.jpg}{The dashboard on a lab server.}
+
+\begin{enumerate}
+  \item[\mk{1}] Type a name for a new paper, choose a starting template next to
+    it, and press \ui{New Project}. You can also open a folder you have on the
+    server, import from git, or upload a \texttt{.zip}.
+  \item[\mk{2}] Each paper is a card. Click its name to open it. Papers shared
+    with you are marked \ui{Shared}.
+  \item[\mk{3}] \ui{Download all my papers} saves one \texttt{.zip} of every paper
+    you own or share. Do this now and then, and keep the file somewhere safe.
+  \item[\mk{4}] \ui{Admin} appears only for administrators
+    (Section~\ref{sec:admin}).
+  \item[\mk{5}] Your account: password, two-step sign-in and the assistant's
+    settings (Section~\ref{sec:account}).
+\end{enumerate}
+%%%% END
+
+%% ---------------------------------------------------------------------------
+\section{The project screen}
+
+Opening a paper shows three parts side by side: your files, the editor and the
+PDF. Quireloop compiles the paper as soon as you open it, so the PDF is already
+there.
+
+\shot{project.jpg}{A paper open in Quireloop.}
+
+\begin{enumerate}
+  \item[\mk{1}] The side panel. \ui{Files} lists the project's files and folders;
+    \ui{Outline}, \ui{Git} and \ui{Search} are the other tabs.
+  \item[\mk{2}] The \textbf{insert toolbar}: formatting, structure, maths,
+    tables, figures and packages in one click (Section~\ref{sec:toolbar}).
+  \item[\mk{3}] The editor. Type LaTeX here. It saves by itself; there is no save
+    button.
+  \item[\mk{4}] \ui{Compile} builds the PDF. Shortcut: \key{Ctrl+S} or
+    \key{Ctrl+Enter} (\key{Cmd} on a Mac).
+  \item[\mk{5}] The PDF. Zoom, find text, and double-click to jump to the source
+    (Section~\ref{sec:sync}).
+  \item[\mk{6}] \ui{Share} lets other people in (Section~\ref{sec:share}).
+  \item[\mk{7}] \ui{History} lists versions of the paper
+    (Section~\ref{sec:history}).
+  \item[\mk{8}] \ui{Menu}: compiler, auto-compile, clean-up and download.
+  \item[\mk{9}] \ui{Edit}: the main file, writing tools and collaboration.
+\end{enumerate}
+
+Panels that open from the top bar (Share, History, menus) close when you click
+anywhere else, or press \key{Esc}. Drag the borders between the three parts to
+resize them; Quireloop remembers the sizes.
+
+%% ---------------------------------------------------------------------------
+\section{Writing faster with the insert toolbar}\label{sec:toolbar}
+
+The row above the editor holds the commands used most often. Select some text
+first to wrap it, or press a button with nothing selected to insert a
+placeholder you can type over.
+
+\shot{insert-toolbar.jpg}{The insert toolbar, in five groups.}
+
+\begin{enumerate}
+  \item[\mk{1}] \textbf{Text:} \ui{B} bold, \ui{I} italic, \ui{U} underline,
+    \ui{H} highlight, \ui{Colour} coloured text, and \ui{Align} for left,
+    centred or right-aligned text.
+  \item[\mk{2}] \textbf{Structure:} \ui{Heading} (section, subsection,
+    subsubsection, paragraph), bulleted and numbered lists, \ui{fn} footnote,
+    \ui{[1]} citation, \ui{ref} reference and \ui{lbl} label.
+  \item[\mk{3}] \textbf{Maths:} \ui{\$x\$} inline maths, \ui{(1)} a numbered
+    equation, \ui{a=} aligned equations, \ui{½} a fraction, \ui{[:]} a matrix,
+    and \ui{Symbol} for Greek letters, operators and arrows.
+  \item[\mk{4}] \textbf{Tables, figures and packages:} \ui{Table} asks for rows
+    and columns and builds the whole table; \ui{Figure} lists the images in your
+    project; \ui{+ Package} adds a package to the preamble, with a short note on
+    what each common package is for.
+  \item[\mk{5}] \textbf{Text size:} \ui{A$-$} and \ui{A+} make the editor's text
+    smaller or larger; the percentage resets it. Each browser remembers its
+    own size.
+\end{enumerate}
+
+\textbf{Packages are added for you.} Highlighting needs the \texttt{soul} and
+\texttt{xcolor} packages, a table needs \texttt{booktabs}, and so on. When a
+button needs one, Quireloop adds the \verb|\usepackage| line to the preamble
+and shows a short note saying so. In a chapter file without a preamble, the
+line goes into your main file.
+
+\subsection*{More writing help}
+\begin{itemize}
+  \item \textbf{Autocomplete:} start typing a command, such as \verb|\beg|, and
+    choose from the list. \verb|\cite{| offers every key in your
+    \texttt{.bib} files.
+  \item \textbf{Hover previews:} point at maths to see it typeset, or at a
+    citation key to see the reference.
+  \item \textbf{Paste or drop images:} paste a screenshot or drag an image into
+    the editor. It is saved in \texttt{figures/} and a figure is inserted.
+  \item \textbf{Folding:} the small arrows next to the line numbers fold a
+    section or environment away.
+\end{itemize}
+
+%% ---------------------------------------------------------------------------
+\section{Menu and Edit}
+
+\shot[0.75\linewidth]{menu.jpg}{The Menu.}
+
+\begin{enumerate}
+  \item[\mk{1}] \ui{Auto-compile} recompiles shortly after you stop typing.
+  \item[\mk{2}] \ui{Compiler}: pdfLaTeX for most papers; XeLaTeX or LuaLaTeX for
+    system fonts and \texttt{fontspec}.
+  \item[\mk{3}] \ui{Clean aux files} removes LaTeX's leftover files. Use it when
+    a compile stays broken after you have fixed the mistake.
+  \item[\mk{4}] \ui{Download .zip} saves this paper's files.
+\end{enumerate}
+
+\shot[0.75\linewidth]{edit-menu.jpg}{The Edit menu.}
+
+\begin{enumerate}
+  \item[\mk{1}] \ui{Main file}: the \texttt{.tex} file that is compiled into the
+    PDF. A paper split into chapters has one main file that pulls the others in
+    with \verb|\input| or \verb|\include|. Choose it here; the PDF is rebuilt
+    straight away.
+  \item[\mk{2}] \ui{Spell check}, and \ui{Grammar check} when your Quireloop
+    has it set up. \ui{Copy text without LaTeX} copies plain prose to paste into
+    other writing tools.
+  \item[\mk{3}] \ui{Insert symbol} opens a palette of symbols and snippets.
+  \item[\mk{4}] \ui{Suggest mode} turns your edits into suggestions that others
+    accept or reject (Section~\ref{sec:together}).
+  \item[\mk{5}] \ui{Comments} on selected text.
+  \item[\mk{6}] \ui{Chat} with everyone working on the paper.
+  \item[\mk{7}] \ui{Assistant}: ask an AI model about your paper
+    (Section~\ref{sec:assistant}).
+\end{enumerate}
+
+%% ---------------------------------------------------------------------------
+\section{Compiling and fixing mistakes}
+
+Press \ui{Compile} (or \key{Ctrl+S}). Quireloop runs LaTeX, BibTeX or Biber as
+many times as needed, and shows the PDF even when LaTeX reports errors, as long
+as it produced one.
+
+\shot{logs.jpg}{A compile with a mistake.}
+
+\begin{enumerate}
+  \item[\mk{1}] \ui{Logs} shows a small badge with the number of problems.
+    Press it to open the list.
+  \item[\mk{2}] Each problem names its file and line. Click it to jump there; the
+    line is also marked in the editor with a red dot and a wavy underline.
+  \item[\mk{3}] \ui{Show raw log} shows LaTeX's own output, for the rare
+    message the list does not explain.
+\end{enumerate}
+
+\subsection{Jumping between the PDF and the source}\label{sec:sync}
+\begin{itemize}
+  \item \textbf{Source to PDF:} double-click a word in the editor, or press
+    \key{Ctrl+Alt+J}. The PDF scrolls to it and outlines it.
+  \item \textbf{PDF to source:} double-click a word in the PDF. The editor opens
+    the right file and selects the word.
+\end{itemize}
+In the PDF pane you can also select and copy text, search with
+\ui{Find in PDF}, and switch to a dark page view with the half-moon button.
+
+%% ---------------------------------------------------------------------------
+\section{Files, folders and the outline}
+
+In the \ui{Files} tab, \ui{New file} creates a file (type
+\texttt{chapters/intro.tex} to create it inside a folder), \ui{Folder} creates a
+folder, and \ui{Upload} adds files from your computer. Each file has buttons to
+rename and delete it. Folders start closed; click one to open it.
+
+\shot[0.4\linewidth]{outline.jpg}{The outline of a paper.}
+
+The \ui{Outline} tab lists the open file's sections. They start folded, so a
+long paper shows only its main sections.
+\begin{enumerate}
+  \item[\mk{1}] The arrow opens or folds a section's subsections.
+  \item[\mk{2}] Click any title to jump to it in the editor.
+  \item[\mk{3}] \ui{Open all} or \ui{Fold all} at once.
+\end{enumerate}
+
+The \ui{Search} tab searches every file in the project. To find a command or a
+file by name, press \key{Ctrl+K} (\key{Cmd+K} on a Mac):
+
+\shot[0.7\linewidth]{palette.jpg}{Search for any command or file.}
+
+%% ---------------------------------------------------------------------------
+\section{Sharing a paper}\label{sec:share}
+
+Press \ui{Share} next to \ui{Compile}. Only the paper's owner can change who has
+access.
+
+\shot[0.55\linewidth]{share.jpg}{The Share panel.}
+
+\begin{enumerate}
+  \item[\mk{1}] \ui{Add people} lists everyone else with an account here, so you
+    do not need to know their username or email. Tick the people to add.
+  \item[\mk{2}] Choose a role for each: an \textbf{Editor} can change the paper;
+    a \textbf{Viewer} can read, compile and comment, but not change anything.
+  \item[\mk{3}] Press \ui{Share with \dots} to give them access. The paper
+    appears on their dashboard at once.
+  \item[\mk{4}] The people who already have access. Change a role or press
+    \ui{Remove} at any time.
+  \item[\mk{5}] A \textbf{share link} lets in anyone with an account who opens
+    it, with the role you choose. It suits someone who has no account yet: they
+    sign up first, then open the link.
+  \item[\mk{6}] \ui{Create link}, then \ui{Copy} it. \ui{Revoke} switches a link
+    off.
+\end{enumerate}
+
+%% ---------------------------------------------------------------------------
+\section{Working together}\label{sec:together}
+
+Everyone with access can edit at the same time. Each person's cursor appears in
+their own colour, with their name. There is no locking and no ``someone else
+saved first'': edits are merged as you type. The dot next to the paper's name is
+green when you are connected; if your connection drops, keep typing, and your
+work is merged when it returns.
+
+\begin{itemize}
+  \item \textbf{Comments:} select text, then \ui{Edit} $\rightarrow$
+    \ui{Comment on selection}. Reply, resolve or delete in the Comments panel.
+    A comment stays with its text even as the paper changes around it.
+  \item \textbf{Suggest mode:} with \ui{Suggest mode} on, what you type is shown
+    in green and what you delete is struck through, without being removed.
+    Anyone who can edit accepts or rejects each suggestion in the Suggestions
+    panel.
+  \item \textbf{Chat:} a message board for the paper, under \ui{Edit}.
+\end{itemize}
+
+%% ---------------------------------------------------------------------------
+\section{Version history}\label{sec:history}
+
+Press \ui{History}. Quireloop keeps three kinds of versions:
+\begin{itemize}
+  \item \textbf{Autosave (writing only):} every minute in which the writing
+    changed, whether you compiled or not, and whether the change was made in
+    Quireloop or by another program. Holds your text files only.
+  \item \textbf{Auto (compile):} a full copy after each successful compile.
+  \item \textbf{Saved:} one you save yourself with \ui{Save current version}, at
+    the top of the panel.
+\end{itemize}
+
+\shot[0.5\linewidth]{history.jpg}{Version history.}
+
+\begin{enumerate}
+  \item[\mk{2}] A version you named. Name any version, an autosave included, to
+    find it again later: ``sent to co-authors'', ``before the rewrite''.
+  \item[\mk{3}] \ui{Diff} shows what changed between that version and now.
+  \item[\mk{4}] \ui{Name} or \ui{Rename}.
+  \item[\mk{5}] \ui{Restore} brings the paper back to that version. The current
+    state is saved first, as \ui{Before restore}, so a restore can always be
+    undone. Everyone with the paper open sees the restored text straight away.
+    Restoring an autosave puts back the writing and leaves figures as they are.
+\end{enumerate}
+
+%% ---------------------------------------------------------------------------
+\section{Editing with other programs}
+
+You can change a paper's files with any other program while Quireloop is
+running: another editor, a script, or an AI assistant that writes files. Even
+with the file open in Quireloop, the change appears in the editor within a few
+seconds and is never written over. If someone types in the browser at the same
+moment, both changes are kept.
+
+%%%% PERSONAL
+On this computer, a project's files are in Quireloop's data folder, or wherever
+the folder you opened with \ui{Open a Folder} is.
+%%%% END
+%%%% SERVER
+On the server, this applies to programs running on the server itself, such as a
+folder you opened with \ui{Open a Folder} and edit over a remote session.
+%%%% END
+
+%% ---------------------------------------------------------------------------
+\section{Git}
+
+Every project is also a git repository, in the \ui{Git} tab.
+
+\shot[0.32\linewidth]{git.jpg}{The Git tab.}
+
+Write a message and press \ui{Commit} to record the changes listed below it.
+\ui{Set remote} connects the project to a repository on a git host, using its
+address and an access token; then \ui{Pull} and \ui{Push} exchange changes.
+Quireloop's own files (the build folder, versions, comments) are never pushed.
+
+%% ---------------------------------------------------------------------------
+\section{The writing assistant}\label{sec:assistant}
+
+\ui{Edit} $\rightarrow$ \ui{Assistant} opens a panel where you can ask about the
+open file, or about selected text: fix a LaTeX error, shorten a paragraph, draft
+a caption. Nothing changes in your paper until you press \ui{Insert}, and
+\key{Ctrl+Z} undoes it.
+
+Choose where answers come from under your account's \ui{AI Assistant} settings:
+local models on a server (free, and your text stays there), or your own API key
+from an AI provider. Only you can use your key.
+
+%% ---------------------------------------------------------------------------
+\section{Your account}\label{sec:account}
+
+Click your email at the top of the dashboard.
+\begin{itemize}
+%%%% SERVER
+  \item If you sign in with your server account, your password and two-step
+    sign-in are those of the server, and are changed there.
+%%%% END
+  \item \textbf{Change password:} needs your current password.
+  \item \textbf{Two-step sign-in (2FA):} scan the code with an authenticator
+    app, then enter the six-digit number it shows. Every sign-in then asks for a
+    current number. Keep the app safe: losing it locks you out until an admin
+    helps.
+  \item \textbf{AI Assistant:} where the assistant's answers come from.
+\end{itemize}
+
+%%%% PERSONAL
+%% ---------------------------------------------------------------------------
+\section{On your own computer}
+
+\subsection{Starting Quireloop by itself}
+Quireloop can start when you log in to your computer and restart if it ever
+stops. In a terminal, in the folder where Quireloop is installed, run
+\begin{center}\texttt{npm run service:install}\end{center}
+This works on macOS, Windows and Linux, and needs no administrator rights.
+To undo it, run \texttt{npm run service:uninstall}. If you installed Quireloop
+with \texttt{pip}, start it with \texttt{quireloop start} instead.
+
+\subsection{Linking to a lab server}\label{sec:server-link}
+Under \ui{Work with a server} on the dashboard, enter the server's address and a
+name for this computer, and press \ui{Connect}. Sign in to the server on the page
+that opens and approve the link. From then on:
+\begin{itemize}
+  \item every paper you can open on the server is copied to this computer, and
+    kept in step every 30 seconds while you are online;
+  \item you always work on the copy here, so losing the internet changes
+    nothing; your edits and the server's are merged when it returns;
+  \item a file you have open is linked live, so you see co-authors' typing as it
+    happens.
+\end{itemize}
+Comments, chat, suggestions and version history stay on each side and are not
+copied.
+
+\subsection{A backup folder}\label{sec:backup}
+Under \ui{Keep a backup copy in a folder}, enter a folder and press \ui{Save}.
+Your papers are copied there as ordinary files at once, then every few minutes.
+Nothing in that folder is ever deleted: when a file changes, its earlier copy
+moves to \texttt{\_older-versions}. Choose a folder that your cloud storage app
+syncs to keep a copy off this computer too.
+
+\subsection{Compiling here}
+Compiling uses the LaTeX installed on this computer. A paper that needs a
+package you do not have will report it in \ui{Logs}; install the package with
+your LaTeX distribution's package manager.
+%%%% END
+
+%%%% SERVER
+%% ---------------------------------------------------------------------------
+\section{On the lab server}
+
+\begin{itemize}
+  \item \textbf{Where your papers are:} on the server, backed up regularly to a
+    separate disk. Still, press \ui{Download all my papers} now and then.
+  \item \textbf{Working offline:} install Quireloop on your own computer and link
+    it to this server; your papers are then copied to your computer and kept in
+    step, and you can work without internet.
+  \item \textbf{Opening a folder:} \ui{Open a Folder} on the dashboard lists the
+    folders on the server you are allowed to open, such as your home folder.
+    Quireloop edits those files where they are.
+  \item \textbf{Compile limits:} each compile runs separately from everyone
+    else's and stops after a few minutes, so a runaway paper cannot slow the
+    server for others.
+\end{itemize}
+
+\subsection{For administrators}\label{sec:admin}
+The \ui{Admin} button on the dashboard is shown only to administrators.
+\begin{itemize}
+  \item \textbf{Invites:} create a single-use invite code or link for each new
+    person.
+  \item \textbf{Users:} disable an account to lock it out at once (its papers are
+    kept), or enable it again; assign a member's folder on the server.
+  \item \textbf{Backups and settings:} the time of the last backup, and the
+    server-wide assistant settings.
+\end{itemize}
+Administrators cannot open other people's papers from the admin panel; access
+always goes through sharing.
+%%%% END
+
+%% ---------------------------------------------------------------------------
+\section{Keyboard shortcuts}
+
+On a Mac, use \key{Cmd} where this table says \key{Ctrl}.
+
+\begin{center}
+\begin{tabular}{>{\raggedright}p{0.35\linewidth}p{0.5\linewidth}}
+\toprule
+\textbf{Keys} & \textbf{What they do} \\
+\midrule
+\key{Ctrl+S}, \key{Ctrl+Enter} & Compile \\
+\key{Ctrl+K} & Search commands and files \\
+\key{Ctrl+Alt+J} & Show the cursor's place in the PDF \\
+\key{Ctrl+Z}, \key{Ctrl+Y} & Undo and redo your own edits \\
+\key{Ctrl+F} & Find in the editor, or in the PDF when it has focus \\
+\key{Esc} & Close a panel or menu \\
+Double-click & Jump between the source and the PDF \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%% ---------------------------------------------------------------------------
+\section{When something goes wrong}
+
+\begin{description}
+  \item[The PDF does not change.] Open \ui{Logs}: an error may have stopped
+    the compile, and the last good PDF is still shown. If the log looks fine,
+    use \ui{Menu} $\rightarrow$ \ui{Clean aux files} and compile again.
+  \item[The wrong file is compiled.] Choose the right one under \ui{Edit}
+    $\rightarrow$ \ui{Main file}.
+  \item[I need an older version.] \ui{History}, then \ui{Diff} to check and
+    \ui{Restore} to bring it back.
+  \item[The dot next to the paper's name is not green.] You are offline. Keep
+    working; your edits are kept and merged when the connection returns.
+  \item[A package is missing.] The \ui{Logs} list names it.
+%%%% PERSONAL
+    Install it with your LaTeX distribution's package manager.
+%%%% END
+%%%% SERVER
+    Ask your administrator to install it on the server.
+%%%% END
+  \item[``Too many attempts'' when signing in.] Wait for the time shown, then
+    try again.
+\end{description}
+
+\end{document}

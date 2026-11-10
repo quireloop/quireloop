@@ -1,17 +1,33 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { compileProject, cleanProject, pdfPathFor } from '../lib/latex.js';
 import { parseLatexLog } from '../lib/latexLog.js';
-import { resolveUserPath } from '../lib/storage.js';
+import { projectDir, resolveUserPath } from '../lib/storage.js';
 import { createSnapshot } from '../lib/versions.js';
 import { requireProjectAccess, requireProjectWrite } from '../lib/authMiddleware.js';
 import * as collab from '../lib/collab.js';
+
+const MAX_LOG_BYTES = 8 * 1024 * 1024;
+
+// LaTeX's own log from the last pass. latexmk's output holds every pass, and
+// the first pass of a fresh paper warns about each reference it hasn't seen
+// yet, which later passes resolve: read from there, a new paper showed a
+// dozen problems that were already gone. The build folder is written by the
+// paper's own compile, so a link planted there is not followed.
+async function finalLog(ownerId, projectId, mainFile) {
+  const file = path.join(projectDir(ownerId, projectId), 'build', `${path.basename(mainFile, '.tex')}.log`);
+  const stat = await fs.promises.lstat(file).catch(() => null);
+  if (!stat?.isFile() || stat.size > MAX_LOG_BYTES) return null;
+  return fs.promises.readFile(file, 'latin1').catch(() => null);
+}
 
 export default async function compileRoutes(app) {
   app.post('/api/projects/:id/compile', { preHandler: requireProjectAccess }, async (req) => {
     const manifest = req.manifest;
     await collab.flushProject(req.ownerId, req.params.id);
     const result = await compileProject(req.ownerId, req.params.id, manifest.mainFile, manifest.compiler);
-    const problems = parseLatexLog(result.log, manifest.mainFile);
+    const log = (await finalLog(req.ownerId, req.params.id, manifest.mainFile)) ?? result.log;
+    const problems = parseLatexLog(log, manifest.mainFile);
     if (result.success) {
       await createSnapshot(req.ownerId, req.params.id, { trigger: 'compile' });
     }

@@ -9,17 +9,28 @@ const TRIGGER_LABELS = {
   restore: 'Before restore',
 };
 
-export default function VersionHistoryPanel({ projectId, versions, files, readOnly, onSave, onRestore, onClose }) {
+export default function VersionHistoryPanel({ projectId, versions, files, readOnly, onSave, onRename, onRestore, onClose }) {
   const [diffVersion, setDiffVersion] = useState(null);
 
   async function handleSave() {
     const label = await promptDialog({
       title: 'Save this version',
-      placeholder: 'Label (optional)',
+      placeholder: 'Name, e.g. "sent to co-authors" (optional)',
       confirmLabel: 'Save',
       optional: true,
     });
     if (label !== null) onSave(label || undefined);
+  }
+
+  async function handleRename(v) {
+    const label = await promptDialog({
+      title: 'Name this version',
+      placeholder: TRIGGER_LABELS[v.trigger] || 'Name',
+      defaultValue: v.label ?? '',
+      confirmLabel: 'Save name',
+      optional: true,
+    });
+    if (label !== null) onRename(v.id, label);
   }
 
   async function handleRestore(v) {
@@ -67,11 +78,20 @@ export default function VersionHistoryPanel({ projectId, versions, files, readOn
           <div>
             <strong>{v.label || TRIGGER_LABELS[v.trigger] || v.trigger}</strong>
           </div>
-          <div style={{ color: 'var(--text-muted)' }}>{new Date(v.createdAt).toLocaleString()}</div>
+          <div style={{ color: 'var(--text-muted)' }}>
+            {new Date(v.createdAt).toLocaleString()}
+            {/* A named version still says what kind it is. */}
+            {v.label && TRIGGER_LABELS[v.trigger] ? ` · ${TRIGGER_LABELS[v.trigger]}` : ''}
+          </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
             <button onClick={() => setDiffVersion(v)} style={{ fontSize: 11 }}>
               Diff
             </button>
+            {!readOnly && (
+              <button onClick={() => handleRename(v)} style={{ fontSize: 11 }}>
+                {v.label ? 'Rename' : 'Name'}
+              </button>
+            )}
             {!readOnly && (
               <button onClick={() => handleRestore(v)} style={{ fontSize: 11 }}>
                 Restore

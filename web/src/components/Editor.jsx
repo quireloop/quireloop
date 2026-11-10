@@ -365,6 +365,58 @@ function insertAtCursor(view, text) {
   view.focus();
 }
 
+// Puts `before`/`after` around the selection. With nothing selected, the
+// placeholder goes between them and is selected, so typing replaces it.
+function wrapSelection(view, before, after, placeholder = '') {
+  const { from, to } = view.state.selection.main;
+  const inner = from === to ? placeholder : view.state.doc.sliceString(from, to);
+  view.dispatch({
+    changes: { from, to, insert: before + inner + after },
+    selection: { anchor: from + before.length, head: from + before.length + inner.length },
+  });
+  view.focus();
+}
+
+// Inserts a block (a table, an equation) on lines of its own below the
+// cursor's line, and selects `select` inside it if given, so the first thing
+// to fill in is ready to type over.
+function insertBlock(view, text, select) {
+  const line = view.state.doc.lineAt(view.state.selection.main.head);
+  const atEmptyLine = line.length === 0;
+  const pos = atEmptyLine ? line.from : line.to;
+  const insert = atEmptyLine ? `${text}\n` : `\n${text}\n`;
+  const start = pos + (atEmptyLine ? 0 : 1);
+  const offset = select ? text.indexOf(select) : -1;
+  view.dispatch({
+    changes: { from: pos, insert },
+    selection:
+      offset >= 0
+        ? { anchor: start + offset, head: start + offset + select.length }
+        : { anchor: start + text.length },
+    scrollIntoView: true,
+  });
+  view.focus();
+}
+
+// Adds \usepackage{name} to the preamble: after the last \usepackage there,
+// else after \documentclass. Returns 'added', 'present' or 'no-preamble'.
+export function addPackageToText(text, name, options = '') {
+  const begin = text.indexOf('\\begin{document}');
+  const preamble = begin === -1 ? text : text.slice(0, begin);
+  if (!/\\documentclass/.test(preamble)) return { status: 'no-preamble' };
+  const present = new RegExp(`\\\\(?:usepackage|RequirePackage)(?:\\[[^\\]]*\\])?\\{[^}]*\\b${name}\\b[^}]*\\}`);
+  if (present.test(preamble)) return { status: 'present' };
+  const line = `\\usepackage${options ? `[${options}]` : ''}{${name}}`;
+  const lines = preamble.split('\n');
+  let at = -1;
+  lines.forEach((l, i) => {
+    if (/^\s*\\usepackage/.test(l)) at = i;
+  });
+  if (at === -1) at = lines.findIndex((l) => /\\documentclass/.test(l));
+  const pos = lines.slice(0, at + 1).join('\n').length;
+  return { status: 'added', pos, insert: `\n${line}` };
+}
+
 // Neon theme — a cyberpunk-leaning look for the editor surface: near-black
 // background, glowing cyan caret/selection, magenta keywords. Bundled the
 // same way @codemirror/theme-one-dark bundles oneDark: an EditorView.theme
@@ -487,6 +539,20 @@ const Editor = forwardRef(function Editor(
     },
     insertAtCursor: (text) => {
       if (viewRef.current) insertAtCursor(viewRef.current, text);
+    },
+    wrapSelection: (before, after, placeholder) => {
+      if (viewRef.current) wrapSelection(viewRef.current, before, after, placeholder);
+    },
+    insertBlock: (text, select) => {
+      if (viewRef.current) insertBlock(viewRef.current, text, select);
+    },
+    // Into this file's own preamble; the caller handles a file without one.
+    addPackage: (name, options) => {
+      const view = viewRef.current;
+      if (!view) return 'no-preamble';
+      const result = addPackageToText(view.state.doc.toString(), name, options);
+      if (result.status === 'added') view.dispatch({ changes: { from: result.pos, insert: result.insert } });
+      return result.status;
     },
     getSelectedText: () => {
       const view = viewRef.current;
@@ -718,7 +784,8 @@ const Editor = forwardRef(function Editor(
           }
         }),
         EditorView.theme({
-          '&': { height: '100%', fontSize: '14px' },
+          // Set by the zoom buttons on the editor's wrapper, without a remount.
+          '&': { height: '100%', fontSize: 'var(--editor-font-size, 14px)' },
           '.cm-scroller': {
             overflow: 'auto',
             fontFamily: "'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",

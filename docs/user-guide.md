@@ -57,8 +57,13 @@ that browser.
 1. Type your LaTeX here. It saves by itself.
 2. **Compile** builds the PDF.
 3. The PDF appears here.
-4. **Menu** holds sharing, downloads and project settings.
-5. **Edit** holds writing tools.
+4. **Menu** holds the compiler, downloads and project settings.
+5. **Edit** holds the main file and writing tools.
+
+Every account also gets a project called **Quireloop guide**: an illustrated
+manual of every feature, made for you the first time you sign in. It covers the
+features of your own computer or of a server, whichever you signed in to. Delete
+it when you no longer need it; it does not come back.
 
 **4. Check your writing.** Turn on the tools in the **Edit** menu.
 
@@ -218,7 +223,11 @@ also your escape hatch: your work is always exportable) and **Delete**
 ## The editor
 
 Opening a project gives you the three-pane view: **sidebar** (files/outline/
-search/git), **source editor**, and **PDF preview**.
+search/git), **source editor**, and **PDF preview**. The project compiles as
+soon as it opens, so the PDF is there straight away.
+
+Panels opened from the top bar (Share, History, Insert symbol, the menus) close
+when you click anywhere else or press `Esc`.
 
 ### The sidebar
 
@@ -227,12 +236,36 @@ Four tabs at the top:
 - **Files** — the project tree. `+ New` creates a file (use `/` in the name
   to create it inside a folder, e.g. `sections/intro.tex`), `+ Folder`
   creates a folder, **Upload** adds files from your machine (figures, `.bib`,
-  anything). Each file row has rename (✎) and delete (×) buttons.
+  anything). Each file row has rename (✎) and delete (×) buttons. Folders start
+  closed, except the ones holding the open file.
 - **Outline** — the section structure of the open file
-  (`\section`, `\subsection`, …). Click any entry to jump to it.
+  (`\section`, `\subsection`, …). Sections start folded: the arrow opens one,
+  **Open all** / **Fold all** do them all, and clicking a title jumps to it.
 - **Source Control** — per-project git (see [Git integration](#git-integration)).
 - **Search** — project-wide text search across every file, with per-match
   jump-to-line.
+
+### The insert toolbar
+
+The row above the editor puts the most used commands one click away. Select
+text first to wrap it; with nothing selected, a placeholder is inserted and
+selected so you can type over it.
+
+- **Text:** bold, italic, underline, highlight, coloured text, and alignment
+  (left, centre, right).
+- **Structure:** headings (section to paragraph), bulleted and numbered lists,
+  footnote, citation, reference and label.
+- **Math:** inline math, a numbered equation, aligned equations, fraction,
+  matrix, and a list of common symbols.
+- **Floats and packages:** **Table** asks for rows × columns and builds a
+  `booktabs` table; **Figure** lists the project's images; **+ Package** adds a
+  `\usepackage` line, with a note on what each common package is for.
+- **Text size:** **A−** / **A+** change the editor's font size, and the
+  percentage resets it. Each browser remembers its own size.
+
+A command that needs a package adds it to the preamble for you (highlight adds
+`soul` and `xcolor`, a table adds `booktabs`) and says so in a short note. In a
+chapter file without a preamble, the package goes into the main file.
 
 ### Writing
 
@@ -284,6 +317,8 @@ Rendered PDF with zoom and page navigation. It updates after each compile.
 
 ## Compiling
 
+- **Main file** — **Edit → Main file** chooses which `.tex` file is compiled
+  into the PDF, from the project's `.tex` files. The PDF is rebuilt at once.
 - **Compile** — runs `latexmk` on the server against the project's main
   file. The right pane refreshes with the new PDF. Shortcuts:
   `Cmd/Ctrl-Enter` or `Cmd/Ctrl-S`. The main file may live in a subfolder
@@ -292,8 +327,9 @@ Rendered PDF with zoom and page navigation. It updates after each compile.
   per project. Use XeLaTeX/LuaLaTeX for `fontspec`/system fonts.
 - **Auto** — auto-compile: when toggled on, the project recompiles shortly
   after you stop typing.
-- **Problems / log** — errors and warnings are parsed out of the LaTeX log
-  into a readable list; click an entry to jump to the offending file and
+- **Problems / log** — errors and warnings are read from the LaTeX log of the
+  last pass, so warnings an earlier pass resolved by itself (such as references
+  on a paper's first compile) are not listed, and shown as a readable list; click an entry to jump to the offending file and
   line (marked in the editor gutter). The raw log is available too, for
   the cases where LaTeX's own message is the only truth.
 - **Clean Aux Files** — deletes `.aux`/`.log`/`.out`-style build debris.
@@ -336,7 +372,8 @@ email.
 
 ## Sharing a project
 
-The **Share** button (project owner only) opens the sharing modal.
+The **Share** button, next to **Compile**, opens the sharing modal. Only the
+project's owner can change who has access.
 
 ### Adding people
 
@@ -489,12 +526,15 @@ unpublished work.
 The **History** button opens the version panel.
 
 - **Save version** — snapshot the entire project right now, with an
-  optional label ("submitted to NeurIPS", "before restructuring §4").
+  optional name ("submitted", "before restructuring §4").
+- **Name / Rename** — give any version a name, autosaves included, so it is
+  easy to find later. Clearing the name gives it back its default label.
 - **Restore** — roll the whole project back to a snapshot. A safety
   snapshot of the current state is taken first, so restoring is never
-  destructive — you can restore your way back forward. Open collaborative
-  sessions pick up the restored content; a stale editor can't silently
-  overwrite a restore.
+  destructive — you can restore your way back forward. Every open editor shows
+  the restored text straight away, and the PDF is rebuilt. Who the project is
+  shared with is not part of a version: a restore never adds back someone who
+  was removed, or removes someone added since.
 - **Diff** — compare any snapshot against the current state of the project,
   file by file, in a unified view with unchanged runs collapsed.
 

@@ -1,6 +1,12 @@
 import { confirmDialog, promptDialog } from '../lib/dialog.js';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { buildTree } from '../lib/fileTree.js';
+
+// "a/b/c.tex" -> ["a", "a/b"]
+function foldersAbove(filePath) {
+  const parts = (filePath ?? '').split('/').slice(0, -1);
+  return parts.map((_, i) => parts.slice(0, i + 1).join('/'));
+}
 
 function FolderNode({ node, activePath, dirty, collapsed, onToggle, depth, readOnly, selected, onToggleSelect, ...handlers }) {
   const isCollapsed = collapsed.has(node.path);
@@ -133,14 +139,22 @@ export default function FileTree({
   onDeleteMany,
 }) {
   const fileInputRef = useRef(null);
-  const [collapsed, setCollapsed] = useState(new Set());
+  // Folders start closed, so a project with many folders opens to a short
+  // list; the folders around the open file are opened for it.
+  const [expanded, setExpanded] = useState(() => new Set(foldersAbove(activePath)));
   const [dragOver, setDragOver] = useState(false);
   const [selected, setSelected] = useState(new Set());
 
   const tree = buildTree(files);
+  const collapsed = { has: (path) => !expanded.has(path) };
+
+  useEffect(() => {
+    const above = foldersAbove(activePath);
+    if (above.length) setExpanded((prev) => new Set([...prev, ...above]));
+  }, [activePath]);
 
   function toggleFolder(path) {
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);

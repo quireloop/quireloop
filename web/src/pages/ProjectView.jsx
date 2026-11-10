@@ -8,6 +8,8 @@ import PdfViewer from '../components/PdfViewer.jsx';
 import CompileLogPanel from '../components/CompileLogPanel.jsx';
 import OutlinePanel from '../components/OutlinePanel.jsx';
 import SymbolPalette from '../components/SymbolPalette.jsx';
+import InsertToolbar from '../components/InsertToolbar.jsx';
+import { addPackageToText } from '../components/Editor.jsx';
 import VersionHistoryPanel from '../components/VersionHistoryPanel.jsx';
 import SourceControlPanel from '../components/SourceControlPanel.jsx';
 import SearchPanel from '../components/SearchPanel.jsx';
@@ -22,6 +24,7 @@ import SlidePanel from '../components/SlidePanel.jsx';
 import CommandPalette from '../components/CommandPalette.jsx';
 import { BackIcon, SearchIcon, SidebarIcon } from '../components/Icons.jsx';
 import { confirmDialog, promptDialog } from '../lib/dialog.js';
+import { useDismiss } from '../lib/dismiss.js';
 import { buildOutline, countWords } from '../lib/outline.js';
 import { useTheme, useSidebarOpen } from '../lib/theme.js';
 import { parseBibEntries } from '../lib/bibtex.js';
@@ -90,6 +93,14 @@ export default function ProjectView({ projectId, onBack, user }) {
   const [theme, cycleTheme] = useTheme();
   const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
   const sidebarPanelRef = useRef(null);
+  const shareRef = useRef(null);
+  const [editorFontSize, setEditorFontSize] = useState(() => {
+    const saved = Number(localStorage.getItem('quireloop:editor-font-size'));
+    return saved >= 10 && saved <= 28 ? saved : 14;
+  });
+  const [insertNote, setInsertNote] = useState('');
+  const historyRef = useRef(null);
+  const symbolsRef = useRef(null);
   const [draggingSplit, setDraggingSplit] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
   const editorRef = useRef(null);
@@ -411,6 +422,14 @@ export default function ProjectView({ projectId, onBack, user }) {
   }, [showChat, chatMessages, projectId]);
 
   const isViewer = manifest?.yourRole === 'viewer';
+  const texFiles = useMemo(
+    () => (manifest?.files ?? []).filter((f) => f.path.endsWith('.tex')).map((f) => f.path).sort(),
+    [manifest?.files]
+  );
+
+  useDismiss(shareRef, showShare, () => setShowShare(false));
+  useDismiss(historyRef, showHistory, () => setShowHistory(false));
+  useDismiss(symbolsRef, showSymbols, () => setShowSymbols(false));
   const isOwner = manifest?.ownerId === user?.id;
 
   // Flags a thread as "orphaned" once its anchor can no longer be resolved
@@ -531,6 +550,15 @@ export default function ProjectView({ projectId, onBack, user }) {
 
   handleCompileRef.current = handleCompile;
 
+  // Opening a project shows its PDF straight away instead of an empty
+  // preview, once per project opened.
+  const compiledOnOpenRef = useRef(null);
+  useEffect(() => {
+    if (!manifest?.mainFile || compiledOnOpenRef.current === projectId) return;
+    compiledOnOpenRef.current = projectId;
+    handleCompileRef.current();
+  }, [projectId, manifest?.mainFile]);
+
   // Cmd+S (or Ctrl+S on Windows/Linux) compiles instead of triggering the
   // browser's "Save page" dialog — collaborative edits are already saved
   // continuously via Yjs, so "save" here means "give me a fresh PDF".
@@ -568,6 +596,13 @@ export default function ProjectView({ projectId, onBack, user }) {
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, []);
+
+  async function handleMainFileChange(mainFile) {
+    await api.setMainFile(projectId, mainFile);
+    await refreshManifest();
+    // The PDF on screen came from the old main file.
+    handleCompileRef.current();
+  }
 
   async function handleCompilerChange(compiler) {
     await api.setCompiler(projectId, compiler);
@@ -652,6 +687,37 @@ export default function ProjectView({ projectId, onBack, user }) {
 
   function handleOutlineJump(line) {
     editorRef.current?.goToLine(line);
+  }
+
+  function handleEditorFontSize(size) {
+    setEditorFontSize(size);
+    localStorage.setItem('quireloop:editor-font-size', String(size));
+  }
+
+  function note(message) {
+    setInsertNote(message);
+    setTimeout(() => setInsertNote((current) => (current === message ? '' : current)), 4000);
+  }
+
+  // Adds a package to this file's preamble or, for a chapter file without
+  // one, to the main file's. Already there: nothing to do.
+  async function ensurePackage(name, { announce = false } = {}) {
+    let status = editorRef.current?.addPackage(name) ?? 'no-preamble';
+    let where = activePath;
+    if (status === 'no-preamble' && mainFile && mainFile !== activePath) {
+      where = mainFile;
+      const res = await api.readFile(projectId, mainFile);
+      const text = typeof res === 'string' ? res : res?.content ?? '';
+      const result = addPackageToText(text, name);
+      status = result.status;
+      if (status === 'added') {
+        await api.writeFile(projectId, mainFile, text.slice(0, result.pos) + result.insert + text.slice(result.pos));
+      }
+    }
+    if (status === 'added') note(`Added \\usepackage{${name}} to ${where}`);
+    else if (announce && status === 'present') note(`${name} is already loaded in ${where}`);
+    else if (status === 'no-preamble') note(`No \\documentclass found: add \\usepackage{${name}} to your main file`);
+    return status;
   }
 
   function handleInsertSnippet(text) {
@@ -782,6 +848,11 @@ export default function ProjectView({ projectId, onBack, user }) {
     await refreshVersions();
   }
 
+  async function handleRenameVersion(versionId, label) {
+    await api.renameVersion(projectId, versionId, label);
+    await refreshVersions();
+  }
+
   async function handleRestoreVersion(versionId) {
     await api.restoreVersion(projectId, versionId);
     const updated = await api.getProject(projectId);
@@ -795,6 +866,8 @@ export default function ProjectView({ projectId, onBack, user }) {
       : updated.files.find((f) => ['tex', 'bib', 'cls', 'sty'].includes(f.type))?.path ?? null;
     setActivePath(nextPath);
     await refreshVersions();
+    // Shows the restored paper rather than an empty preview.
+    handleCompileRef.current();
   }
 
   async function jumpToPdfAtLine(line, word) {
@@ -881,11 +954,6 @@ export default function ProjectView({ projectId, onBack, user }) {
             <kbd>{navigator.platform.startsWith('Mac') ? '⌘K' : 'Ctrl K'}</kbd>
           </button>
           <ToolbarMenu label="Menu">
-            {manifest && (
-              <MenuItem onClick={() => setShowShare((v) => !v)} active={showShare}>
-                Share
-              </MenuItem>
-            )}
             <MenuItem onClick={() => setAutoCompile((v) => !v)} active={autoCompile} title="Compiles automatically after edits settle">
               Auto-compile
             </MenuItem>
@@ -913,15 +981,6 @@ export default function ProjectView({ projectId, onBack, user }) {
               Download .zip
             </a>
           </ToolbarMenu>
-          {showShare && manifest && (
-            <ShareModal
-              manifest={manifest}
-              isOwner={manifest.ownerId === user?.id}
-              onClose={() => setShowShare(false)}
-              onUpdated={setManifest}
-            />
-          )}
-
           <ToolbarMenu
             label="Edit"
             badge={
@@ -930,6 +989,28 @@ export default function ProjectView({ projectId, onBack, user }) {
               (unreadChat > 0 ? 1 : 0)
             }
           >
+            {manifest && texFiles.length > 0 && (
+              <div
+                style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}
+                title="The file that is compiled into the PDF. Other .tex files are pulled in by \\input or \\include."
+              >
+                <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Main file</span>
+                <select
+                  value={manifest.mainFile ?? ''}
+                  onChange={(e) => handleMainFileChange(e.target.value)}
+                  disabled={isViewer}
+                  aria-label="Main file"
+                  style={{ fontSize: 13, flex: 1, minWidth: 0 }}
+                >
+                  {!texFiles.includes(manifest.mainFile) && <option value={manifest.mainFile ?? ''}>Choose…</option>}
+                  {texFiles.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <MenuItem
               onClick={() => setSpellcheck((v) => !v)}
               active={spellcheck}
@@ -952,7 +1033,7 @@ export default function ProjectView({ projectId, onBack, user }) {
             <MenuItem onClick={() => setVimMode((v) => !v)} active={vimMode}>
               Vim keybindings
             </MenuItem>
-            <MenuItem onClick={() => setShowSymbols((v) => !v)} active={showSymbols}>
+            <MenuItem onClick={() => setShowSymbols(true)} active={showSymbols}>
               Insert symbol
             </MenuItem>
             {pdfUrl && <MenuItem onClick={handleShowInPdf}>Show in PDF</MenuItem>}
@@ -986,7 +1067,9 @@ export default function ProjectView({ projectId, onBack, user }) {
               ✨ Assistant
             </MenuItem>
           </ToolbarMenu>
-          {showSymbols && <SymbolPalette onInsert={handleInsertSnippet} onClose={() => setShowSymbols(false)} />}
+          <div ref={symbolsRef} style={{ display: 'contents' }}>
+            {showSymbols && <SymbolPalette onInsert={handleInsertSnippet} onClose={() => setShowSymbols(false)} />}
+          </div>
 
           <button
             className="toolbar-button"
@@ -997,20 +1080,23 @@ export default function ProjectView({ projectId, onBack, user }) {
             {THEME_LABEL[theme].icon}
           </button>
 
-          <button className="toolbar-button" onClick={handleToggleHistory}>
-            History
-          </button>
-          {showHistory && (
-            <VersionHistoryPanel
-              projectId={projectId}
-              versions={versions}
-              files={manifest?.files ?? []}
-              readOnly={isViewer}
-              onSave={handleSaveVersion}
-              onRestore={handleRestoreVersion}
-              onClose={() => setShowHistory(false)}
-            />
-          )}
+          <div ref={historyRef} style={{ display: 'contents' }}>
+            <button className="toolbar-button" onClick={handleToggleHistory}>
+              History
+            </button>
+            {showHistory && (
+              <VersionHistoryPanel
+                projectId={projectId}
+                versions={versions}
+                files={manifest?.files ?? []}
+                readOnly={isViewer}
+                onSave={handleSaveVersion}
+                onRename={handleRenameVersion}
+                onRestore={handleRestoreVersion}
+                onClose={() => setShowHistory(false)}
+              />
+            )}
+          </div>
 
           <button
             onClick={() => setShowLogPanel((v) => !v)}
@@ -1038,6 +1124,27 @@ export default function ProjectView({ projectId, onBack, user }) {
               </span>
             )}
           </button>
+
+          {manifest && (
+            <div ref={shareRef} style={{ display: 'contents' }}>
+              <button
+                className="toolbar-button"
+                onClick={() => setShowShare((v) => !v)}
+                style={{ background: showShare ? 'var(--accent-bg)' : undefined }}
+                title="Share this project with people on this server, or by link"
+              >
+                Share
+              </button>
+              {showShare && (
+                <ShareModal
+                  manifest={manifest}
+                  isOwner={manifest.ownerId === user?.id}
+                  onClose={() => setShowShare(false)}
+                  onUpdated={setManifest}
+                />
+              )}
+            </div>
+          )}
 
           <button
             onClick={handleCompile}
@@ -1109,7 +1216,22 @@ export default function ProjectView({ projectId, onBack, user }) {
         >
           <Panel defaultSize={55} minSize={20}>
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ flex: 1, minHeight: 0 }}>
+              {activePath && (
+                <InsertToolbar
+                  editor={editorRef}
+                  readOnly={isViewer}
+                  images={(manifest?.files ?? []).filter((f) => f.type === 'image').map((f) => f.path)}
+                  fontSize={editorFontSize}
+                  onFontSize={handleEditorFontSize}
+                  onNeedPackage={ensurePackage}
+                />
+              )}
+              {insertNote && (
+                <div className="insert-note" role="status" style={{ padding: '2px 10px' }}>
+                  {insertNote}
+                </div>
+              )}
+              <div style={{ flex: 1, minHeight: 0, '--editor-font-size': `${editorFontSize}px` }}>
                 {activePath && (
                   <Editor
                     ref={editorRef}

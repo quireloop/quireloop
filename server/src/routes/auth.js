@@ -20,6 +20,7 @@ import { createSecret, checkCode, enrollmentDetails } from '../lib/twoFactor.js'
 import { requireAuth } from '../lib/authMiddleware.js';
 import { PROVIDER_IDS, isValidModelId } from './assistant.js';
 import { consumeInvite, isInviteValid } from '../lib/invites.js';
+import { ensureGuide, isPersonalHost } from '../lib/guide.js';
 import { registerFailure, isBlocked, clear } from '../lib/rateLimit.js';
 
 // Open signup is only possible for the very first account (bootstrapping
@@ -230,6 +231,13 @@ export default async function authRoutes(app) {
   app.get('/api/auth/me', { preHandler: requireAuth }, async (req, reply) => {
     const user = await findUserById(req.userId);
     if (!user) return reply.code(401).send({ error: 'not authenticated' });
+    // Every page load asks who is signed in, so this is where an account,
+    // new or old, first gets its guide project. A failure only means no guide.
+    if (!user.guideCreated) {
+      await ensureGuide(user.id, { personal: isPersonalHost(req.hostname) }).catch((err) =>
+        req.log.warn({ err }, 'could not make the guide project')
+      );
+    }
     return publicUser(user);
   });
 

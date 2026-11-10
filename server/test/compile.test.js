@@ -110,3 +110,25 @@ test('every successful compile is snapshotted in version history', { skip: !hasL
   const autos = versions.filter((v) => v.trigger === 'compile');
   assert.equal(autos.length, 2, 'each successful compile should leave one snapshot');
 });
+
+test(
+  "a fresh paper's first compile does not report references its later passes resolved",
+  { skip: !hasLatexmk && 'latexmk not installed' },
+  async () => {
+    const { app } = await getTestApp();
+    const { cookie } = await signup(app, 'first-compile@example.com');
+    const project = await createProject(app, cookie, 'Cross references');
+    await app.inject({
+      method: 'PUT',
+      url: `/api/projects/${project.id}/files/main.tex`,
+      headers: { cookie, 'content-type': 'text/plain' },
+      payload:
+        '\\documentclass{article}\n\\begin{document}\n\\section{One}\\label{sec:one}\n' +
+        'See Section~\\ref{sec:two} and page~\\pageref{sec:one}.\n\\section{Two}\\label{sec:two}\n\\end{document}\n',
+    });
+    const res = await app.inject({ method: 'POST', url: `/api/projects/${project.id}/compile`, headers: { cookie } });
+    const result = res.json();
+    assert.equal(result.success, true);
+    assert.deepEqual(result.problems, [], JSON.stringify(result.problems));
+  }
+);

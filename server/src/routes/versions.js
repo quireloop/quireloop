@@ -3,6 +3,7 @@ import {
   createSnapshot,
   listVersions,
   restoreVersion,
+  renameVersion,
   listSnapshotFiles,
   resolveSnapshotFilePath,
 } from '../lib/versions.js';
@@ -41,6 +42,19 @@ export default async function versionsRoutes(app) {
     const { label } = req.body ?? {};
     await collab.flushProject(req.ownerId, req.params.id);
     return createSnapshot(req.ownerId, req.params.id, { label, trigger: 'manual' });
+  });
+
+  app.patch('/api/projects/:id/versions/:versionId', { preHandler: requireProjectWrite }, async (req, reply) => {
+    const { label } = req.body ?? {};
+    if (label != null && (typeof label !== 'string' || label.length > 200)) {
+      return reply.code(400).send({ error: 'a name is text of at most 200 characters' });
+    }
+    try {
+      await renameVersion(req.ownerId, req.params.id, req.params.versionId, label?.trim() ?? '');
+      return { ok: true };
+    } catch (err) {
+      return reply.code(404).send({ error: err.message });
+    }
   });
 
   app.post('/api/projects/:id/versions/:versionId/restore', { preHandler: requireProjectWrite }, async (req, reply) => {

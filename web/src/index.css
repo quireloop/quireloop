@@ -867,3 +867,70 @@ kbd {
 .pdf-dark .pdf-page > canvas {
   filter: invert(0.9) hue-rotate(180deg);
 }
+
+/* Quick-insert row above the editor: groups of small buttons that wrap onto
+   a second row when the editor is narrow, so none is ever out of sight. */
+.insert-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-bg);
+  flex-shrink: 0;
+}
+
+.insert-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  border-right: 1px solid var(--border);
+}
+
+.insert-group:last-child {
+  border-right: none;
+}
+
+.insert-tool,
+.insert-pick {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 6px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.insert-tool:hover:not(:disabled),
+.insert-pick:hover:not(:disabled) {
+  background: var(--control-hover);
+}
+
+.insert-pick {
+  max-width: 110px;
+  border-color: var(--border);
+}
+
+.insert-zoom {
+  min-width: 44px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.insert-highlight {
+  background: #ffe066;
+  color: #222;
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+.insert-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}

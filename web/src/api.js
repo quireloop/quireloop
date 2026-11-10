@@ -93,6 +93,12 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ compiler }),
     }),
+  setMainFile: (id, mainFile) =>
+    request(`/projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mainFile }),
+    }),
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
   downloadUrl: (id) => `${BASE}/projects/${id}/download`,
   clean: (id) => request(`/projects/${id}/clean`, { method: 'POST' }),
@@ -186,6 +192,12 @@ export const api = {
   saveVersion: (id, label) =>
     request(`/projects/${id}/versions`, {
       method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label }),
+    }),
+  renameVersion: (id, versionId, label) =>
+    request(`/projects/${id}/versions/${versionId}`, {
+      method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ label }),
     }),
